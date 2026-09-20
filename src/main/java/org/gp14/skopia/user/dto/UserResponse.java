@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.gp14.skopia.model.user.User;
 import java.time.LocalDateTime;
 
 @Data
@@ -21,4 +22,22 @@ public class UserResponse {
     private LocalDateTime registeredDate;
     private String profilePicture;
     private String bio;
+
+    public static UserResponse fromEntity(User user) {
+        if (user == null) {
+            return null;
+        }
+        return UserResponse.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .userType(user.getUserType() != null ? user.getUserType().toString() : null)
+                .accountStatus(user.getAccountStatus())
+                .registeredDate(user.getRegisteredDate())
+                .profilePicture(user.getProfilePicture())
+                .bio(user.getBio())
+                .build();
+    }
 }
