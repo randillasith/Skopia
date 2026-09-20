@@ -1,109 +1,119 @@
 package org.gp14.skopia.user;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
+import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.user.dto.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/users")
+@RequestMapping("/api/users")
+@CrossOrigin(origins = "*", maxAge = 3600)
 public class AdminUserController {
 
-    private final UserManagementService userManagementService;
+    @Autowired
+    private UserService userService;
 
-    public AdminUserController(UserManagementService userManagementService) {
-        this.userManagementService = userManagementService;
-    }
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody RegisterUserRequest request) {
+        if (request.getUsername() == null || request.getUsername().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Missing required fields"));
+        }
 
-    // 1. Search and list all users with optional filters (query, status, role)
-    @GetMapping
-    public ResponseEntity<List<UserResponse>> getUsers(
-            @RequestParam(required = false) String query,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String role) {
-        return ResponseEntity.ok(userManagementService.getUsers(query, status, role));
-    }
+        LoginResponse response = userService.register(request);
+        if (response.getMessage().contains("already exists")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        }
 
-    // 2. Get specific user profile details
-    @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
-        return ResponseEntity.ok(userManagementService.getUserById(id));
-    }
-
-    // 3. Suspend, block, or activate a user account
-    @PatchMapping("/{id}/status")
-    public ResponseEntity<UserResponse> updateAccountStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateAccountStatusRequest request,
-            HttpServletRequest httpRequest) {
-        String clientIp = getClientIp(httpRequest);
-        return ResponseEntity.ok(userManagementService.updateAccountStatus(id, request, clientIp));
-    }
-
-    // 4. Register new Staff member (Administrator, Support Officer, Marketing Officer)
-    @PostMapping("/staff")
-    public ResponseEntity<UserResponse> createStaffMember(
-            @Valid @RequestBody CreateStaffRequest request,
-            HttpServletRequest httpRequest) {
-        String clientIp = getClientIp(httpRequest);
-        UserResponse response = userManagementService.createStaffMember(request, clientIp);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // 5. Update staff profile, designation, or role details
-    @PutMapping("/staff/{id}")
-    public ResponseEntity<UserResponse> updateStaffProfile(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateStaffProfileRequest request,
-            HttpServletRequest httpRequest) {
-        String clientIp = getClientIp(httpRequest);
-        return ResponseEntity.ok(userManagementService.updateStaffProfile(id, request, clientIp));
-    }
-
-    // 6. Update creator verification status
-    @PatchMapping("/creators/{id}/verification")
-    public ResponseEntity<UserResponse> updateCreatorVerification(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateCreatorStatusRequest request,
-            HttpServletRequest httpRequest) {
-        String clientIp = getClientIp(httpRequest);
-        return ResponseEntity.ok(userManagementService.updateCreatorVerification(id, request, clientIp));
-    }
-
-    // 7. Update viewer premium status
-    @PatchMapping("/viewers/{id}/premium")
-    public ResponseEntity<UserResponse> updateViewerPremiumStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdatePremiumStatusRequest request,
-            HttpServletRequest httpRequest) {
-        String clientIp = getClientIp(httpRequest);
-        return ResponseEntity.ok(userManagementService.updateViewerPremiumStatus(id, request, clientIp));
-    }
-
-    // 8. View platform activity logs
-    @GetMapping("/activity-logs")
-    public ResponseEntity<List<ActivityLogResponse>> getActivityLogs(
-            @RequestParam(required = false) Long userId,
-            @RequestParam(required = false) String actionType) {
-        return ResponseEntity.ok(userManagementService.getActivityLogs(userId, actionType));
-    }
-
-    // 9. View user management summary statistics
-    @GetMapping("/stats")
-    public ResponseEntity<PlatformUserStatsResponse> getPlatformUserStats() {
-        return ResponseEntity.ok(userManagementService.getPlatformUserStats());
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        if (request == null) return "127.0.0.1";
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        LoginResponse response = userService.login(request);
+        if (response.getMessage().contains("successful")) {
+            return ResponseEntity.ok(response);
         }
-        return ip != null ? ip : "127.0.0.1";
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @GetMapping("/{userId}")
+    public ResponseEntity<?> getUserProfile(@PathVariable Long userId) {
+        UserResponse user = userService.getUserProfile(userId);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(user);
+    }
+
+    @PutMapping("/{userId}/profile")
+    public ResponseEntity<?> updateProfile(@PathVariable Long userId, @RequestBody UpdateProfileRequest request) {
+        UserResponse updated = userService.updateProfile(userId, request);
+        if (updated == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/{userId}/change-password")
+    public ResponseEntity<?> changePassword(@PathVariable Long userId, @RequestBody ChangePasswordRequest request) {
+        boolean success = userService.changePassword(userId, request);
+        if (!success) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(createErrorResponse("Failed to change password"));
+        }
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Password changed successfully");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping
+    public ResponseEntity<?> getAllUsers() {
+        List<User> users = userService.getAllUsers();
+        return ResponseEntity.ok(users);
+    }
+
+    @PutMapping("/{userId}/deactivate")
+    public ResponseEntity<?> deactivateUser(@PathVariable Long userId) {
+        boolean success = userService.deactivateUser(userId);
+        if (!success) {
+            return ResponseEntity.notFound().build();
+        }
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "User deactivated successfully");
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{userId}/activate")
+    public ResponseEntity<?> activateUser(@PathVariable Long userId) {
+        boolean success = userService.activateUser(userId);
+        if (!success) {
+            return ResponseEntity.notFound().build();
+        }
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "User activated successfully");
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{userId}")
+    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
+        boolean success = userService.deleteUser(userId);
+        if (!success) {
+            return ResponseEntity.notFound().build();
+        }
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "User deleted successfully");
+        return ResponseEntity.ok(response);
+    }
+
+    private Map<String, String> createErrorResponse(String message) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", message);
+        return error;
     }
 }
