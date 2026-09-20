@@ -32,9 +32,11 @@ public class SpaWebConfig implements WebMvcConfigurer {
      * returning HTML, and {@code assets} because those filenames carry a content
      * hash: after a deploy, a browser holding a cached index.html asks for the
      * previous bundle, and answering with HTML surfaces as "Unexpected token '<'"
-     * in the console instead of an honest missing file.
+     * in the console instead of an honest missing file. {@code uploads} is served
+     * off disk by {@link org.gp14.skopia.config.WebConfig}, so a missing advertisement
+     * creative must read as missing rather than as the application shell.
      */
-    private static final String[] NO_FALLBACK = { "api/", "assets/" };
+    private static final String[] NO_FALLBACK = { "api/", "assets/", "uploads/" };
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
