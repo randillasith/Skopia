@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Playwright MCP scratch output
+.playwright-mcp/
+
+# macOS
+.DS_Store
+
+# Local agent tooling and dev-server launcher config
+.claude/
+
+# Impeccable design-tool scratch and local review captures
+.impeccable/
