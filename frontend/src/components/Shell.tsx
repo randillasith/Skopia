@@ -338,6 +338,9 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-4 px-4 sm:px-6 lg:px-8">
           <Wordmark to="/browse" />
 
+          {/* The marker travels between items rather than cutting: shared
+              layoutId hands the same element from one link to the next, so the
+              eye follows where it went instead of re-finding it. */}
           <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
             {VIEWER_NAV.map((n) => (
               <NavLink
@@ -345,12 +348,23 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
                 to={n.to}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-sm px-3 py-2 text-[14px] font-medium transition-colors',
+                    'relative rounded-sm px-3 py-2 text-[14px] font-medium transition-colors duration-200',
                     isActive ? 'text-white' : 'text-ink-300 hover:text-white',
                   )
                 }
               >
-                {n.label}
+                {({ isActive }) => (
+                  <>
+                    {n.label}
+                    {isActive && (
+                      <motion.span
+                        layoutId="viewer-nav-marker"
+                        transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
+                        className="absolute inset-x-2.5 -bottom-0.5 h-px bg-cyan-400"
+                      />
+                    )}
+                  </>
+                )}
               </NavLink>
             ))}
           </nav>

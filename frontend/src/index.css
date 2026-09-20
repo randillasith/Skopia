@@ -304,7 +304,16 @@
     }
   }
 
+  /* Reduced motion: nothing travels, nothing scales. Colour and opacity
+     changes stay, because they carry state rather than movement. */
   @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
     .lightbox-glance::before {
       --mx: 50%;
       --my: 50%;

@@ -77,13 +77,21 @@ Three voices, no more.
 - **Archivo** — the marquee. All display and heading type, set at `font-stretch: 84%` via the
   `.font-marquee` utility, with `letter-spacing: -0.02em`. It is a real condensed grotesque and
   carries the lettering the whole thesis rests on.
-- **Inter** — the workhorse. All interface and body copy.
+- **Instrument Sans** — the workhorse. All interface and body copy. It replaced Inter, which is
+  well drawn but is the grotesque every template reaches for, and whose optical-sizing axis was
+  being requested from the CDN and then never used.
 - **JetBrains Mono** — data. References (`RPT-2291`, `CMP-410`), timecodes, timestamps, dates,
   and every figure inside a table.
 
-All three load from Google Fonts in `frontend/index.html`. **This is a known weakness**: the
-marquee voice is a third-party network dependency on a world whose thesis is its lettering. Self-
-hosting is the recorded next step.
+All three are **self-hosted** through `@fontsource`, imported at the head of `index.css`. The
+marquee voice is the thesis, and it does not depend on a third party being reachable. No page
+request tells Google the page was loaded, and the versions are pinned in `package-lock.json`, so
+a build next year renders as it does today. Archivo and Instrument Sans use the `wdth` builds:
+the marquee condensation is a real width axis, not a synthesised one.
+
+`body` sets `font-feature-settings: 'kern' 1, 'calt' 1` explicitly. Both are off by default in
+several engines, and their absence is what makes interface type look slightly loose without
+anyone being able to say why.
 
 ### The ramp
 
@@ -96,11 +104,11 @@ hosting is the recorded next step.
 | Heading/L | Archivo Bold | 24 / 32 | −1% |
 | Heading/M | Archivo SemiBold | 20 / 28 | −0.6% |
 | Heading/S | Archivo SemiBold | 17 / 24 | −0.4% |
-| Body/L | Inter Regular | 17 / 26 | −0.1% |
-| Body/M | Inter Regular | 15 / 23 | 0 |
-| Body/S | Inter Regular | 13 / 20 | 0 |
-| Label/L · M · S | Inter Semi Bold | 15 / 13 / 12 | 0 to +0.2% |
-| Label/XS | Inter Semi Bold | 11 / 14 | +2.4%, uppercase |
+| Body/L | Instrument Sans Regular | 17 / 26 | −0.1% |
+| Body/M | Instrument Sans Regular | 15 / 23 | 0 |
+| Body/S | Instrument Sans Regular | 13 / 20 | 0 |
+| Label/L · M · S | Instrument Sans Semi Bold | 15 / 13 / 12 | 0 to +0.2% |
+| Label/XS | Instrument Sans Semi Bold | 11 / 14 | +2.4%, uppercase |
 | Mono/M · S | JetBrains Mono | 13 / 12 | 0 |
 
 Hero headlines use `clamp()` rather than a fixed step — the lobby headline runs
@@ -215,8 +223,22 @@ vocabulary, reused everywhere a state changes. Under `prefers-reduced-motion` it
 the resolved string is set outright.
 
 Everything else is interaction-driven and quiet: modal and toast enter/exit, the tab underline
-sliding on `layoutId`, the toggle knob, the lightbox hover lift, wizard panels mounting on a step
-change, upload progress.
+and the viewer nav marker travelling on shared `layoutId`, the toggle knob, the lightbox hover
+lift, wizard panels mounting on a step change, upload progress.
+
+**The glance** is the one desktop-only interaction, and the one place the interface behaves like
+the physical object it is named after. A lightbox is a backlit surface, so on a fine pointer it
+catches light where the cursor is: `Lightbox interactive` writes `--mx`/`--my` straight onto the
+node, and `.lightbox-glance` draws a radial gradient there while the artwork drifts to 1.035.
+
+Three constraints hold it in place. The coordinates never enter React state — routing a
+`mousemove` through `useState` would re-render the whole shelf on every frame. It is gated on
+`(hover: hover) and (pointer: fine)`, because a touch device has no hover and would leave the
+highlight stuck wherever the last tap landed. And under `prefers-reduced-motion` the sheen holds
+still at the centre and the artwork does not scale.
+
+Buttons press to `scale(0.975)` over 75ms. The scale is deliberately small: a button that
+visibly squashes reads as a toy. Disabled buttons do not move, because nothing happened.
 
 **Decorative first-paint entrance animations are banned in this build, for two reasons.** They
 were scattered effects rather than one moment — a fade on every section is the thing the craft
@@ -256,24 +278,38 @@ Breakpoints are Tailwind's defaults. What actually changes:
 
 ## Access
 
-Role-based access decides reach, and the interface says so rather than hiding controls. The
-`RequireRole` guard wraps every back-of-house route group: Creator Studio needs `creator`, the Box
-Office `marketing`, the House Log `support`, the Projection Booth `admin`; an administrator
-reaches all of them. Account-bound surfaces need any signed-in role. A role that cannot reach a
-console gets a named access screen stating who it is for and offering the way back — never a
-blank page or a vanished link.
+Login is session-based, and everyone signs up as the same kind of account. What an account may do
+beyond watching comes from **three grants that do not imply one another** (`lib/session.ts`):
 
-The role switcher in the header and sidebar is **prototype scaffolding** so all six roles can be
-demonstrated without a backend. It is not part of the product.
+| Grant | Scope | Granted by |
+|---|---|---|
+| Staff role — `marketing`, `support`, `admin` | Platform | An administrator |
+| Channel | That channel | The account holder. No approval step |
+| Moderator | One channel | That channel's owner |
+
+They were one enum, and it could not express any of this. A moderator had to appear platform-wide
+when the grant only ever covered one channel, and an administrator appeared to hand out `creator`
+as though publishing were something to be permitted.
+
+Guards ask what an account **holds**, not what it **is**: `RequireAuth`, `RequireChannel`,
+`RequireModerator`, `RequireStaff`. `/studio/create` deliberately sits outside the channel guard,
+because that guard is what sends you there. A refusal is a named screen that says who *can* let
+you in and offers the way back — never a blank page or a vanished link, because hiding teaches
+nothing to somebody arriving from a shared URL.
+
+The identity switcher inside the account menu is **prototype scaffolding**. Its identities are
+chosen to show the grants are independent: one account moderates two channels without owning one,
+and no staff role carries a channel.
 
 ## Known gaps
 
 Recorded honestly rather than left for someone to discover:
 
 1. Poster plates are authored placeholders, not real artwork.
-2. The three faces load from the Google CDN and should be self-hosted.
-3. The client bundle is a single ~168KB gzipped chunk; route-level code splitting is untouched.
-4. Fixture data is thin — 12 videos, 10 accounts, 5 campaigns, 4 complaints — so sustained-session
-   density, sticky headers and large-list behaviour are undemonstrated.
-5. Only 1440px desktop and 390px mobile were verified. Intermediate laptop widths are unchecked.
-6. Light mode does not exist, in CSS or in Figma.
+2. The client bundle is a single chunk; route-level code splitting is untouched.
+3. Fixture data is synthetic — 44 videos, 10 accounts, 3 channels, 5 campaigns — and the video
+   library in Creator Studio is still filtered by creator name rather than by the signed-in
+   account's channel.
+4. Light mode does not exist, in CSS or in Figma.
+5. The Figma file still carries the old six-role model on its reference screens; the code is
+   ahead of it.
