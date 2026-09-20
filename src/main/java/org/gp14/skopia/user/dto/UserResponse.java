@@ -33,11 +33,9 @@ public class UserResponse {
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .userType(user.getUserType() != null ? user.getUserType().toString() : null)
+                .userType(user.getClass().getSimpleName())
                 .accountStatus(user.getAccountStatus())
                 .registeredDate(user.getRegisteredDate())
-                .profilePicture(user.getProfilePicture())
-                .bio(user.getBio())
                 .build();
     }
 }
