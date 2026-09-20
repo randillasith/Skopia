@@ -28,6 +28,18 @@
     </scm>
     <properties>
         <java.version>17</java.version>
+
+        <!-- The frontend is built by Maven so that `mvnw package` produces a
+             single runnable JAR containing both the API and the UI. -->
+        <frontend.directory>${project.basedir}/frontend</frontend.directory>
+        <!-- Active LTS (Krypton), which bundles npm 11. Do not drop below
+             22.12: Vite's Rolldown bindings declare
+             "node": "^20.19.0 || >=22.12.0", so an older runtime makes npm skip
+             the platform-specific binary as engine-incompatible and the build
+             fails with a misleading "Cannot find native binding" error. -->
+        <node.version>v24.21.0</node.version>
+        <!-- `-DskipFrontend=true` builds the backend alone, without Node. -->
+        <skipFrontend>false</skipFrontend>
     </properties>
     <dependencies>
         <dependency>
@@ -57,6 +69,80 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Downloads a project-local Node/npm (nothing is installed
+                 globally) and runs the Vite build. -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>1.15.1</version>
+                <configuration>
+                    <workingDirectory>${frontend.directory}</workingDirectory>
+                    <installDirectory>${project.build.directory}</installDirectory>
+                    <skip>${skipFrontend}</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>install-node-and-npm</goal>
+                        </goals>
+                        <configuration>
+                            <nodeVersion>${node.version}</nodeVersion>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-ci</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>ci</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-run-build</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>run build</arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Copies the Vite bundle into target/classes/static, where Spring
+                 Boot serves it. It lands in target/ and never in src/, so
+                 `mvnw clean` removes it and it is never committed.
+                 process-classes runs before test-compile, so `mvnw
+                 spring-boot:run` serves the UI too, not just `package`. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-frontend-bundle</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipFrontend}</skip>
+                            <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${frontend.directory}/dist</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
