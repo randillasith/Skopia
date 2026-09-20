@@ -192,6 +192,7 @@ export function Checkout() {
 /* ========================================================= checkout result */
 
 export function CheckoutResult() {
+  const nav = useNavigate()
   const [params, setParams] = useSearchParams()
   const ok = params.get('status') !== 'failed'
 
@@ -228,19 +229,19 @@ export function CheckoutResult() {
         <div className="mt-7 flex flex-wrap justify-center gap-2.5">
           {ok ? (
             <>
-              <Button variant="primary" onClick={() => (window.location.href = '/browse')}>
+              <Button variant="primary" onClick={() => nav('/browse')}>
                 Start watching
               </Button>
-              <Button icon={<Download className="size-4" />} onClick={() => (window.location.href = '/billing')}>
+              <Button icon={<Download className="size-4" />} onClick={() => nav('/billing')}>
                 View receipt
               </Button>
             </>
           ) : (
             <>
-              <Button variant="primary" onClick={() => (window.location.href = '/checkout')}>
+              <Button variant="primary" onClick={() => nav('/checkout')}>
                 Try again
               </Button>
-              <Button onClick={() => (window.location.href = '/plans')}>Back to passes</Button>
+              <Button onClick={() => nav('/plans')}>Back to passes</Button>
             </>
           )}
         </div>
@@ -259,6 +260,7 @@ export function CheckoutResult() {
 /* =========================================================== subscription */
 
 export function Subscription() {
+  const nav = useNavigate()
   const toast = useToast()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [active, setActive] = useState(true)
@@ -299,13 +301,13 @@ export function Subscription() {
           </dl>
 
           <div className="mt-6 flex flex-wrap gap-2.5 border-t border-ink-800 pt-5">
-            <Button variant="primary" icon={<ArrowUpRight className="size-4" />} onClick={() => (window.location.href = '/plans')}>
+            <Button variant="primary" icon={<ArrowUpRight className="size-4" />} onClick={() => nav('/plans')}>
               Change pass
             </Button>
             <Button icon={<CreditCard className="size-4" />} onClick={() => toast({ title: 'Payment method update is not wired in this prototype' })}>
               Update payment method
             </Button>
-            <Button icon={<Receipt className="size-4" />} onClick={() => (window.location.href = '/billing')}>
+            <Button icon={<Receipt className="size-4" />} onClick={() => nav('/billing')}>
               Billing history
             </Button>
             {active ? (

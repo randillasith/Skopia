@@ -112,11 +112,46 @@ function rng(seed: number) {
   }
 }
 
+/**
+ * Poster artwork.
+ *
+ * A poster is type on a plate: the title is the subject and the ground is there
+ * to carry it. The ground is generated, but not uniformly — twelve compositions
+ * and seven duotones drawn from the brand ramps, so that a shelf of forty titles
+ * reads as a wall of different posters rather than one poster re-tinted. The
+ * category biases which compositions come up, the way a real art department
+ * would: music gets rhythm, documentary gets horizons, learning gets diagrams.
+ *
+ * All of it is placeholder. Replace with real artwork before production.
+ */
+
+/** Duotones, all drawn from the brand ramps in index.css. */
+const PLATE_INKS: [string, string][] = [
+  ['#7559ff', '#241862'], // violet
+  ['#25c7f7', '#0b7194'], // cyan
+  ['#a48cff', '#3a2796'], // lifted violet
+  ['#5bdbfb', '#125c78'], // lifted cyan
+  ['#ffb443', '#5b3fe6'], // gold against violet — the rarest, for emphasis
+  ['#8b6fff', '#063145'], // violet over deep teal
+  ['#4b5b7c', '#0f1628'], // near-monochrome, for the quiet ones
+]
+
+/** Which compositions suit which shelf. Indices into the switch below. */
+const CATEGORY_FORMS: Record<string, number[]> = {
+  Documentary: [8, 0, 6, 11],
+  'Short Film': [5, 9, 0, 3],
+  Series: [1, 4, 9, 11],
+  Talk: [3, 2, 7, 6],
+  Music: [4, 10, 1, 2],
+  Learning: [7, 2, 10, 6],
+}
+
 export function PosterPlate({
   title,
   creator,
   runtime,
   seed,
+  category,
   className,
   compact = false,
   lettering = true,
@@ -125,6 +160,8 @@ export function PosterPlate({
   creator?: string
   runtime?: string
   seed: number
+  /** Biases the composition. Omit for an even spread across all twelve. */
+  category?: string
   className?: string
   /** Drops the studio/runtime line but keeps the title. */
   compact?: boolean
@@ -132,14 +169,16 @@ export function PosterPlate({
   lettering?: boolean
 }) {
   const r = rng(seed)
-  const variant = seed % 6
+  const forms = (category && CATEGORY_FORMS[category]) || null
+  const form = forms ? forms[seed % forms.length] : seed % 12
+  const [ink, deep] = PLATE_INKS[(seed * 3) % PLATE_INKS.length]
   const rot = -28 + r() * 56
   const cx = 20 + r() * 60
   const cy = 20 + r() * 60
   const uid = `p${seed}`
 
-  // A poster is type on a plate. Wrap the title to at most two lines so the
-  // lettering stays the subject at every size the plate is used at.
+  // Wrap the title to at most two lines so the lettering stays the subject at
+  // every size the plate is used at.
   const words = title.split(' ')
   const lines: string[] = []
   let line = ''
@@ -162,6 +201,9 @@ export function PosterPlate({
   )
   const baseY = 148 - (lines.length - 1) * titleSize * 0.88
 
+  const A = `url(#${uid}-a)`
+  const B = `url(#${uid}-b)`
+
   return (
     <svg
       viewBox="0 0 320 180"
@@ -172,13 +214,17 @@ export function PosterPlate({
     >
       <defs>
         <linearGradient id={`${uid}-a`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#7559FF" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="#241862" stopOpacity="0.9" />
+          <stop offset="0%" stopColor={ink} stopOpacity="0.95" />
+          <stop offset="100%" stopColor={deep} stopOpacity="0.9" />
         </linearGradient>
         <linearGradient id={`${uid}-b`} x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#25C7F7" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#0B7194" stopOpacity="0.7" />
+          <stop offset="0%" stopColor={deep} stopOpacity="0.9" />
+          <stop offset="100%" stopColor={ink} stopOpacity="0.7" />
         </linearGradient>
+        <radialGradient id={`${uid}-r`} cx="50%" cy="50%">
+          <stop offset="0%" stopColor={ink} stopOpacity="1" />
+          <stop offset="100%" stopColor={deep} stopOpacity="0.65" />
+        </radialGradient>
         <linearGradient id={`${uid}-plate`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#060A16" stopOpacity="0" />
           <stop offset="48%" stopColor="#060A16" stopOpacity="0.62" />
@@ -192,58 +238,117 @@ export function PosterPlate({
       <g clipPath={`url(#${uid}-clip)`}>
         <rect width="320" height="180" fill="#060A16" />
 
-        {variant === 0 && (
+        {/* 0 — diagonal split */}
+        {form === 0 && (
           <>
-            <polygon points="0,180 320,0 320,180" fill={`url(#${uid}-a)`} />
-            <polygon points="0,0 190,0 0,140" fill={`url(#${uid}-b)`} opacity="0.75" />
+            <polygon points="0,180 320,0 320,180" fill={A} />
+            <polygon points="0,0 190,0 0,140" fill={B} opacity="0.75" />
           </>
         )}
-        {variant === 1 && (
+
+        {/* 1 — bands */}
+        {form === 1 && (
           <>
-            <rect y="24" width="320" height="52" fill={`url(#${uid}-a)`} />
-            <rect y="88" width="320" height="26" fill={`url(#${uid}-b)`} opacity="0.8" />
-            <rect y="122" width="320" height="10" fill="#7559FF" opacity="0.45" />
+            <rect y="24" width="320" height="52" fill={A} />
+            <rect y="88" width="320" height="26" fill={B} opacity="0.8" />
+            <rect y="122" width="320" height="10" fill={ink} opacity="0.45" />
           </>
         )}
-        {variant === 2 && (
+
+        {/* 2 — concentric rings */}
+        {form === 2 && (
           <g transform={`translate(${cx * 2} ${cy * 0.8}) rotate(${rot})`}>
             {[92, 70, 48, 26].map((rr, i) => (
-              <circle
-                key={rr}
-                r={rr}
-                fill="none"
-                stroke={i % 2 ? '#25C7F7' : '#7559FF'}
-                strokeWidth={i % 2 ? 10 : 16}
-                opacity={0.55 + i * 0.08}
-              />
+              <circle key={rr} r={rr} fill="none" stroke={i % 2 ? deep : ink}
+                strokeWidth={i % 2 ? 10 : 16} opacity={0.55 + i * 0.08} />
             ))}
           </g>
         )}
-        {variant === 3 && (
+
+        {/* 3 — orb and companion */}
+        {form === 3 && (
           <>
-            <circle cx={cx * 3} cy={cy * 1.1} r="92" fill={`url(#${uid}-a)`} />
-            <circle cx={cx * 3 + 74} cy={cy * 1.1 + 18} r="54" fill={`url(#${uid}-b)`} opacity="0.8" />
+            <circle cx={cx * 3} cy={cy * 1.1} r="92" fill={`url(#${uid}-r)`} />
+            <circle cx={cx * 3 + 74} cy={cy * 1.1 + 18} r="54" fill={B} opacity="0.8" />
           </>
         )}
-        {variant === 4 && (
+
+        {/* 4 — rhythm, uneven bars */}
+        {form === 4 && (
           <g transform={`rotate(${rot / 4} 160 90)`}>
             {Array.from({ length: 11 }).map((_, i) => (
-              <rect
-                key={i}
-                x={i * 30 + 4}
-                y={-20}
-                width={10 + (i % 3) * 7}
-                height={220}
-                fill={i % 3 === 0 ? '#25C7F7' : '#7559FF'}
-                opacity={0.22 + (i % 4) * 0.14}
-              />
+              <rect key={i} x={i * 30 + 4} y={-20} width={10 + (i % 3) * 7} height={220}
+                fill={i % 3 === 0 ? deep : ink} opacity={0.22 + (i % 4) * 0.14} />
             ))}
           </g>
         )}
-        {variant === 5 && (
+
+        {/* 5 — wedges */}
+        {form === 5 && (
           <>
-            <polygon points="320,0 320,180 130,180" fill={`url(#${uid}-b)`} />
-            <polygon points="0,0 200,0 60,180 0,180" fill={`url(#${uid}-a)`} opacity="0.9" />
+            <polygon points="320,0 320,180 130,180" fill={B} />
+            <polygon points="0,0 200,0 60,180 0,180" fill={A} opacity="0.9" />
+          </>
+        )}
+
+        {/* 6 — arc sweep */}
+        {form === 6 && (
+          <>
+            <path d={`M0,180 A220,220 0 0 1 ${190 + cx},0 L0,0 Z`} fill={A} opacity="0.85" />
+            <path d={`M320,0 A150,150 0 0 0 ${150 - cy},180 L320,180 Z`} fill={B} opacity="0.55" />
+          </>
+        )}
+
+        {/* 7 — halftone grid */}
+        {form === 7 && (
+          <g opacity="0.85">
+            {Array.from({ length: 8 }).map((_, row) =>
+              Array.from({ length: 14 }).map((__, col) => (
+                <circle key={`${row}-${col}`} cx={14 + col * 23} cy={12 + row * 23}
+                  r={1.5 + ((row + col) % 5) * 1.9}
+                  fill={(row + col) % 3 === 0 ? deep : ink}
+                  opacity={0.3 + ((col * row) % 6) * 0.11} />
+              )),
+            )}
+          </g>
+        )}
+
+        {/* 8 — horizon */}
+        {form === 8 && (
+          <>
+            <rect width="320" height={96 + cy * 0.3} fill={B} opacity="0.55" />
+            <circle cx={70 + cx * 1.6} cy={86 + cy * 0.3} r={38 + cx * 0.2} fill={ink} opacity="0.95" />
+            <rect y={96 + cy * 0.3} width="320" height={180} fill={A} />
+          </>
+        )}
+
+        {/* 9 — overlapping planes */}
+        {form === 9 && (
+          <>
+            <rect x={cx * 0.6} y="8" width="150" height="150" fill={A} opacity="0.92" />
+            <rect x={cx * 0.6 + 96} y={38} width="170" height="120" fill={B} opacity="0.7" />
+            <rect x={cx * 0.6 + 52} y={70} width="80" height="80" fill={ink} opacity="0.35" />
+          </>
+        )}
+
+        {/* 10 — radial burst */}
+        {form === 10 && (
+          <g transform={`translate(${60 + cx * 2} 180)`}>
+            {Array.from({ length: 13 }).map((_, i) => (
+              <polygon key={i}
+                points={`0,0 ${-220 + i * 36},-260 ${-196 + i * 36},-260`}
+                fill={i % 2 ? ink : deep} opacity={0.18 + (i % 5) * 0.12} />
+            ))}
+          </g>
+        )}
+
+        {/* 11 — terraces */}
+        {form === 11 && (
+          <>
+            {[0, 1, 2, 3].map((i) => (
+              <rect key={i} x={-20 + i * 46} y={40 + i * 26} width="200" height="180"
+                fill={i % 2 ? deep : ink} opacity={0.75 - i * 0.13} />
+            ))}
           </>
         )}
 
@@ -252,42 +357,29 @@ export function PosterPlate({
 
         {/* house rule */}
         {lettering && (
-          <rect
-            x="18"
-            y={baseY - titleSize - 13}
-            width="44"
-            height="2"
-            fill="#25C7F7"
-            fillOpacity="0.9"
-          />
+          <rect x="18" y={baseY - titleSize - 13} width="44" height="2" fill={ink} fillOpacity="0.95" />
         )}
 
         {/* the title — the poster's whole job */}
         {lettering &&
           lines.map((l, i) => (
-          <text
-            key={i}
-            x="18"
-            y={baseY - (lines.length - 1 - i) * titleSize * 0.88}
-            fill="#ffffff"
-            fontFamily="Archivo, sans-serif"
-            fontSize={titleSize}
-            fontWeight="800"
-            letterSpacing="-1.1"
+            <text
+              key={i}
+              x="18"
+              y={baseY - (lines.length - 1 - i) * titleSize * 0.88}
+              fill="#ffffff"
+              fontFamily="Archivo, sans-serif"
+              fontSize={titleSize}
+              fontWeight="800"
+              letterSpacing="-1.1"
             >
               {l}
             </text>
           ))}
 
         {lettering && !compact && (creator || runtime) && (
-          <text
-            x="18"
-            y="170"
-            fill="#B6C1D6"
-            fontFamily="'JetBrains Mono', monospace"
-            fontSize="10"
-            letterSpacing="1.1"
-          >
+          <text x="18" y="170" fill="#B6C1D6" fontFamily="'JetBrains Mono', monospace"
+            fontSize="10" letterSpacing="1.1">
             {[creator, runtime].filter(Boolean).join('   ·   ').toUpperCase()}
           </text>
         )}

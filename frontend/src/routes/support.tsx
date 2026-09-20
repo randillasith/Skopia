@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate} from 'react-router-dom'
 import {
   ArrowLeft, Inbox, Check, Send, UserPlus, AlertTriangle, Search as SearchIcon,
 } from 'lucide-react'
@@ -22,6 +22,7 @@ const PRIORITIES: Priority[] = ['Low', 'Normal', 'High', 'Urgent']
 /* ============================================================ the queue */
 
 export function SupportQueue() {
+  const nav = useNavigate()
   const [tab, setTab] = useState('unassigned')
   const [q, setQ] = useState('')
 
@@ -47,7 +48,7 @@ export function SupportQueue() {
             </span>{' '}
             Urgent items are worked before anything else in the queue.
           </p>
-          <Button size="sm" onClick={() => (window.location.href = `/queue/${urgent[0].id}`)}>
+          <Button size="sm" onClick={() => nav(`/queue/${urgent[0].id}`)}>
             Open {urgent[0].id}
           </Button>
         </div>
@@ -85,7 +86,7 @@ export function SupportQueue() {
             </thead>
             <tbody>
               {list.map((r) => (
-                <Tr key={r.id} onClick={() => (window.location.href = `/queue/${r.id}`)}>
+                <Tr key={r.id} onClick={() => nav(`/queue/${r.id}`)}>
                   <Td><span className="font-mono tabular-nums text-ink-100">{r.id}</span></Td>
                   <Td><span className="font-medium text-white">{r.subject}</span></Td>
                   <Td className="text-ink-300">{r.type}</Td>
@@ -111,6 +112,7 @@ export function SupportQueue() {
 /* ======================================================== complaint detail */
 
 export function ComplaintDetail() {
+  const nav = useNavigate()
   const { id } = useParams()
   const r = REPORTS.find((x) => x.id === id)
   const toast = useToast()
@@ -123,7 +125,7 @@ export function ComplaintDetail() {
     return (
       <BackOfHouse title="Complaint not found">
         <EmptyState title="No such complaint" body="That reference does not exist in the queue."
-          action={<Button onClick={() => (window.location.href = '/queue')}>Back to the queue</Button>} />
+          action={<Button onClick={() => nav('/queue')}>Back to the queue</Button>} />
       </BackOfHouse>
     )
   }
@@ -277,7 +279,7 @@ export function ComplaintDetail() {
                 Content complaints can require an administrator to act on the title itself.
               </p>
               <Button size="sm" className="mt-3 w-full"
-                onClick={() => (window.location.href = '/admin/moderation')}>
+                onClick={() => nav('/admin/moderation')}>
                 Refer to moderation
               </Button>
             </div>
@@ -291,6 +293,7 @@ export function ComplaintDetail() {
 /* ====================================================== complaint history */
 
 export function ComplaintHistory() {
+  const nav = useNavigate()
   const [q, setQ] = useState('')
   const [type, setType] = useState('All')
 
@@ -339,7 +342,7 @@ export function ComplaintHistory() {
             </thead>
             <tbody>
               {list.map((r) => (
-                <Tr key={r.id} onClick={() => (window.location.href = `/queue/${r.id}`)}>
+                <Tr key={r.id} onClick={() => nav(`/queue/${r.id}`)}>
                   <Td><span className="font-mono tabular-nums text-ink-100">{r.id}</span></Td>
                   <Td><span className="font-medium text-white">{r.subject}</span></Td>
                   <Td className="text-ink-300">{r.type}</Td>

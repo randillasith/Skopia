@@ -25,6 +25,7 @@ const ctr = (c: Campaign) => (c.impressions ? (c.clicks / c.impressions) * 100 :
 /* ========================================================== campaign list */
 
 export function CampaignList() {
+  const nav = useNavigate()
   const [tab, setTab] = useState('all')
   const [q, setQ] = useState('')
 
@@ -44,7 +45,7 @@ export function CampaignList() {
       title="Campaigns"
       actions={
         <Button variant="primary" size="sm" icon={<Plus className="size-4" />}
-          onClick={() => (window.location.href = '/campaigns/new')}>
+          onClick={() => nav('/campaigns/new')}>
           New campaign
         </Button>
       }
@@ -83,7 +84,7 @@ export function CampaignList() {
         <div className="mt-8">
           <EmptyState icon={<Megaphone className="size-7" />} title="No campaigns here"
             body="Nothing matches this filter. Try another tab, or start a new campaign."
-            action={<Button onClick={() => (window.location.href = '/campaigns/new')}>New campaign</Button>} />
+            action={<Button onClick={() => nav('/campaigns/new')}>New campaign</Button>} />
         </div>
       ) : (
         <div className="mt-5 rounded-lg border border-ink-700 bg-ink-850">
@@ -96,7 +97,7 @@ export function CampaignList() {
             </thead>
             <tbody>
               {list.map((c) => (
-                <Tr key={c.id} onClick={() => (window.location.href = `/campaigns/${c.id}`)}>
+                <Tr key={c.id} onClick={() => nav(`/campaigns/${c.id}`)}>
                   <Td>
                     <span className="font-marquee block font-bold text-white">{c.name}</span>
                     <span className="block font-mono text-[11px] text-ink-300">{c.id} · {c.advertiser}</span>
@@ -386,6 +387,7 @@ function Nav({
 /* ======================================================== campaign detail */
 
 export function CampaignDetail() {
+  const nav = useNavigate()
   const { id } = useParams()
   const c = CAMPAIGNS.find((x) => x.id === id)
   const toast = useToast()
@@ -395,7 +397,7 @@ export function CampaignDetail() {
     return (
       <BackOfHouse title="Campaign not found">
         <EmptyState title="No such campaign" body="That campaign does not exist or has been removed."
-          action={<Button onClick={() => (window.location.href = '/campaigns')}>Back to campaigns</Button>} />
+          action={<Button onClick={() => nav('/campaigns')}>Back to campaigns</Button>} />
       </BackOfHouse>
     )
   }
@@ -531,6 +533,7 @@ export function CampaignDetail() {
 /* ==================================================== campaign performance */
 
 export function CampaignPerformance() {
+  const nav = useNavigate()
   const withData = CAMPAIGNS.filter((c) => c.impressions > 0)
   const maxImp = Math.max(...withData.map((c) => c.impressions))
 
@@ -603,7 +606,7 @@ export function CampaignPerformance() {
           </thead>
           <tbody>
             {CAMPAIGNS.map((c) => (
-              <Tr key={c.id} onClick={() => (window.location.href = `/campaigns/${c.id}`)}>
+              <Tr key={c.id} onClick={() => nav(`/campaigns/${c.id}`)}>
                 <Td><span className="font-medium text-white">{c.name}</span></Td>
                 <Td><Letterboard tone={STATUS_TONE[c.status]}>{c.status.toUpperCase()}</Letterboard></Td>
                 <Td numeric>{c.impressions.toLocaleString()}</Td>
