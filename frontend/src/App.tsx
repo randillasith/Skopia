@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { ToastHost } from '@/components/primitives'
+import { LibraryProvider } from '@/lib/library'
 import {
   SessionProvider, RequireAuth, RequireChannel, RequireModerator, RequireStaff,
 } from '@/components/Shell'
@@ -17,6 +18,8 @@ import {
   CreateChannel, ChannelModerators, ChannelSettings,
 } from '@/routes/studio'
 import { ModerationQueue, ModerationHistory } from '@/routes/moderate'
+import { ChannelPage, Subscriptions } from '@/routes/channel'
+import { Playlists, PlaylistDetail } from '@/routes/playlists'
 import { CampaignList, CampaignNew, CampaignDetail, CampaignPerformance } from '@/routes/campaigns'
 import { SupportQueue, ComplaintDetail, ComplaintHistory } from '@/routes/support'
 import {
@@ -36,6 +39,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <SessionProvider>
+        <LibraryProvider>
         <ToastHost>
           <ScrollToTop />
           <Routes>
@@ -50,9 +54,13 @@ export default function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/category/:name" element={<Category />} />
             <Route path="/watch/:id" element={<Watch />} />
+            <Route path="/channel/:handle" element={<ChannelPage />} />
             {/* Anything that belongs to an account rather than to the programme. */}
             <Route element={<RequireAuth what="This"><Outlet /></RequireAuth>}>
               <Route path="/watchlist" element={<Watchlist />} />
+              <Route path="/subscriptions" element={<Subscriptions />} />
+              <Route path="/playlists" element={<Playlists />} />
+              <Route path="/playlist/:id" element={<PlaylistDetail />} />
               <Route path="/history" element={<History />} />
               <Route path="/for-you" element={<ForYou />} />
               <Route path="/notifications" element={<Notifications />} />
@@ -122,6 +130,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/browse" replace />} />
           </Routes>
         </ToastHost>
+        </LibraryProvider>
       </SessionProvider>
     </BrowserRouter>
   )
