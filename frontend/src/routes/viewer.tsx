@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams, useNavigate} from 'react-router-dom'
 import { motion } from 'motion/react'
 import {
   Play, Pause, Volume2, Maximize, Subtitles, Settings2, SkipBack, SkipForward,
@@ -22,12 +22,12 @@ const EASE = [0.16, 1, 0.3, 1] as const
 
 /* ------------------------------------------------------------- poster tile */
 
-function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }) {
+export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }) {
   return (
     <article className="group min-w-0">
       <Lightbox interactive>
         <Link to={`/watch/${v.id}`} className="block aspect-video" aria-label={`Play ${v.title}`}>
-          <PosterPlate title={v.title} seed={v.seed} compact />
+          <PosterPlate title={v.title} seed={v.seed} category={v.category} compact />
           {typeof v.progress === 'number' && (
             <span className="absolute inset-x-0 bottom-0 block h-0.5 bg-ink-700">
               <span
@@ -67,6 +67,7 @@ function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }) {
 /* ================================================================== browse */
 
 export function Browse() {
+  const nav = useNavigate()
   const [cat, setCat] = useState<string>('All')
   const [sort, setSort] = useState('popular')
 
@@ -144,7 +145,7 @@ export function Browse() {
                     title={lead.title}
                     creator={lead.creator}
                     runtime={lead.runtime}
-                    seed={lead.seed}
+                    seed={lead.seed} category={lead.category}
                   />
                 </Link>
               </Lightbox>
@@ -163,7 +164,7 @@ export function Browse() {
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2.5">
                   <Button variant="primary" icon={<Play className="size-4 fill-current" />}
-                    onClick={() => (window.location.href = `/watch/${lead.id}`)}>
+                    onClick={() => nav(`/watch/${lead.id}`)}>
                     Play
                   </Button>
                   <Button icon={<Bookmark className="size-4" />}>Watchlist</Button>
@@ -198,7 +199,7 @@ export function Browse() {
                       >
                         <span className="w-24 shrink-0 overflow-hidden rounded-xs">
                           <span className="block aspect-video">
-                            <PosterPlate title={v.title} seed={v.seed} compact lettering={false} />
+                            <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
                           </span>
                         </span>
                         <span className="min-w-0 flex-1">
@@ -339,6 +340,7 @@ export function Category() {
 /* ============================================================== the hall */
 
 export function Watch() {
+  const nav = useNavigate()
   const { id } = useParams()
   const v = byId(id ?? '')
   const toast = useToast()
@@ -357,7 +359,7 @@ export function Watch() {
           <EmptyState
             title="That title is not in the programme"
             body="The link may be out of date, or the title may have been pulled."
-            action={<Button onClick={() => (window.location.href = '/browse')}>Back to the lobby</Button>}
+            action={<Button onClick={() => nav('/browse')}>Back to the lobby</Button>}
           />
         </div>
       </FrontOfHouse>
@@ -373,7 +375,7 @@ export function Watch() {
           <div className="min-w-0">
             {/* ---- the screen ---- */}
             <div className="lightbox relative aspect-video w-full">
-              <PosterPlate title={v.title} creator={v.creator} runtime={v.runtime} seed={v.seed} />
+              <PosterPlate title={v.title} creator={v.creator} runtime={v.runtime} seed={v.seed} category={v.category} />
               <div className="absolute inset-0 bg-ink-950/45" />
 
               {failed ? (
@@ -577,7 +579,7 @@ export function Watch() {
                   <Link to={`/watch/${r.id}`} className="group flex gap-3">
                     <span className="w-28 shrink-0 overflow-hidden rounded-xs">
                       <span className="block aspect-video">
-                        <PosterPlate title={r.title} seed={r.seed} compact lettering={false} />
+                        <PosterPlate title={r.title} seed={r.seed} category={r.category} compact lettering={false} />
                       </span>
                     </span>
                     <span className="min-w-0">
@@ -703,6 +705,7 @@ export function ReportModal({
 /* ============================================================== watchlist */
 
 export function Watchlist() {
+  const nav = useNavigate()
   const [list, setList] = useState(VIDEOS.slice(1, 5))
   return (
     <FrontOfHouse>
@@ -717,7 +720,7 @@ export function Watchlist() {
               icon={<Bookmark className="size-7" />}
               title="Your watchlist is empty"
               body="Save a title from anywhere in the programme and it will wait for you here."
-              action={<Button onClick={() => (window.location.href = '/browse')}>Browse the lobby</Button>}
+              action={<Button onClick={() => nav('/browse')}>Browse the lobby</Button>}
             />
           </div>
         ) : (
@@ -725,7 +728,7 @@ export function Watchlist() {
             {list.map((v) => (
               <li key={v.id} className="flex items-center gap-4 py-4">
                 <Link to={`/watch/${v.id}`} className="w-32 shrink-0 overflow-hidden rounded-xs">
-                  <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} compact lettering={false} /></span>
+                  <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} /></span>
                 </Link>
                 <div className="min-w-0 flex-1">
                   <Link to={`/watch/${v.id}`} className="font-marquee block truncate text-[17px] font-bold text-white hover:text-violet-200">
@@ -753,6 +756,7 @@ export function Watchlist() {
 /* ================================================================ history */
 
 export function History() {
+  const nav = useNavigate()
   const [list, setList] = useState(continueWatching)
   return (
     <FrontOfHouse>
@@ -776,7 +780,7 @@ export function History() {
               icon={<Clock className="size-7" />}
               title="No viewing history"
               body="Once you start watching, your place is kept here so you can resume."
-              action={<Button onClick={() => (window.location.href = '/browse')}>Find something to watch</Button>}
+              action={<Button onClick={() => nav('/browse')}>Find something to watch</Button>}
             />
           </div>
         ) : (
@@ -802,6 +806,7 @@ export function History() {
 /* ================================================================ for you */
 
 export function ForYou() {
+  const nav = useNavigate()
   const personalised = VIDEOS.filter((v) => v.billing === 'NOW SHOWING')
   return (
     <FrontOfHouse>
@@ -814,7 +819,7 @@ export function ForYou() {
           learning is involved — these are rule-based matches, and you can change what feeds them.
         </p>
         <div className="mt-4">
-          <Button size="sm" onClick={() => (window.location.href = '/settings/notifications')}>
+          <Button size="sm" onClick={() => nav('/settings/notifications')}>
             Adjust what feeds this
           </Button>
         </div>
@@ -841,6 +846,7 @@ export function ForYou() {
 /* =========================================================== notifications */
 
 export function Notifications() {
+  const nav = useNavigate()
   const [items, setItems] = useState(NOTIFICATIONS)
   const [tab, setTab] = useState('all')
   const shown = tab === 'all' ? items : items.filter((i) => !i.read)
@@ -856,7 +862,7 @@ export function Notifications() {
             <Button size="sm" onClick={() => setItems((x) => x.map((i) => ({ ...i, read: true })))}>
               Mark all read
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => (window.location.href = '/settings/notifications')}>
+            <Button size="sm" variant="ghost" onClick={() => nav('/settings/notifications')}>
               Preferences
             </Button>
           </div>
@@ -991,6 +997,7 @@ export function Profile() {
 /* =================================================================== help */
 
 export function Help() {
+  const nav = useNavigate()
   const [open, setOpen] = useState(false)
   const faqs = [
     ['Why can I not play a premium title?', 'Premium titles need an active pass. Check your pass under Account → Pass, or claim one from the Passes page.'],
@@ -1029,7 +1036,7 @@ export function Help() {
             <Button variant="primary" icon={<LifeBuoy className="size-4" />} onClick={() => setOpen(true)}>
               Contact support
             </Button>
-            <Button onClick={() => (window.location.href = '/reports')}>See my reports</Button>
+            <Button onClick={() => nav('/reports')}>See my reports</Button>
           </div>
         </div>
       </div>

@@ -21,6 +21,7 @@ const MINE = VIDEOS.filter((v) => ['Meridian Films', 'Harbour Studio'].includes(
 /* ========================================================= video library */
 
 export function StudioLibrary() {
+  const nav = useNavigate()
   const [confirm, setConfirm] = useState<string | null>(null)
   const toast = useToast()
   const target = confirm ? byId(confirm) : undefined
@@ -30,7 +31,7 @@ export function StudioLibrary() {
       title="Video library"
       actions={
         <Button variant="primary" size="sm" icon={<Plus className="size-4" />}
-          onClick={() => (window.location.href = '/studio/upload')}>
+          onClick={() => nav('/studio/upload')}>
           Upload
         </Button>
       }
@@ -64,7 +65,7 @@ export function StudioLibrary() {
                   <Link to={`/studio/video/${v.id}`} className="flex items-center gap-3 group">
                     <span className="w-16 shrink-0 overflow-hidden rounded-xs">
                       <span className="block aspect-video">
-                        <PosterPlate title={v.title} seed={v.seed} compact lettering={false} />
+                        <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
                       </span>
                     </span>
                     <span className="font-marquee font-bold text-white group-hover:text-violet-200">
@@ -86,7 +87,7 @@ export function StudioLibrary() {
                 </Td>
                 <Td>
                   <div className="flex justify-end gap-1">
-                    <Button size="sm" variant="quiet" onClick={() => (window.location.href = `/studio/video/${v.id}`)}>
+                    <Button size="sm" variant="quiet" onClick={() => nav(`/studio/video/${v.id}`)}>
                       Edit
                     </Button>
                     <Button size="sm" variant="quiet" onClick={() => setConfirm(v.id)}>
@@ -400,6 +401,7 @@ export function StudioUpload() {
 /* ============================================================ edit video */
 
 export function StudioEdit() {
+  const nav = useNavigate()
   const { id } = useParams()
   const v = byId(id ?? '')
   const toast = useToast()
@@ -408,7 +410,7 @@ export function StudioEdit() {
     return (
       <BackOfHouse title="Video not found">
         <EmptyState title="No such video" body="That record does not exist, or it has been deleted."
-          action={<Button onClick={() => (window.location.href = '/studio')}>Back to library</Button>} />
+          action={<Button onClick={() => nav('/studio')}>Back to library</Button>} />
       </BackOfHouse>
     )
   }
@@ -418,7 +420,7 @@ export function StudioEdit() {
       title={v.title}
       actions={
         <>
-          <Button size="sm" variant="quiet" onClick={() => (window.location.href = `/watch/${v.id}`)}>
+          <Button size="sm" variant="quiet" onClick={() => nav(`/watch/${v.id}`)}>
             View as a viewer
           </Button>
           <Button size="sm" variant="primary" onClick={() => toast({ title: 'Changes saved', tone: 'ok' })}>
@@ -468,7 +470,7 @@ export function StudioEdit() {
           <div>
             <p className="letterboard mb-2 text-ink-300">Thumbnail</p>
             <Lightbox>
-              <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} compact /></span>
+              <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} category={v.category} compact /></span>
             </Lightbox>
             <Button size="sm" className="mt-2.5 w-full" icon={<Upload className="size-4" />}>Replace</Button>
           </div>

@@ -4,15 +4,33 @@ import { ArrowRight, Play, Check } from 'lucide-react'
 import { Button, Field, Input, Checkbox } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, MarqueeRule, Letterboard } from '@/components/world'
 import { Wordmark, useSession } from '@/components/Shell'
+import { Tile } from './viewer'
 import { VIDEOS, CATEGORIES, GENRES, fmt } from '@/lib/data'
 import { ACCOUNTS, homeFor } from '@/lib/session'
 
 /* =============================================================== the lobby */
 
 export function Lobby() {
+  const nav = useNavigate()
   const headline = VIDEOS[0]
   const support = [VIDEOS[3], VIDEOS[7]]
-  const tail = VIDEOS.slice(1).filter((v) => !support.includes(v) && v.billing !== 'PULLED')
+  // The justified tail is a typographic device, not a listing. Past a dozen or so
+  // it stops reading as a block of type and becomes a wall; the shelves below
+  // carry the rest.
+  const tail = VIDEOS.slice(1)
+    .filter((v) => !support.includes(v) && v.billing === 'NOW SHOWING')
+    .slice(0, 12)
+
+  // Browsing needs no account, so the landing page is the catalogue rather than a
+  // description of it. Only what is actually playable appears: a title still in
+  // review or not yet released is not the guest's business, and a shelf with one
+  // item on it looks worse than no shelf at all.
+  const shelves = CATEGORIES.map((category) => ({
+    category,
+    items: VIDEOS.filter(
+      (v) => v.category === category && (v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER'),
+    ).slice(0, 5),
+  })).filter((s) => s.items.length >= 3)
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -25,7 +43,7 @@ export function Lobby() {
           >
             Sign in
           </Link>
-          <Button variant="primary" onClick={() => (window.location.href = '/browse')}>
+          <Button variant="primary" onClick={() => nav('/browse')}>
             Start watching
           </Button>
         </nav>
@@ -63,11 +81,11 @@ export function Lobby() {
                   variant="primary"
                   size="lg"
                   icon={<Play className="size-4 fill-current" />}
-                  onClick={() => (window.location.href = `/watch/${headline.id}`)}
+                  onClick={() => nav(`/watch/${headline.id}`)}
                 >
                   Play now
                 </Button>
-                <Button size="lg" onClick={() => (window.location.href = '/browse')}>
+                <Button size="lg" onClick={() => nav('/browse')}>
                   See the whole programme
                 </Button>
               </div>
@@ -118,7 +136,7 @@ export function Lobby() {
                   title={headline.title}
                   creator={headline.creator}
                   runtime={headline.runtime}
-                  seed={headline.seed}
+                  seed={headline.seed} category={headline.category}
                 />
               </Link>
             </Lightbox>
@@ -128,41 +146,34 @@ export function Lobby() {
                 {headline.runtime}
               </span>
             </div>
-            <p className="mt-3 text-[13px] leading-relaxed text-ink-300">
-              Placeholder artwork. Real poster imagery replaces these plates at production.
-            </p>
           </aside>
         </div>
       </section>
 
-      {/* ---- what the platform carries ---- */}
-      <section className="border-t border-ink-800">
-        <div className="mx-auto max-w-[1500px] px-4 py-14 sm:px-6 lg:px-8">
-          <h2 className="font-marquee text-[clamp(1.6rem,3vw,2.2rem)] font-bold tracking-tight text-white">
-            A venue, not a feed
-          </h2>
-          <p className="mt-3 max-w-[68ch] text-[16px] leading-relaxed text-ink-300">
-            Skopia carries the whole operation in one place — the programme and its playback,
-            passes and payment, reports and their resolution, notifications, advertising, and the
-            consoles the staff run it from. What you can reach depends on your role.
-          </p>
-          <div className="mt-8 grid gap-x-10 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              ['Browse and watch', 'Search by category, genre and popularity. Play with full controls, captions, and your place kept.'],
-              ['Passes and payment', 'Claim a pass, change it, or let it go. Every payment leaves a receipt you can find again.'],
-              ['Report and track', 'Report a title or a playback fault, then follow it through to a resolution you can read.'],
-              ['Notifications', 'New titles, pass changes, and report outcomes — only the kinds you asked for.'],
-              ['Advertising', 'Campaigns run to a schedule against chosen categories, and always say they are advertising.'],
-              ['Administration', 'Accounts, roles, moderation, plans, announcements, logs and configuration.'],
-            ].map(([t, d]) => (
-              <div key={t}>
-                <h3 className="font-marquee text-[17px] font-bold text-white">{t}</h3>
-                <p className="mt-1.5 text-[14px] leading-relaxed text-ink-300">{d}</p>
-              </div>
-            ))}
+      {/* ---- the programme itself: a guest browses before signing up ---- */}
+      {shelves.map(({ category, items }) => (
+        <section key={category} className="border-t border-ink-800">
+          <div className="mx-auto max-w-[1500px] px-4 py-11 sm:px-6 lg:px-8">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="font-marquee text-[clamp(1.3rem,2.4vw,1.75rem)] font-bold tracking-[-0.02em] text-white">
+                {category}
+              </h2>
+              <Link
+                to={`/category/${encodeURIComponent(category)}`}
+                className="group flex shrink-0 items-center gap-1.5 text-[13px] text-ink-300 transition-colors hover:text-white"
+              >
+                All {category.toLowerCase()}
+                <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </Link>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {items.map((v) => (
+                <Tile key={v.id} v={v} size="sm" />
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ))}
 
       <section className="border-t border-ink-800">
         <div className="mx-auto flex max-w-[1500px] flex-col gap-5 px-4 py-12 sm:flex-row sm:items-center sm:px-6 lg:px-8">
@@ -174,10 +185,10 @@ export function Lobby() {
           </div>
           <div className="flex flex-wrap gap-3 sm:ml-auto">
             <Button variant="primary" size="lg" icon={<ArrowRight className="size-4" />}
-              onClick={() => (window.location.href = '/signup')}>
+              onClick={() => nav('/signup')}>
               Create an account
             </Button>
-            <Button size="lg" onClick={() => (window.location.href = '/plans')}>
+            <Button size="lg" onClick={() => nav('/plans')}>
               See passes
             </Button>
           </div>

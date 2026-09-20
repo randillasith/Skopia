@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate} from 'react-router-dom'
 import {
   Users, AlertTriangle, Ban, ShieldCheck, Plus, Megaphone, Eye,
   Download, Trash2, ScrollText,
@@ -362,6 +362,7 @@ export function AdminRoles() {
 /* ============================================================ moderation */
 
 export function AdminModeration() {
+  const nav = useNavigate()
   const toast = useToast()
   const reported = REPORTS.filter((r) => r.type === 'Inappropriate content')
   const [tab, setTab] = useState('queue')
@@ -412,7 +413,7 @@ export function AdminModeration() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" icon={<Eye className="size-4" />}
-                        onClick={() => v && (window.location.href = `/watch/${v.id}`)}>
+                        onClick={() => v && nav(`/watch/${v.id}`)}>
                         Review
                       </Button>
                       <Button size="sm" variant="secondary"
