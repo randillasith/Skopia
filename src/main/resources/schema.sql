@@ -131,9 +131,21 @@ CREATE TABLE IF NOT EXISTS videos (
     view_count BIGINT NOT NULL DEFAULT 0,
     resolution VARCHAR(20),
     video_status VARCHAR(20) NOT NULL DEFAULT 'PUBLIC',
+    video_url VARCHAR(500),
+    thumbnail_url VARCHAR(500),
     FOREIGN KEY (creator_id) REFERENCES content_creators(viewer_id) ON DELETE CASCADE,
     FOREIGN KEY (tier_id) REFERENCES access_tiers(tier_id),
     FOREIGN KEY (category_id) REFERENCES categories(category_id)
+);
+
+-- Video Likes
+CREATE TABLE IF NOT EXISTS video_likes (
+    user_id BIGINT NOT NULL,
+    video_id BIGINT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, video_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE CASCADE
 );
 
 -- Many-to-Many: Video <-> Tag
