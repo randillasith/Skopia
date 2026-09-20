@@ -1,0 +1,328 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   SKOPIA — token layer
+   Mirrors the Figma collections "Skopia · Primitives",
+   "Skopia · Semantic" and "Skopia · Scale" one-to-one.
+   Locked palette: nothing outside this block may introduce colour.
+   ============================================================ */
+
+@theme {
+  /* --- primitives ------------------------------------------ */
+  --color-violet-50: #efebff;
+  --color-violet-100: #ddd5ff;
+  --color-violet-200: #c2b4ff;
+  --color-violet-300: #a48cff;
+  --color-violet-400: #8b6fff;
+  --color-violet-500: #7559ff;
+  --color-violet-600: #6544f0;
+  --color-violet-700: #5b3fe6;
+  --color-violet-800: #4a32be;
+  --color-violet-900: #3a2796;
+  --color-violet-950: #241862;
+
+  --color-cyan-50: #e6faff;
+  --color-cyan-100: #c4f3ff;
+  --color-cyan-200: #92e9ff;
+  --color-cyan-300: #5bdbfb;
+  --color-cyan-400: #25c7f7;
+  --color-cyan-500: #0fb0e0;
+  --color-cyan-600: #048db8;
+  --color-cyan-700: #0b7194;
+  --color-cyan-800: #125c78;
+  --color-cyan-900: #144d65;
+  --color-cyan-950: #063145;
+
+  --color-ink-0: #ffffff;
+  --color-ink-50: #eef2f8;
+  --color-ink-100: #d4dcea;
+  --color-ink-150: #b6c1d6;
+  --color-ink-200: #94a2be;
+  --color-ink-300: #7a8aa9;
+  --color-ink-400: #4b5b7c;
+  --color-ink-500: #32405f;
+  --color-ink-600: #242e4c;
+  --color-ink-700: #1a233d;
+  --color-ink-750: #141c32;
+  --color-ink-800: #0f1628;
+  --color-ink-850: #0b1122;
+  --color-ink-900: #080d1c;
+  --color-ink-950: #060a16;
+
+  --color-success-400: #34d399;
+  --color-success-500: #16c784;
+  --color-success-600: #0ea46a;
+  --color-warning-400: #fbbf54;
+  --color-warning-500: #f5a524;
+  --color-warning-600: #d18412;
+  --color-danger-400: #ff6b8a;
+  --color-danger-500: #f63d68;
+  --color-danger-600: #d42a52;
+  --color-gold-400: #ffce6a;
+  --color-gold-500: #ffb443;
+  --color-gold-600: #e0921f;
+
+  /* --- semantic --------------------------------------------- */
+  --color-canvas: var(--color-ink-900);
+  --color-surface: var(--color-ink-850);
+  --color-raised: var(--color-ink-800);
+  --color-overlay: var(--color-ink-750);
+  --color-inset: var(--color-ink-950);
+
+  --color-fg: var(--color-ink-0);
+  --color-fg-muted: var(--color-ink-200);
+  --color-fg-subtle: var(--color-ink-300);
+  --color-fg-disabled: var(--color-ink-400);
+
+  --color-rule: var(--color-ink-700);
+  --color-rule-strong: var(--color-ink-600);
+
+  --color-brand: var(--color-violet-500);
+  --color-brand-hi: var(--color-violet-400);
+  --color-brand-lo: var(--color-violet-700);
+  --color-accent: var(--color-cyan-400);
+
+  /* --- type ------------------------------------------------- */
+  --font-marquee: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* --- radii ------------------------------------------------ */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+
+  /* --- elevation -------------------------------------------- */
+  --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.18);
+  --shadow-e2: 0 4px 8px -2px rgb(0 0 0 / 0.4), 0 2px 4px -1px rgb(0 0 0 / 0.28);
+  --shadow-e3: 0 12px 24px -6px rgb(0 0 0 / 0.5), 0 4px 8px -2px rgb(0 0 0 / 0.3);
+  --shadow-e4: 0 24px 48px -12px rgb(0 0 0 / 0.6), 0 8px 16px -4px rgb(0 0 0 / 0.35);
+
+  /* --- motion ----------------------------------------------- */
+  --ease-marquee: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-house: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ============================================================
+   Base — including the browser surfaces we did not draw
+   ============================================================ */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    /* the two sign colours, as raw channels for alpha use */
+    --sign-violet: 117 89 255;
+    --sign-cyan: 37 199 247;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--color-ink-600) transparent;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* text selection — the house colours, not the browser's blue */
+  ::selection {
+    background-color: rgb(var(--sign-violet) / 0.32);
+    color: var(--color-ink-0);
+  }
+
+  /* caret */
+  input,
+  textarea,
+  [contenteditable] {
+    caret-color: var(--color-accent);
+  }
+
+  /* scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-ink-600);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-ink-500);
+  }
+
+  /* focus — one visible ring everywhere, never removed */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-hi);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* links carry a readable underline, not a browser-default one */
+  a {
+    text-underline-offset: 0.22em;
+    text-decoration-thickness: from-font;
+  }
+
+  /* numbers in data line up */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* the marquee voice */
+  .font-marquee {
+    font-stretch: 84%;
+    letter-spacing: -0.02em;
+  }
+
+  ::placeholder {
+    color: var(--color-ink-300);
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ============================================================
+   The world's three component primitives
+   ============================================================ */
+
+@layer components {
+  /* A lightbox: a backlit poster in a luminous frame. */
+  .lightbox {
+    position: relative;
+    background-color: #000;
+    border-radius: var(--radius-lg);
+    box-shadow:
+      inset 0 0 0 1px rgb(var(--sign-violet) / 0.28),
+      var(--shadow-e3);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .lightbox::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 0 rgb(var(--sign-cyan) / 0.22);
+  }
+
+  /* A letterboard: uppercase tracked status on a ruled field. */
+  .letterboard {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  /* A hairline rule — the staff consoles' only divider. */
+  .hairline {
+    border-color: var(--color-rule);
+  }
+
+  /* The marquee rule that runs above the fold. */
+  .marquee-rule {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--sign-violet) / 0.55) 18%,
+      rgb(var(--sign-cyan) / 0.55) 62%,
+      transparent
+    );
+  }
+}
+
+/* ============================================================
+   Operate tables below md — each record stacks as a labelled
+   block. A horizontal scroller is not a responsive composition.
+   ============================================================ */
+
+@media (max-width: 767px) {
+  .skopia-table,
+  .skopia-table tbody,
+  .skopia-table tr,
+  .skopia-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .skopia-table thead {
+    display: none;
+  }
+
+  .skopia-table tr {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-ink-800);
+  }
+
+  .skopia-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    border: 0;
+    padding: 4px 0;
+    text-align: left;
+  }
+
+  /* the caption each stacked cell carries */
+  .skopia-table td::before {
+    content: var(--col-label, '');
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.45;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--color-ink-300);
+  }
+
+  .skopia-table td:nth-of-type(1) { --col-label: var(--col-1); }
+  .skopia-table td:nth-of-type(2) { --col-label: var(--col-2); }
+  .skopia-table td:nth-of-type(3) { --col-label: var(--col-3); }
+  .skopia-table td:nth-of-type(4) { --col-label: var(--col-4); }
+  .skopia-table td:nth-of-type(5) { --col-label: var(--col-5); }
+  .skopia-table td:nth-of-type(6) { --col-label: var(--col-6); }
+  .skopia-table td:nth-of-type(7) { --col-label: var(--col-7); }
+  .skopia-table td:nth-of-type(8) { --col-label: var(--col-8); }
+
+  /* the record's own name leads, unlabelled and at full width */
+  .skopia-table td:nth-of-type(1) {
+    padding-bottom: 8px;
+  }
+  .skopia-table td:nth-of-type(1)::before {
+    display: none;
+  }
+
+  /* an action cell with no caption should not reserve caption space */
+  .skopia-table td:empty {
+    display: none;
+  }
+}
