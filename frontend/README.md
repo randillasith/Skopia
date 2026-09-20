@@ -120,10 +120,13 @@ photography. Replace it with real imagery before this goes anywhere near product
 | Route | Use case |
 |---|---|
 | `/browse` | UC-FR1-01 — browse the catalogue, billing-ranked |
-| `/search` | UC-FR1-01 — search and filter, including the empty-result state |
+| `/search` | UC-FR1-01 — search with suggestions, five filters, channel results, empty state |
 | `/category/:name` | UC-FR1-01 — browse by category |
-| `/watch/:id` | UC-FR1-01 — playback, controls, captions, pre-roll advertising, the playback-failure state (demo button), reporting |
-| `/watchlist` · `/history` | UC-FR1-02 — favourites, watch history with resume, empty states |
+| `/channel/:handle` | UC-FR1-01 — a creator's channel: latest release, sorted library, about, follow |
+| `/subscriptions` | UC-FR1-02 — the channels you follow, newest release first |
+| `/watch/:id` | UC-FR1-01 — playback with chapters, speed, volume, captions, theatre, full screen, keyboard control, pre-roll advertising, the playback-failure state, reporting, share-from-here |
+| `/watchlist` · `/history` | UC-FR1-02 — watch later, history with resume, pause and clear |
+| `/playlists` · `/playlist/:id` | UC-FR1-02 — create, rename, delete, visibility, play all, shuffle |
 | `/studio/create` | UC-FR1-03 — open a channel. Self-service, no approval step |
 | `/studio` | UC-FR1-03 — the creator's video library |
 | `/studio/upload` | UC-FR1-03 — staged upload with validation and the duplicate warning |
@@ -214,6 +217,23 @@ faked one), **Instrument Sans** is the interface workhorse, **JetBrains Mono** c
 references, timecodes and every figure in a table. All three are self-hosted through
 `@fontsource` — no CDN request, no third-party dependency, and the versions are pinned in
 `package-lock.json` so a build next year renders as it does today.
+
+### The player
+
+`src/components/player.tsx`. There is no stream behind it, so the clock is driven by a timer
+rather than a media element: the scrubber moves, chapters become current, and 2× genuinely
+reaches the end sooner. Every piece maps onto a real `<video>` — `time` becomes `currentTime`,
+`speed` becomes `playbackRate` — so wiring a stream in later is a substitution, not a rewrite.
+
+Keyboard control follows the conventions people already have: `Space`/`K` play, `J`/`L` ±10s,
+arrows ±5s, `0`–`9` jump to 0–90%, `M` mute, `C` captions, `F` full screen, `T` theatre,
+`<`/`>` speed. Handlers bail out when the caret is in a field — toggling captions from the
+comment box is the classic way this feature goes wrong.
+
+Two deliberate absences. **Quality** opens and states that the levels are undecided, rather than
+inventing a ladder of resolutions nobody has agreed to serve. **Picture-in-picture is not
+offered**: it needs a real media element, and a button that cannot do its job is worse than no
+button.
 
 **The glance** is the one desktop-only interaction. A lightbox is a backlit surface, so on a
 fine pointer it catches light where the cursor is: `Lightbox interactive` writes `--mx`/`--my`
