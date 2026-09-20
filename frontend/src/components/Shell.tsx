@@ -16,6 +16,7 @@ import {
 } from '@/lib/session'
 import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
+import { SearchBox } from './search'
 
 /* ---------------------------------------------------------------- session */
 
@@ -370,12 +371,15 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
+          <div className="ml-auto hidden min-w-0 sm:block">
+            <SearchBox />
+          </div>
           <Link
             to="/search"
-            className="ml-auto flex h-10 items-center gap-2 rounded-sm border border-ink-700 bg-ink-850 px-3 text-[13px] text-ink-300 transition-colors hover:border-ink-600 hover:text-ink-200 sm:w-64"
+            aria-label="Search"
+            className="ml-auto rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-white sm:hidden"
           >
-            <Search className="size-4" />
-            <span className="hidden sm:inline">Search the programme</span>
+            <Search className="size-5" />
           </Link>
 
           <Link

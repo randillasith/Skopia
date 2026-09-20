@@ -272,7 +272,7 @@ export const VIDEOS: Video[] = [
     seed: 10,
   },
   /* ---- the rest of the catalogue ------------------------------------- */
-  { id: 'v-1053', title: 'Salt and Iron', creator: 'Harbour Studio', category: 'Documentary', genre: 'History', runtime: '1:12:40', published: '2026-07-19', views: 96340, likes: 7120, comments: 431, premium: true, billing: 'NOW SHOWING', captions: ['English', 'Sinhala'], synopsis: 'Three generations of a shipbreaking family on the Gujarat coast, and the week the yard finally closed.', seed: 11 },
+  { id: 'v-1053', title: 'The Breaking Yard', creator: 'Harbour Studio', category: 'Documentary', genre: 'History', runtime: '1:12:40', published: '2026-07-19', views: 96340, likes: 7120, comments: 431, premium: true, billing: 'NOW SHOWING', captions: ['English', 'Sinhala'], synopsis: 'Three generations of a shipbreaking family on the Gujarat coast, and the week the yard finally closed.', seed: 11 },
   { id: 'v-1054', title: 'The Quiet Bench', creator: 'Aster Lane', category: 'Short Film', genre: 'Drama', runtime: '14:08', published: '2026-08-30', views: 22180, likes: 3040, comments: 188, premium: false, billing: 'NOW SHOWING', captions: ['English'], synopsis: 'Two strangers share a park bench every Thursday for a year without exchanging a word.', progress: 0.77, seed: 12 },
   { id: 'v-1055', title: 'Night Shift — Episode 4', creator: 'Northbound', category: 'Series', genre: 'Drama', runtime: '42:55', published: '2026-09-04', views: 141020, likes: 10860, comments: 1204, premium: true, billing: 'NOW SHOWING', captions: ['English', 'Tamil'], synopsis: 'The ward loses power for eleven minutes. Nobody agrees afterwards on what happened in the dark.', seed: 13 },
   { id: 'v-1056', title: 'How a Lens Actually Works', creator: 'Fern & Field', category: 'Learning', genre: 'Science', runtime: '18:22', published: '2026-06-11', views: 310540, likes: 28400, comments: 2210, premium: false, billing: 'HELD OVER', captions: ['English', 'Sinhala', 'Tamil'], synopsis: 'Glass, curvature and light, explained with a bathtub and a laser pointer.', progress: 0.15, seed: 14 },
@@ -574,7 +574,7 @@ export type PendingComment = {
 export const MODERATION_QUEUE: PendingComment[] = [
   { id: 'm-1', channelId: 'ch-01', video: 'The Longest Winter', who: 'T. Nadeeka', at: '18 min ago', body: 'Captions drift after about four minutes — reported it.', flag: 'Reported by a viewer' },
   { id: 'm-2', channelId: 'ch-01', video: 'The Longest Winter', who: 'anon_4417', at: '1 h ago', body: 'Visit my page for free streams of everything on here', flag: 'Held by a filter' },
-  { id: 'm-3', channelId: 'ch-01', video: 'Salt and Iron', who: 'M. Silva', at: '3 h ago', body: 'Completely wasted my evening. Whoever cut this should not be allowed near an edit suite again.', flag: 'Reported by a viewer' },
+  { id: 'm-3', channelId: 'ch-01', video: 'The Breaking Yard', who: 'M. Silva', at: '3 h ago', body: 'Completely wasted my evening. Whoever cut this should not be allowed near an edit suite again.', flag: 'Reported by a viewer' },
   { id: 'm-4', channelId: 'ch-03', video: 'Night Shift', who: 'K. Fernando', at: '5 h ago', body: 'Is there a longer cut anywhere? The ending felt abrupt.', flag: 'First comment from this account' },
   { id: 'm-5', channelId: 'ch-01', video: 'Harbour Lights', who: 'anon_9902', at: 'yesterday', body: 'FIRST!!!! 🎉🎉🎉', flag: 'Held by a filter' },
 ]
@@ -592,7 +592,7 @@ export type ModerationDecision = {
 
 export const MODERATION_LOG: ModerationDecision[] = [
   { id: 'd-1', channelId: 'ch-01', video: 'The Longest Winter', who: 'R. Perera', at: '2026-09-18 14:02', by: 'd.fernando', outcome: 'Published', note: 'Reported in error — ordinary criticism.' },
-  { id: 'd-2', channelId: 'ch-01', video: 'Salt and Iron', who: 'anon_3310', at: '2026-09-18 09:44', by: 'd.fernando', outcome: 'Removed', note: 'Advertising an unrelated service.' },
+  { id: 'd-2', channelId: 'ch-01', video: 'The Breaking Yard', who: 'anon_3310', at: '2026-09-18 09:44', by: 'd.fernando', outcome: 'Removed', note: 'Advertising an unrelated service.' },
   { id: 'd-3', channelId: 'ch-03', video: 'Night Shift', who: 'anon_7781', at: '2026-09-17 21:15', by: 'r.perera', outcome: 'Author blocked', note: 'Third removal on this channel this week.' },
   { id: 'd-4', channelId: 'ch-01', video: 'Harbour Lights', who: 'M. Silva', at: '2026-09-17 11:30', by: 'd.fernando', outcome: 'Published', note: 'Held by the filter, read fine.' },
 ]

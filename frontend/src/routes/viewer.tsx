@@ -5,18 +5,19 @@ import {
   Bell, LifeBuoy, ChevronRight, X,
 } from 'lucide-react'
 import {
-  Button, Field, Input, Select, Textarea, SearchInput, Toggle, EmptyState,
+  Button, Field, Input, Select, Textarea, Toggle, EmptyState,
   Modal, Section, Avatar, Meter, useToast, Tabs,
 } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, Letterboard } from '@/components/world'
 import { Player, ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import {
-  VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt, clock,
-  continueWatching, type Video,
+  VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt, clock, seconds,
+  type Video,
 } from '@/lib/data'
-import { channelByName } from '@/lib/session'
+import { CHANNELS, channelByName } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
+import { SearchBox } from '@/components/search'
 import { SubscribeButton } from './channel'
 import { SaveToPlaylist } from './playlists'
 import { cn } from '@/lib/cn'
@@ -24,6 +25,13 @@ import { cn } from '@/lib/cn'
 /* ------------------------------------------------------------- poster tile */
 
 export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }) {
+  const { isSaved, toggleWatchLater } = useLibrary()
+  const { viewer } = useSession()
+  const nav = useNavigate()
+  const toast = useToast()
+  const [saveOpen, setSaveOpen] = useState(false)
+  const saved = isSaved(v.id)
+
   return (
     <article className="group min-w-0">
       <Lightbox interactive>
@@ -31,10 +39,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
           <PosterPlate title={v.title} seed={v.seed} category={v.category} compact />
           {typeof v.progress === 'number' && (
             <span className="absolute inset-x-0 bottom-0 block h-0.5 bg-ink-700">
-              <span
-                className="block h-full bg-cyan-400"
-                style={{ width: `${v.progress * 100}%` }}
-              />
+              <span className="block h-full bg-cyan-400" style={{ width: `${v.progress * 100}%` }} />
             </span>
           )}
           {v.premium && (
@@ -42,8 +47,46 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
               Pass
             </span>
           )}
+          {/* Duration on the thumbnail. It is the first thing anyone checks
+              before committing to something, and making them open the page to
+              find it is a small tax paid on every browse. */}
+          <span className="absolute bottom-1.5 right-1.5 rounded-xs bg-ink-950/85 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-white backdrop-blur-[2px]">
+            {v.runtime}
+          </span>
         </Link>
+
+        {/* Quick actions, on a fine pointer only: on touch there is no hover to
+            reveal them, and a permanently visible pair of buttons would compete
+            with the artwork on every tile. */}
+        <span className="pointer-events-none absolute left-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100">
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              if (!viewer) return nav('/login')
+              toggleWatchLater(v.id)
+              toast({ title: saved ? 'Removed from Watch later' : 'Saved to Watch later' })
+            }}
+            aria-label={saved ? `Remove ${v.title} from Watch later` : `Save ${v.title} to Watch later`}
+            title={saved ? 'Remove from Watch later' : 'Watch later'}
+            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
+          >
+            <Clock className={cn('size-3.5', saved && 'text-cyan-300')} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              if (!viewer) return nav('/login')
+              setSaveOpen(true)
+            }}
+            aria-label={`Save ${v.title} to a playlist`}
+            title="Save to playlist"
+            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
+          >
+            <Bookmark className="size-3.5" />
+          </button>
+        </span>
       </Lightbox>
+
       <div className="mt-2.5 min-w-0">
         <Link to={`/watch/${v.id}`}>
           <h3
@@ -57,10 +100,21 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             {v.title}
           </h3>
         </Link>
-        <p className="mt-0.5 truncate text-[13px] text-ink-300">
-          {v.creator} · <span className="font-mono tabular-nums">{v.runtime}</span>
+        {/* The creator is a link, so a shelf is a way into a channel rather than
+            a dead end that only leads to single videos. */}
+        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[13px] text-ink-300">
+          <Link
+            to={`/channel/${channelByName(v.creator)?.handle ?? ''}`}
+            className="truncate transition-colors hover:text-ink-100"
+          >
+            {v.creator}
+          </Link>
+          <span aria-hidden>·</span>
+          <span className="shrink-0 font-mono tabular-nums">{fmt(v.views)}</span>
         </p>
       </div>
+
+      <SaveToPlaylist videoId={v.id} open={saveOpen} onClose={() => setSaveOpen(false)} />
     </article>
   )
 }
@@ -69,6 +123,8 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
 
 export function Browse() {
   const nav = useNavigate()
+  const toast = useToast()
+  const { isSaved, toggleWatchLater } = useLibrary()
   const [cat, setCat] = useState<string>('All')
   const [sort, setSort] = useState('popular')
 
@@ -168,7 +224,15 @@ export function Browse() {
                     onClick={() => nav(`/watch/${lead.id}`)}>
                     Play
                   </Button>
-                  <Button icon={<Bookmark className="size-4" />}>Watchlist</Button>
+                  <Button
+                    icon={<Bookmark className={cn('size-4', isSaved(lead.id) && 'fill-current')} />}
+                    onClick={() => {
+                      const added = toggleWatchLater(lead.id)
+                      toast({ title: added ? 'Saved to Watch later' : 'Removed from Watch later' })
+                    }}
+                  >
+                    {isSaved(lead.id) ? 'Saved' : 'Watch later'}
+                  </Button>
                 </div>
               </div>
             </div>
@@ -233,24 +297,95 @@ export function Browse() {
 
 /* ================================================================== search */
 
+type SearchSort = 'relevance' | 'newest' | 'views' | 'longest'
+type Duration = 'any' | 'short' | 'medium' | 'long'
+type Age = 'any' | 'month' | 'quarter' | 'year'
+
+const DURATION: Record<Duration, { label: string; test: (v: Video) => boolean }> = {
+  any: { label: 'Any length', test: () => true },
+  short: { label: 'Under 10 minutes', test: (v) => seconds(v.runtime) < 600 },
+  medium: { label: '10 to 40 minutes', test: (v) => seconds(v.runtime) >= 600 && seconds(v.runtime) <= 2400 },
+  long: { label: 'Over 40 minutes', test: (v) => seconds(v.runtime) > 2400 },
+}
+
+const AGE: Record<Age, { label: string; days: number }> = {
+  any: { label: 'Any time', days: Infinity },
+  month: { label: 'This month', days: 31 },
+  quarter: { label: 'Last 3 months', days: 92 },
+  year: { label: 'This year', days: 365 },
+}
+
+const SEARCH_SORT: Record<SearchSort, string> = {
+  relevance: 'Relevance',
+  newest: 'Newest first',
+  views: 'Most watched',
+  longest: 'Longest first',
+}
+
 export function SearchPage() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
+  const { recordSearch } = useLibrary()
   const [cat, setCat] = useState('All')
   const [genre, setGenre] = useState('All')
+  const [sort, setSort] = useState<SearchSort>('relevance')
+  const [dur, setDur] = useState<Duration>('any')
+  const [age, setAge] = useState<Age>('any')
+  // Captured once. Reading the clock inside the memo would make the same query
+  // return slightly different sets as the component re-rendered.
+  const [now] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (q.trim()) recordSearch(q)
+  }, [q])
+
+  // Channels match too — "harbour" is as likely to mean the studio as a word in
+  // a synopsis, and sending somebody to a list of videos when they wanted the
+  // channel is a small failure that repeats every session.
+  const channelHits = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    if (!t) return []
+    return CHANNELS.filter((c) => `${c.name} ${c.handle} ${c.tagline}`.toLowerCase().includes(t)).slice(0, 3)
+  }, [q])
 
   const results = useMemo(() => {
-    let l = VIDEOS.filter((v) => v.billing !== 'PULLED')
-    if (q.trim())
+    const t = q.trim().toLowerCase()
+    let l = VIDEOS.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW')
+    if (t)
       l = l.filter((v) =>
-        `${v.title} ${v.creator} ${v.category} ${v.genre} ${v.synopsis}`
-          .toLowerCase()
-          .includes(q.toLowerCase()),
+        `${v.title} ${v.creator} ${v.category} ${v.genre} ${v.synopsis}`.toLowerCase().includes(t),
       )
     if (cat !== 'All') l = l.filter((v) => v.category === cat)
     if (genre !== 'All') l = l.filter((v) => v.genre === genre)
-    return l
-  }, [q, cat, genre])
+    l = l.filter(DURATION[dur].test)
+    if (age !== 'any') {
+      const cutoff = now - AGE[age].days * 86_400_000
+      l = l.filter((v) => new Date(v.published).getTime() >= cutoff)
+    }
+    const sorted = [...l]
+    if (sort === 'newest') sorted.sort((a, b) => b.published.localeCompare(a.published))
+    else if (sort === 'views') sorted.sort((a, b) => b.views - a.views)
+    else if (sort === 'longest') sorted.sort((a, b) => seconds(b.runtime) - seconds(a.runtime))
+    else if (t)
+      // Relevance: a hit in the title beats a hit buried in a synopsis.
+      sorted.sort(
+        (a, b) =>
+          Number(b.title.toLowerCase().includes(t)) - Number(a.title.toLowerCase().includes(t)),
+      )
+    return sorted
+  }, [q, cat, genre, sort, dur, age, now])
+
+  const filters: [string, boolean, () => void][] = [
+    [cat, cat !== 'All', () => setCat('All')],
+    [genre, genre !== 'All', () => setGenre('All')],
+    [DURATION[dur].label, dur !== 'any', () => setDur('any')],
+    [AGE[age].label, age !== 'any', () => setAge('any')],
+  ]
+  const active = filters.filter(([, on]) => on)
+
+  const clearAll = () => {
+    setCat('All'); setGenre('All'); setDur('any'); setAge('any'); setSort('relevance')
+  }
 
   return (
     <FrontOfHouse>
@@ -259,28 +394,84 @@ export function SearchPage() {
           Search the programme
         </h1>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <SearchInput
-            autoFocus
-            value={q}
-            placeholder="Title, creator, category or genre"
-            aria-label="Search"
-            onChange={(e) => setParams(e.target.value ? { q: e.target.value } : {})}
-            className="flex-1"
-          />
-          <Select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category" className="sm:w-44">
+        <div className="mt-5 max-w-2xl">
+          <SearchBox autoFocus initial={q} />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          <Select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category" className="w-auto min-w-36">
             <option>All</option>
             {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
           </Select>
-          <Select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Genre" className="sm:w-40">
+          <Select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Genre" className="w-auto min-w-32">
             <option>All</option>
             {GENRES.map((g) => <option key={g}>{g}</option>)}
           </Select>
+          <Select value={dur} onChange={(e) => setDur(e.target.value as Duration)} aria-label="Length" className="w-auto min-w-40">
+            {(Object.keys(DURATION) as Duration[]).map((d) => (
+              <option key={d} value={d}>{DURATION[d].label}</option>
+            ))}
+          </Select>
+          <Select value={age} onChange={(e) => setAge(e.target.value as Age)} aria-label="Published" className="w-auto min-w-36">
+            {(Object.keys(AGE) as Age[]).map((a) => (
+              <option key={a} value={a}>{AGE[a].label}</option>
+            ))}
+          </Select>
+          <Select value={sort} onChange={(e) => setSort(e.target.value as SearchSort)} aria-label="Sort by" className="w-auto min-w-36">
+            {(Object.keys(SEARCH_SORT) as SearchSort[]).map((k) => (
+              <option key={k} value={k}>{SEARCH_SORT[k]}</option>
+            ))}
+          </Select>
         </div>
 
-        <p className="mt-4 font-mono text-[12px] tabular-nums text-ink-300">
+        {/* Active filters stay visible as removable chips, so an empty result is
+            explained by something you can see and undo rather than by a control
+            scrolled out of view. */}
+        {active.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {active.map(([label, , clear]) => (
+              <button
+                key={label}
+                onClick={clear}
+                className="letterboard flex items-center gap-1.5 rounded-xs border border-ink-600 bg-ink-800 px-2 py-1 text-ink-150 transition-colors hover:border-ink-500 hover:text-white"
+              >
+                {label}
+                <X className="size-3" />
+              </button>
+            ))}
+            <button onClick={clearAll} className="letterboard text-ink-300 underline-offset-4 hover:text-white hover:underline">
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {channelHits.length > 0 && (
+          <div className="mt-7 border-y border-ink-800 py-5">
+            <p className="letterboard mb-3 text-ink-300">Channels</p>
+            <ul className="space-y-3">
+              {channelHits.map((c) => (
+                <li key={c.id}>
+                  <Link to={`/channel/${c.handle}`} className="group flex items-center gap-3">
+                    <Avatar name={c.name} size={44} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-medium text-white group-hover:text-violet-200">
+                        {c.name}
+                      </span>
+                      <span className="block truncate text-[12px] text-ink-300">
+                        <span className="font-mono">@{c.handle}</span> · {fmt(c.subscribers)} following
+                      </span>
+                      <span className="mt-0.5 block truncate text-[13px] text-ink-300">{c.tagline}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <p className="mt-5 font-mono text-[12px] tabular-nums text-ink-300">
           {results.length} {results.length === 1 ? 'result' : 'results'}
-          {q && ` for “${q}”`}
+          {q && ` for \u201c${q}\u201d`}
         </p>
 
         {results.length === 0 ? (
@@ -288,31 +479,19 @@ export function SearchPage() {
             <EmptyState
               icon={<SearchX className="size-7" />}
               title="Nothing matched those criteria"
-              body="No titles matched your search and filters. Clear a filter, or try a different word."
-              action={
-                <Button
-                  onClick={() => {
-                    setParams({})
-                    setCat('All')
-                    setGenre('All')
-                  }}
-                >
-                  Clear everything
-                </Button>
-              }
+              body="No titles matched your search and filters. Remove a filter above, or try a different word."
+              action={<Button onClick={() => { setParams({}); clearAll() }}>Clear everything</Button>}
             />
           </div>
         ) : (
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {results.map((v) => <Tile key={v.id} v={v} />)}
+          <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {results.map((v) => <Tile key={v.id} v={v} size="sm" />)}
           </div>
         )}
       </div>
     </FrontOfHouse>
   )
 }
-
-/* ================================================================ category */
 
 export function Category() {
   const { name } = useParams()
@@ -734,47 +913,84 @@ export function ReportModal({
 
 export function Watchlist() {
   const nav = useNavigate()
-  const [list, setList] = useState(VIDEOS.slice(1, 5))
+  const { watchLater, toggleWatchLater } = useLibrary()
+  const toast = useToast()
+  const list = watchLater.map((id) => byId(id)).filter(Boolean) as Video[]
+  const total = clock(list.reduce((s, v) => s + seconds(v.runtime), 0))
+
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
         <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
-          Watchlist
+          Watch later
         </h1>
-        <p className="mt-2 text-[15px] text-ink-300">Titles you saved for later.</p>
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 text-[15px] text-ink-300">
+          <span>Titles you saved for later.</span>
+          {list.length > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="font-mono tabular-nums">{list.length} titles, {total}</span>
+            </>
+          )}
+        </p>
+
         {list.length === 0 ? (
           <div className="mt-8">
             <EmptyState
               icon={<Bookmark className="size-7" />}
-              title="Your watchlist is empty"
+              title="Nothing saved yet"
               body="Save a title from anywhere in the programme and it will wait for you here."
               action={<Button onClick={() => nav('/browse')}>Browse the lobby</Button>}
             />
           </div>
         ) : (
-          <ul className="mt-7 divide-y divide-ink-800">
-            {list.map((v) => (
-              <li key={v.id} className="flex items-center gap-4 py-4">
-                <Link to={`/watch/${v.id}`} className="w-32 shrink-0 overflow-hidden rounded-xs">
-                  <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} /></span>
-                </Link>
-                <div className="min-w-0 flex-1">
-                  <Link to={`/watch/${v.id}`} className="font-marquee block truncate text-[17px] font-bold text-white hover:text-violet-200">
-                    {v.title}
+          <>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                icon={<Play className="size-4 fill-current" />}
+                onClick={() => nav(`/watch/${list[0].id}`)}
+              >
+                Play all
+              </Button>
+            </div>
+            <ul className="mt-6 divide-y divide-ink-800">
+              {list.map((v, i) => (
+                <li key={v.id} className="group flex items-center gap-4 py-4">
+                  <span className="hidden w-6 shrink-0 text-center font-mono text-[12px] tabular-nums text-ink-300 sm:block">
+                    {i + 1}
+                  </span>
+                  <Link to={`/watch/${v.id}`} className="w-32 shrink-0 overflow-hidden rounded-xs sm:w-40">
+                    <span className="block aspect-video">
+                      <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                    </span>
                   </Link>
-                  <p className="truncate text-[13px] text-ink-300">{v.creator} · {v.runtime}</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={<Trash2 className="size-4" />}
-                  onClick={() => setList((l) => l.filter((x) => x.id !== v.id))}
-                >
-                  Remove
-                </Button>
-              </li>
-            ))}
-          </ul>
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/watch/${v.id}`} className="font-marquee block truncate text-[17px] font-bold text-white hover:text-violet-200">
+                      {v.title}
+                    </Link>
+                    <p className="truncate text-[13px] text-ink-300">
+                      {v.creator} · <span className="font-mono tabular-nums">{fmt(v.views)} views</span>
+                    </p>
+                  </div>
+                  <span className="hidden shrink-0 font-mono text-[12px] tabular-nums text-ink-300 sm:block">
+                    {v.runtime}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<Trash2 className="size-4" />}
+                    onClick={() => {
+                      toggleWatchLater(v.id)
+                      toast({ title: `${v.title} removed` })
+                    }}
+                  >
+                    <span className="sr-only sm:not-sr-only">Remove</span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </FrontOfHouse>
@@ -785,7 +1001,11 @@ export function Watchlist() {
 
 export function History() {
   const nav = useNavigate()
-  const [list, setList] = useState(continueWatching)
+  const toast = useToast()
+  const { history, forgetWatch, clearHistory, historyPaused, setHistoryPaused } = useLibrary()
+  const [confirm, setConfirm] = useState(false)
+  const list = history.map((id) => byId(id)).filter(Boolean) as Video[]
+
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
@@ -797,11 +1017,27 @@ export function History() {
             <p className="mt-2 text-[15px] text-ink-300">Pick up where you stopped.</p>
           </div>
           {list.length > 0 && (
-            <Button variant="ghost" icon={<Trash2 className="size-4" />} onClick={() => setList([])}>
-              Clear history
+            <Button variant="ghost" icon={<Trash2 className="size-4" />} onClick={() => setConfirm(true)}>
+              Clear all
             </Button>
           )}
         </div>
+
+        {/* Pausing is separate from clearing. One stops the recording, the other
+            destroys what was recorded, and conflating them is how people lose
+            things they meant to keep. */}
+        <div className="mt-5 max-w-xl rounded-lg border border-ink-700 bg-ink-850 p-4">
+          <Toggle
+            checked={historyPaused}
+            onChange={(v) => {
+              setHistoryPaused(v)
+              toast({ title: v ? 'History paused' : 'History resumed' })
+            }}
+            label="Pause watch history"
+            description="Nothing new is recorded while this is on. What is already here stays, and recommendations keep using it."
+          />
+        </div>
+
         {list.length === 0 ? (
           <div className="mt-8">
             <EmptyState
@@ -814,19 +1050,57 @@ export function History() {
         ) : (
           <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {list.map((v) => (
-              <div key={v.id}>
+              <div key={v.id} className="group relative">
                 <Tile v={v} />
-                <div className="mt-2">
-                  <Meter value={v.progress ?? 0} tone="accent" />
-                  <p className="mt-1.5 font-mono text-[11px] tabular-nums text-ink-300">
-                    {Math.round((v.progress ?? 0) * 100)}% watched · resume
-                  </p>
-                </div>
+                <button
+                  aria-label={`Remove ${v.title} from history`}
+                  onClick={() => {
+                    forgetWatch(v.id)
+                    toast({ title: 'Removed from history' })
+                  }}
+                  className="absolute right-2 top-2 rounded-sm bg-ink-950/80 p-1.5 text-ink-200 opacity-0 backdrop-blur transition-opacity hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <X className="size-3.5" />
+                </button>
+                {typeof v.progress === 'number' && (
+                  <div className="mt-2">
+                    <Meter value={v.progress} tone="accent" />
+                    <p className="mt-1.5 font-mono text-[11px] tabular-nums text-ink-300">
+                      {Math.round(v.progress * 100)}% watched · resume
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      <Modal
+        open={confirm}
+        onClose={() => setConfirm(false)}
+        title="Clear all watch history?"
+        footer={
+          <>
+            <Button onClick={() => setConfirm(false)}>Keep it</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                clearHistory()
+                setConfirm(false)
+                toast({ title: 'Watch history cleared', tone: 'bad' })
+              }}
+            >
+              Clear everything
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[14px] leading-relaxed text-ink-200">
+          Every title and every saved position goes. Recommendations will have less to work from
+          until you watch something again. This cannot be undone.
+        </p>
+      </Modal>
     </FrontOfHouse>
   )
 }
