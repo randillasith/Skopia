@@ -12,6 +12,7 @@ import {
 } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, Letterboard } from '@/components/world'
 import { FrontOfHouse } from '@/components/Shell'
+import { AdSlot, useBackendVideoId } from '@/components/AdSlot'
 import {
   VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt,
   continueWatching, type Video,
@@ -349,6 +350,10 @@ export function Watch() {
   const [reportOpen, setReportOpen] = useState(false)
   const [failed, setFailed] = useState(false)
   const [adShowing, setAdShowing] = useState(true)
+  // FR5: the advertisement shown here is a real one, chosen by the serving engine
+  // from what is booked against this title. `undefined` means still resolving,
+  // which is why the break is not ended on a falsy id.
+  const backendVideoId = useBackendVideoId(v?.title)
   const [saved, setSaved] = useState(false)
   const [comment, setComment] = useState('')
 
@@ -396,22 +401,12 @@ export function Watch() {
                   </div>
                 </div>
               ) : adShowing ? (
-                /* ---- pre-roll, always identified as advertising ---- */
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-950/70 px-6 text-center">
-                  <Letterboard tone="held">Advertisement</Letterboard>
-                  <p className="font-marquee text-[22px] font-bold text-white">
-                    Autumn Season Launch
-                  </p>
-                  <p className="text-[13px] text-ink-300">Meridian Films · CMP-410</p>
-                  <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="primary" onClick={() => setAdShowing(false)}>
-                      Skip advertisement
-                    </Button>
-                  </div>
-                  <p className="absolute bottom-3 left-4 font-mono text-[11px] text-ink-300">
-                    Pre-roll · your Season Pass removes advertising
-                  </p>
-                </div>
+                /* ---- pre-roll, served by FR5 and always labelled as advertising ---- */
+                <AdSlot
+                  videoId={backendVideoId}
+                  slot="PREROLL"
+                  onFinished={() => setAdShowing(false)}
+                />
               ) : (
                 <button
                   onClick={() => setPlaying((p) => !p)}
