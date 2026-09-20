@@ -30,9 +30,6 @@ public class RegisteredViewer extends Viewer {
     @Column(name = "join_date", nullable = false)
     private LocalDateTime joinDate;
 
-    @Column(name = "contact_no", length = 30)
-    private String contactNo;
-
     @Column(name = "notify_channel", length = 50)
     private String notifyChannel = "EMAIL";
 

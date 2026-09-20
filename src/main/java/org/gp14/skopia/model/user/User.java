@@ -35,6 +35,12 @@ public class User {
     @Column(name = "last_name", length = 50)
     private String lastName;
 
+    @Column(name = "bio", columnDefinition = "TEXT")
+    private String bio;
+
+    @Column(name = "contact_no", length = 30)
+    private String contactNo;
+
     @Column(name = "registered_date", nullable = false, updatable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime registeredDate;
 
