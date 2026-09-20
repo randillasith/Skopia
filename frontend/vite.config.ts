@@ -26,6 +26,13 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Advertisement creative is written to disk by the API and served from
+      // there, so it has to come through the proxy too or every uploaded
+      // poster is a broken image in development.
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
 })
