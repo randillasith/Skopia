@@ -5,12 +5,58 @@ The web interface for Skopia, the web-based video browsing system (SE2030, group
 
 ## Running it
 
+Two modes, depending on what you are doing.
+
+**Working on the UI** — Vite dev server with hot reload, backend separate:
+
 ```bash
-npm --prefix frontend install
-npm --prefix frontend run dev
+npm --prefix frontend install && npm --prefix frontend run dev
 ```
 
-Then open http://localhost:5175.
+Open http://localhost:5175. Calls to `/api` are proxied to Spring Boot on 8080
+(`server.proxy` in `vite.config.ts`), so the browser sees a single origin and neither
+side needs CORS configuration. Start the backend alongside it if you need the API:
+
+```bash
+./mvnw spring-boot:run -DskipFrontend=true
+```
+
+**Running the whole application** — one process serving the UI and the API together:
+
+```bash
+./mvnw spring-boot:run
+```
+
+Open http://localhost:8080. No hot reload, but this is what the built artifact does.
+
+## How it is built
+
+Maven owns the whole build. `./mvnw package` produces one runnable JAR containing both
+the API and the UI:
+
+1. `frontend-maven-plugin` downloads a project-local Node into `target/` — nothing is
+   installed globally, and the Node version is pinned in `pom.xml` so every machine and
+   CI agent builds identically — then runs `npm ci` and `npm run build`.
+2. `maven-resources-plugin` copies `frontend/dist` into `target/classes/static`, which
+   Spring Boot serves.
+
+The bundle lands in `target/`, never in `src/main/resources/`. That is the Maven
+contract — `src/` is what you write, `target/` is what the build produces — and it means
+`./mvnw clean` removes the bundle and no build output is ever committed.
+
+Add `-DskipFrontend=true` to build the backend alone, without Node. Useful on a machine
+that only touches Java, and in CI when a job does not need the UI.
+
+Because routing happens in the browser, `SpaWebConfig` (in
+`src/main/java/org/gp14/skopia/web/`) serves a real file when one exists and otherwise
+falls back to `index.html`, so a deep link such as `/studio/analytics` survives a
+refresh. Paths under `/api` and `/assets` are excluded from that fallback and answer 404
+honestly — an unknown endpoint must stay an API error, and a stale hashed bundle should
+report as missing rather than as a page of HTML.
+
+Pinned: Node **v24.21.0** (LTS). Do not drop below 22.12 — Vite's Rolldown bindings
+declare `"node": "^20.19.0 || >=22.12.0"`, and on an older runtime npm silently skips the
+platform-specific binary, failing later with a misleading `Cannot find native binding`.
 
 A **role switcher** sits in the top-right of the viewer chrome and at the foot of every staff
 sidebar. It moves you between the six roles so you can reach every console without a backend.
@@ -147,5 +193,7 @@ Two rules worth knowing before you edit:
 ## Connecting it to the backend
 
 The Spring Boot service lives in `../src/main/java/org/gp14/skopia`. Nothing here calls it yet.
-Replace the exports in `src/lib/data.ts` with real fetches; the component layer takes the same
-shapes.
+Replace the exports in `src/lib/data.ts` with real fetches against `/api/...`; the component
+layer takes the same shapes. Use the relative path rather than an absolute URL — the dev proxy
+and the packaged application both serve the API from the same origin, so no base URL or
+environment switch is needed.
