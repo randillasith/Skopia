@@ -58,16 +58,35 @@ Pinned: Node **v24.21.0** (LTS). Do not drop below 22.12 — Vite's Rolldown bin
 declare `"node": "^20.19.0 || >=22.12.0"`, and on an older runtime npm silently skips the
 platform-specific binary, failing later with a misleading `Cannot find native binding`.
 
-A **role switcher** sits in the top-right of the viewer chrome and at the foot of every staff
-sidebar. It moves you between the six roles so you can reach every console without a backend.
-It exists for the prototype only — real access is decided by role-based access control.
+## Who can do what
 
-Routes are **guarded by role** (`RequireRole` in `src/components/Shell.tsx`, wired in
-`src/App.tsx`). A role that cannot reach a console gets a named access screen rather than a
-silently hidden link — Creator Studio needs `creator`, the Box Office needs `marketing`, the
-House Log needs `support`, the Projection Booth needs `admin`, and an administrator can reach
-all of them. Account-bound surfaces (watchlist, history, notifications, pass, billing, reports)
-require any signed-in role. Start on the lobby as a Registered Viewer and switch to see this.
+Login is **session-based**. Everyone signs up as the same kind of account; nothing about it is
+special at creation. What an account can do beyond watching comes from three grants that are
+independent of one another — see `src/lib/session.ts`.
+
+| Grant | Scope | Granted by |
+|---|---|---|
+| **Staff role** — `marketing`, `support`, `admin` | Platform-wide | An administrator |
+| **Channel** — publish and manage your own videos | Your channel | Yourself. No approval step |
+| **Moderator** — publish, remove and block comments | One channel | That channel's owner |
+
+They are deliberately not one enum. A person can own a channel *and* moderate somebody else's;
+a support officer can own a channel too. Collapsing them into a single role field is what makes
+a permission model start lying — it forces a moderator to look platform-wide when the grant only
+ever covered one channel, and it makes publishing look like something an administrator permits.
+
+Guards ask what an account **holds**, not what it **is**: `RequireAuth`, `RequireChannel`,
+`RequireModerator` and `RequireStaff` in `src/components/Shell.tsx`, wired in `src/App.tsx`. An
+account that cannot reach a surface gets a named refusal that says who *can* let them in, rather
+than a silently hidden link — hiding teaches nothing to somebody arriving from a shared URL.
+
+Note that `/studio/create` sits **outside** the channel guard. That guard is what sends you there.
+
+The **account menu** (top right, or the foot of a staff sidebar) lists the grants the signed-in
+account actually holds, and carries an identity switcher for the prototype. The identities are
+chosen to show the three grants are independent: `R. Perera` moderates two channels without
+owning one, and no staff role carries a channel. Signing in with any account's email address
+resolves the session to that account.
 
 ## What is real and what is not
 
@@ -79,7 +98,7 @@ render as a visible placeholder (`—`, dashed border, tooltip) so nobody mistak
 decision: plan prices, durations and entitlements; the payment gateway provider; refund approval
 authority; accepted video and advertisement formats and sizes; duplicate-detection rules; subtitle
 languages; complaint status and priority value sets; valid impression and click definitions;
-the role/permission matrix detail; log retention and alert thresholds; playback quality levels.
+the detailed permission set; log retention and alert thresholds; playback quality levels.
 
 Poster artwork is authored placeholder art (`PosterPlate` in `src/components/world.tsx`), not
 photography. Replace it with real imagery before this goes anywhere near production.
@@ -105,10 +124,22 @@ photography. Replace it with real imagery before this goes anywhere near product
 | `/category/:name` | UC-FR1-01 — browse by category |
 | `/watch/:id` | UC-FR1-01 — playback, controls, captions, pre-roll advertising, the playback-failure state (demo button), reporting |
 | `/watchlist` · `/history` | UC-FR1-02 — favourites, watch history with resume, empty states |
+| `/studio/create` | UC-FR1-03 — open a channel. Self-service, no approval step |
 | `/studio` | UC-FR1-03 — the creator's video library |
 | `/studio/upload` | UC-FR1-03 — staged upload with validation and the duplicate warning |
 | `/studio/video/:id` | UC-FR1-03 — edit metadata, captions, playback settings, archive or delete |
 | `/studio/analytics` | Creator performance |
+| `/studio/moderators` | Appoint and remove moderators on your own channel |
+| `/studio/channel` | Channel settings |
+
+### Channel moderation
+
+Granted by a channel owner, and scoped to that channel. Not a staff role.
+
+| Route | Screen |
+|---|---|
+| `/moderate` | Comment queue for the channels you moderate |
+| `/moderate/history` | Every publish, removal and block, with who decided it |
 
 ### FR2 · Subscription and payment
 
@@ -157,7 +188,7 @@ in the builder both carry an `ADVERTISEMENT` board that cannot be switched off.
 |---|---|
 | `/admin` | UC-FR6-03 — dashboard |
 | `/admin/accounts` | UC-FR6-01 — accounts, role changes, suspend and restore |
-| `/admin/roles` | UC-FR6-01 — the permission matrix (marked as a working draft) |
+| `/admin/roles` | UC-FR6-01 — the three grants, who gives each, and the staff roles granted so far |
 | `/admin/moderation` | UC-FR6-02 — reported content and moderation decisions |
 | `/admin/logs` | UC-FR6-03 — activity log with filters |
 | `/admin/settings` | UC-FR6-03 — platform configuration |
@@ -178,10 +209,21 @@ Three primitives carry the world, all in `src/components/world.tsx`:
 - **Stations** — a staged commit with a marked point of no return, used by the upload and
   payment flows.
 
-Typography: **Archivo** is the marquee voice (condensed to 84% width), **Inter** is the interface
-workhorse, **JetBrains Mono** carries references, timecodes and every figure in a table.
+Typography: **Archivo** is the marquee voice (condensed to 84% via a real width axis, not a
+faked one), **Instrument Sans** is the interface workhorse, **JetBrains Mono** carries
+references, timecodes and every figure in a table. All three are self-hosted through
+`@fontsource` — no CDN request, no third-party dependency, and the versions are pinned in
+`package-lock.json` so a build next year renders as it does today.
 
-Two rules worth knowing before you edit:
+**The glance** is the one desktop-only interaction. A lightbox is a backlit surface, so on a
+fine pointer it catches light where the cursor is: `Lightbox interactive` writes `--mx`/`--my`
+straight onto the node and `.lightbox-glance` in `index.css` draws a radial gradient there.
+The coordinates never enter React state — routing them through a `useState` would re-render the
+whole shelf on every `mousemove`. It is gated on `(hover: hover) and (pointer: fine)`, because
+without that gate a touch device leaves the highlight stuck wherever the last tap landed, and
+gated again on `prefers-reduced-motion`, where the sheen holds still at the centre.
+
+Three rules worth knowing before you edit:
 
 - **`ink-400`, `ink-500` and `ink-600` are border and surface tokens only.** On the `ink-900`
   ground they fall below 2.9:1, so they must never carry text. `ink-300` (`#7a8aa9`) is the
@@ -189,6 +231,8 @@ Two rules worth knowing before you edit:
 - **Operate tables stack below `md`.** `Table` takes a `labels` array of column names; under
   768px each row becomes a labelled record block instead of a horizontal scroller. If you add a
   column, add its label.
+- **Never navigate with `window.location.href`.** It tears the application down and rebuilds it
+  from scratch. Use `useNavigate` or a `<Link>`.
 
 ## Connecting it to the backend
 
