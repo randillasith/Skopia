@@ -30,6 +30,10 @@ export function Button({
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-sm font-medium transition-all duration-200',
+        // Tactile press. 150ms down so it registers under the finger, and the
+        // scale is deliberately small — a button that squashes visibly reads as
+        // a toy. Disabled buttons do not move, because nothing happened.
+        'active:scale-[0.975] active:duration-75 disabled:active:scale-100',
         'disabled:cursor-not-allowed disabled:opacity-45',
         size === 'sm' && 'h-8 px-3 text-[13px]',
         size === 'md' && 'h-10 px-4 text-[14px]',
