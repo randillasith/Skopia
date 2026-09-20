@@ -53,11 +53,15 @@ public class AdminUserController {
 
     @PutMapping("/{userId}/profile")
     public ResponseEntity<?> updateProfile(@PathVariable Long userId, @RequestBody UpdateProfileRequest request) {
-        UserResponse updated = userService.updateProfile(userId, request);
-        if (updated == null) {
-            return ResponseEntity.notFound().build();
+        try {
+            UserResponse updated = userService.updateProfile(userId, request);
+            if (updated == null) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok(updated);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(createErrorResponse(e.getMessage()));
         }
-        return ResponseEntity.ok(updated);
     }
 
     @PostMapping("/{userId}/change-password")

@@ -81,6 +81,12 @@ public class UserResponse {
     public static UserResponse fromEntity(User user) {
         if (user == null) return null;
 
+        String defaultDisplayName = (user.getFirstName() != null ? user.getFirstName() : "") +
+                (user.getLastName() != null && !user.getLastName().isEmpty() ? " " + user.getLastName() : "");
+        if (defaultDisplayName.trim().isEmpty()) {
+            defaultDisplayName = user.getUsername();
+        }
+
         UserResponseBuilder builder = UserResponse.builder()
                 .id(user.getId())
                 .userId(user.getId())
@@ -88,6 +94,9 @@ public class UserResponse {
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .displayName(defaultDisplayName.trim())
+                .bio(user.getBio())
+                .contactNo(user.getContactNo())
                 .registeredDate(user.getRegisteredDate())
                 .accountStatus(user.getAccountStatus());
 
@@ -119,7 +128,8 @@ public class UserResponse {
                    .deviceType(creator.getDeviceType())
                    .channelName(creator.getChannelName())
                    .channelBio(creator.getChannelBio())
-                   .bio(creator.getChannelBio())
+                   .displayName(creator.getChannelName() != null && !creator.getChannelName().isEmpty() ? creator.getChannelName() : defaultDisplayName.trim())
+                   .bio(creator.getChannelBio() != null && !creator.getChannelBio().isEmpty() ? creator.getChannelBio() : user.getBio())
                    .isVerified(creator.getIsVerified())
                    .totalUploads(creator.getTotalUploads());
         } else if (user instanceof RegisteredViewer regViewer) {
@@ -127,8 +137,8 @@ public class UserResponse {
                    .userType("REGISTERED_VIEWER")
                    .preferredLanguage(regViewer.getPreferredLanguage())
                    .deviceType(regViewer.getDeviceType())
-                   .displayName(regViewer.getDisplayName())
-                   .contactNo(regViewer.getContactNo())
+                   .displayName(regViewer.getDisplayName() != null && !regViewer.getDisplayName().isEmpty() ? regViewer.getDisplayName() : defaultDisplayName.trim())
+                   .contactNo(user.getContactNo())
                    .isPremium(regViewer.getIsPremium())
                    .notifyChannel(regViewer.getNotifyChannel())
                    .street(regViewer.getStreet())

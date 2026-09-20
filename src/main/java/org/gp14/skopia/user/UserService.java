@@ -98,16 +98,7 @@ public class UserService {
             return null;
         }
 
-        User u = user.get();
-        return UserResponse.builder()
-                .userId(u.getId())
-                .username(u.getUsername())
-                .email(u.getEmail())
-                .firstName(u.getFirstName())
-                .lastName(u.getLastName())
-                .accountStatus(u.getAccountStatus())
-                .registeredDate(u.getRegisteredDate())
-                .build();
+        return UserResponse.fromEntity(user.get());
     }
 
     public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
@@ -119,23 +110,61 @@ public class UserService {
 
         User user = userOpt.get();
         if (request.getFirstName() != null) {
-            user.setFirstName(request.getFirstName());
+            user.setFirstName(request.getFirstName().trim());
         }
         if (request.getLastName() != null) {
-            user.setLastName(request.getLastName());
+            user.setLastName(request.getLastName().trim());
+        }
+
+        if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
+            String newUsername = request.getUsername().trim().replaceFirst("^@", "");
+            if (!newUsername.equalsIgnoreCase(user.getUsername())) {
+                Optional<User> existingUser = userRepository.findByUsername(newUsername);
+                if (existingUser.isPresent() && !existingUser.get().getId().equals(userId)) {
+                    throw new IllegalArgumentException("Username @" + newUsername + " is already taken");
+                }
+                user.setUsername(newUsername);
+            }
+        }
+
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            String newEmail = request.getEmail().trim();
+            if (!newEmail.equalsIgnoreCase(user.getEmail())) {
+                Optional<User> existingEmail = userRepository.findByEmail(newEmail);
+                if (existingEmail.isPresent() && !existingEmail.get().getId().equals(userId)) {
+                    throw new IllegalArgumentException("Email " + newEmail + " is already registered");
+                }
+                user.setEmail(newEmail);
+            }
+        }
+
+        if (request.getBio() != null) {
+            user.setBio(request.getBio().trim());
+        }
+
+        if (request.getContactNo() != null) {
+            user.setContactNo(request.getContactNo().trim());
+        }
+
+        if (user instanceof org.gp14.skopia.model.user.RegisteredViewer viewer) {
+            String full = (user.getFirstName() != null ? user.getFirstName() : "") + 
+                          (user.getLastName() != null && !user.getLastName().isEmpty() ? " " + user.getLastName() : "");
+            if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
+                viewer.setDisplayName(request.getDisplayName().trim());
+            } else if (!full.trim().isEmpty()) {
+                viewer.setDisplayName(full.trim());
+            }
+        } else if (user instanceof org.gp14.skopia.model.user.ContentCreator creator) {
+            if (request.getBio() != null) {
+                creator.setChannelBio(request.getBio().trim());
+            }
+            if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
+                creator.setChannelName(request.getDisplayName().trim());
+            }
         }
 
         User updated = userRepository.save(user);
-
-        return UserResponse.builder()
-                .userId(updated.getId())
-                .username(updated.getUsername())
-                .email(updated.getEmail())
-                .firstName(updated.getFirstName())
-                .lastName(updated.getLastName())
-                .accountStatus(updated.getAccountStatus())
-                .registeredDate(updated.getRegisteredDate())
-                .build();
+        return UserResponse.fromEntity(updated);
     }
 
     public boolean changePassword(Long userId, ChangePasswordRequest request) {
