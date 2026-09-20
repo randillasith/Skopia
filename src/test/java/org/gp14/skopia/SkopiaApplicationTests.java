@@ -8,7 +8,8 @@ class SkopiaApplicationTests {
 
     @Test
     void contextLoads() {
-        // test
+        System.out.println("Test");
+        //
     }
 
 }
