@@ -4,13 +4,12 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserResponse {
+public class LoginResponse {
     private Long userId;
     private String username;
     private String email;
@@ -18,7 +17,6 @@ public class UserResponse {
     private String lastName;
     private String userType;
     private String accountStatus;
-    private LocalDateTime registeredDate;
-    private String profilePicture;
-    private String bio;
+    private String token;
+    private String message;
 }

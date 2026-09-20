@@ -1,24 +1,17 @@
 package org.gp14.skopia.user.dto;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class UserResponse {
-    private Long userId;
+public class RegisterUserRequest {
     private String username;
     private String email;
+    private String password;
     private String firstName;
     private String lastName;
     private String userType;
-    private String accountStatus;
-    private LocalDateTime registeredDate;
-    private String profilePicture;
-    private String bio;
 }
