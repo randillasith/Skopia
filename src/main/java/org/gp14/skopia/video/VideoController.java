@@ -140,8 +140,12 @@ public class VideoController {
     }
 
     @PostMapping("/videos/{id}/comments")
-    public ResponseEntity<CommentResponse> addComment(@PathVariable Long id, @RequestBody CreateCommentRequest request) {
-        CommentResponse response = videoService.addComment(id, VIEWER_ID, request);
+    public ResponseEntity<CommentResponse> addComment(
+            @PathVariable Long id,
+            @RequestParam(value = "viewerId", required = false) Long viewerId,
+            @RequestBody CreateCommentRequest request) {
+        Long effectiveViewerId = (viewerId != null && viewerId > 0) ? viewerId : VIEWER_ID;
+        CommentResponse response = videoService.addComment(id, effectiveViewerId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
