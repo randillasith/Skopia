@@ -12,6 +12,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(origins = "*", maxAge = 3600)
 public class VideoController {
 
     private static final Long VIEWER_ID = 1L;
@@ -61,6 +62,7 @@ public class VideoController {
             @RequestParam(value = "durationSeconds", required = false, defaultValue = "0") Integer durationSeconds,
             @RequestParam(value = "videoUrl", required = false) String videoUrl,
             @RequestParam(value = "thumbnailUrl", required = false) String thumbnailUrl,
+            @RequestParam(value = "creatorId", required = false) Long creatorId,
             @RequestParam(value = "videoFile", required = false) MultipartFile videoFile,
             @RequestParam(value = "thumbnailFile", required = false) MultipartFile thumbnailFile) {
 
@@ -74,7 +76,8 @@ public class VideoController {
         request.setVideoUrl(videoUrl);
         request.setThumbnailUrl(thumbnailUrl);
 
-        VideoResponse created = videoService.createVideo(request, videoFile, thumbnailFile, CREATOR_ID);
+        Long effectiveCreatorId = (creatorId != null && creatorId > 0) ? creatorId : CREATOR_ID;
+        VideoResponse created = videoService.createVideo(request, videoFile, thumbnailFile, effectiveCreatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", created.getId(),
                 "message", "Video published"
@@ -82,8 +85,11 @@ public class VideoController {
     }
 
     @PostMapping(value = "/videos", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> createVideoJson(@RequestBody CreateVideoRequest request) {
-        VideoResponse created = videoService.createVideo(request, null, null, CREATOR_ID);
+    public ResponseEntity<Map<String, Object>> createVideoJson(
+            @RequestBody CreateVideoRequest request,
+            @RequestParam(value = "creatorId", required = false) Long creatorId) {
+        Long effectiveCreatorId = (creatorId != null && creatorId > 0) ? creatorId : CREATOR_ID;
+        VideoResponse created = videoService.createVideo(request, null, null, effectiveCreatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", created.getId(),
                 "message", "Video published"

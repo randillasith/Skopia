@@ -33,14 +33,34 @@ class AuthManager {
         try {
             const response = await SkopiaAPIService.registerUser(data);
 
-            if (response.message && response.message.includes('successfully')) {
-                return { success: true, message: 'Registration successful', data: response };
+            const isSuccess = response.ok !== false && (
+                (response.message && (response.message.includes('successfully') || response.message.includes('provisioned'))) ||
+                !!response.token ||
+                response.status === 201
+            );
+
+            if (isSuccess) {
+                if (response.token) {
+                    SkopiaAPIService.setToken(response.token);
+                    SkopiaAPIService.setCurrentUser({
+                        userId: response.userId || response.id,
+                        username: response.username,
+                        email: response.email,
+                        firstName: response.firstName,
+                        lastName: response.lastName,
+                        displayName: response.displayName,
+                        roleType: response.roleType,
+                        userType: response.userType,
+                        accountStatus: response.accountStatus
+                    });
+                }
+                return { success: true, message: response.message || 'Registration successful', data: response };
             } else {
-                return { success: false, message: response.message };
+                return { success: false, message: response.message || 'Registration failed' };
             }
         } catch (error) {
             console.error('Registration error:', error);
-            return { success: false, message: 'Registration failed' };
+            return { success: false, message: 'Registration failed due to connection error' };
         }
     }
 
