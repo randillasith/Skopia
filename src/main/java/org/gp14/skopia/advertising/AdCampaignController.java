@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Campaign management (FR5 — create, schedule and assign ad campaigns).
@@ -22,9 +23,11 @@ import java.util.List;
 public class AdCampaignController {
 
     private final AdCampaignService campaigns;
+    private final AdExpiryJob expiry;
 
-    public AdCampaignController(AdCampaignService campaigns) {
+    public AdCampaignController(AdCampaignService campaigns, AdExpiryJob expiry) {
         this.campaigns = campaigns;
+        this.expiry = expiry;
     }
 
     @GetMapping
@@ -91,5 +94,19 @@ public class AdCampaignController {
             @PathVariable Long id) {
         campaigns.delete(actorId, id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Run the expiry sweep now.
+     *
+     * <p>The campaign list offers this behind its "review expired" banner so an
+     * officer who has just moved an end date sees the list settle immediately
+     * rather than at the next cron tick.
+     */
+    @PostMapping("/sweep-expired")
+    public Map<String, Object> sweep(
+            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId) {
+        campaigns.list(actorId, null, null); // access check, and it is cheap
+        return Map.of("updated", expiry.run());
     }
 }
