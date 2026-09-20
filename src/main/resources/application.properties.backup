@@ -1,0 +1,8 @@
+spring.application.name=Skopia
+spring.datasource.url=jdbc:mysql://localhost:3307/skopia
+spring.datasource.username=root
+spring.datasource.password=Lcafe@66981
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+server.port=8082
