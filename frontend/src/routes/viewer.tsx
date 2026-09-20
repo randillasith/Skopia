@@ -1,24 +1,25 @@
-import { useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams, useNavigate} from 'react-router-dom'
-import { motion } from 'motion/react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
-  Play, Pause, Volume2, Maximize, Subtitles, Settings2, SkipBack, SkipForward,
-  Bookmark, Share2, Flag, ThumbsUp, Trash2, SearchX, Clock,
-  Bell, LifeBuoy, ChevronRight, AlertTriangle, X,
+  Play, Bookmark, Share2, Flag, ThumbsUp, ThumbsDown, Trash2, SearchX, Clock,
+  Bell, LifeBuoy, ChevronRight, X,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, SearchInput, Toggle, EmptyState,
   Modal, Section, Avatar, Meter, useToast, Tabs,
 } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, Letterboard } from '@/components/world'
-import { FrontOfHouse } from '@/components/Shell'
+import { Player, ChapterList } from '@/components/player'
+import { FrontOfHouse, useSession } from '@/components/Shell'
 import {
-  VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt,
+  VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt, clock,
   continueWatching, type Video,
 } from '@/lib/data'
+import { channelByName } from '@/lib/session'
+import { useLibrary } from '@/lib/library'
+import { SubscribeButton } from './channel'
+import { SaveToPlaylist } from './playlists'
 import { cn } from '@/lib/cn'
-
-const EASE = [0.16, 1, 0.3, 1] as const
 
 /* ------------------------------------------------------------- poster tile */
 
@@ -344,13 +345,27 @@ export function Watch() {
   const { id } = useParams()
   const v = byId(id ?? '')
   const toast = useToast()
-  const [playing, setPlaying] = useState(false)
-  const [captions, setCaptions] = useState(true)
+  const { viewer } = useSession()
+  const { votes, vote, isSaved, recordWatch } = useLibrary()
   const [reportOpen, setReportOpen] = useState(false)
-  const [failed, setFailed] = useState(false)
-  const [adShowing, setAdShowing] = useState(true)
-  const [saved, setSaved] = useState(false)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [theater, setTheater] = useState(false)
+  const [autoplay, setAutoplay] = useState(true)
+  const [at, setAt] = useState(0)
   const [comment, setComment] = useState('')
+  const [order, setOrder] = useState<'top' | 'new'>('top')
+
+  const related = useMemo(
+    () => (v ? VIDEOS.filter((x) => x.id !== v.id && x.category === v.category).slice(0, 6) : []),
+    [v],
+  )
+
+  // Watching is what puts something in history, so it is recorded here rather
+  // than on any click that happened to lead here.
+  useEffect(() => {
+    if (v) recordWatch(v.id)
+  }, [v?.id])
 
   if (!v) {
     return (
@@ -366,157 +381,158 @@ export function Watch() {
     )
   }
 
-  const related = VIDEOS.filter((x) => x.id !== v.id && x.category === v.category).slice(0, 4)
+  const channel = channelByName(v.creator)
+  const my = votes[v.id] ?? null
+  const saved = isSaved(v.id)
+  const comments = order === 'top' ? [...COMMENTS].sort((a, b) => b.likes - a.likes) : COMMENTS
+  const shareUrl = `${window.location.origin}/watch/${v.id}`
+
+  const copy = (text: string, msg: string) => {
+    navigator.clipboard?.writeText(text).then(
+      () => toast({ title: msg, tone: 'ok' }),
+      () => toast({ title: 'Could not reach the clipboard', tone: 'bad' }),
+    )
+  }
 
   return (
     <FrontOfHouse>
-      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
+      <div
+        className={cn(
+          'mx-auto px-4 py-6 sm:px-6 lg:px-8',
+          theater ? 'max-w-none px-0 sm:px-0 lg:px-0' : 'max-w-[1500px]',
+        )}
+      >
+        <div className={cn('grid gap-8', !theater && 'lg:grid-cols-[1fr_360px]')}>
           <div className="min-w-0">
-            {/* ---- the screen ---- */}
-            <div className="lightbox relative aspect-video w-full">
-              <PosterPlate title={v.title} creator={v.creator} runtime={v.runtime} seed={v.seed} category={v.category} />
-              <div className="absolute inset-0 bg-ink-950/45" />
+            <div className={cn(theater && 'mx-auto max-w-[1700px]')}>
+              <Player
+                video={v}
+                theater={theater}
+                onTheater={setTheater}
+                autoplay={autoplay}
+                onAutoplay={setAutoplay}
+                onTimeChange={setAt}
+                onReport={() => setReportOpen(true)}
+                onEnded={() => {
+                  if (autoplay && related[0]) {
+                    toast({ title: `Next: ${related[0].title}` })
+                    nav(`/watch/${related[0].id}`)
+                  }
+                }}
+              />
+            </div>
 
-              {failed ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-                  <AlertTriangle className="size-8 text-danger-400" />
-                  <p className="font-marquee text-[20px] font-bold text-white">
-                    Playback could not start
-                  </p>
-                  <p className="max-w-sm text-[14px] leading-relaxed text-ink-300">
-                    The stream did not respond. Your connection may have dropped, or this title may
-                    be temporarily unavailable.
-                  </p>
-                  <div className="mt-2 flex flex-wrap justify-center gap-2">
-                    <Button variant="primary" onClick={() => setFailed(false)}>Try again</Button>
-                    <Button onClick={() => setReportOpen(true)} icon={<Flag className="size-4" />}>
-                      Report this
-                    </Button>
-                  </div>
+            <div className={cn(theater && 'mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8')}>
+              {/* ---- title block ---- */}
+              <div className="mt-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <BillingBoard billing={v.billing} />
+                  <Letterboard>{v.category}</Letterboard>
+                  <Letterboard>{v.genre}</Letterboard>
+                  {v.captions.length > 0 && <Letterboard tone="ok">{`CC ${v.captions.join(' · ')}`}</Letterboard>}
                 </div>
-              ) : adShowing ? (
-                /* ---- pre-roll, always identified as advertising ---- */
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-950/70 px-6 text-center">
-                  <Letterboard tone="held">Advertisement</Letterboard>
-                  <p className="font-marquee text-[22px] font-bold text-white">
-                    Autumn Season Launch
-                  </p>
-                  <p className="text-[13px] text-ink-300">Meridian Films · CMP-410</p>
-                  <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="primary" onClick={() => setAdShowing(false)}>
-                      Skip advertisement
-                    </Button>
-                  </div>
-                  <p className="absolute bottom-3 left-4 font-mono text-[11px] text-ink-300">
-                    Pre-roll · your Season Pass removes advertising
-                  </p>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setPlaying((p) => !p)}
-                  aria-label={playing ? 'Pause' : 'Play'}
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <motion.span
-                    initial={false}
-                    animate={{ scale: playing ? 0.88 : 1, opacity: playing ? 0 : 1 }}
-                    transition={{ duration: 0.3, ease: EASE }}
-                    className="flex size-16 items-center justify-center rounded-full bg-violet-500/90 text-white shadow-e3 backdrop-blur"
-                  >
-                    <Play className="size-7 fill-current" />
-                  </motion.span>
-                </button>
-              )}
+                <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
+                  {v.title}
+                </h1>
 
-              {/* ---- transport ---- */}
-              {!adShowing && !failed && (
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink-950/95 to-transparent px-3 pb-2.5 pt-8">
-                  <div className="group h-1 w-full cursor-pointer rounded-full bg-ink-600">
-                    <div
-                      className="relative h-full rounded-full bg-violet-500"
-                      style={{ width: `${(v.progress ?? 0.12) * 100}%` }}
-                    >
-                      <span className="absolute -right-1.5 top-1/2 size-3 -translate-y-1/2 rounded-full bg-white opacity-0 transition-opacity group-hover:opacity-100" />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center gap-1 text-ink-100">
-                    <IconBtn label="Rewind 10 seconds"><SkipBack className="size-4" /></IconBtn>
-                    <IconBtn label={playing ? 'Pause' : 'Play'} onClick={() => setPlaying((p) => !p)}>
-                      {playing ? <Pause className="size-4.5" /> : <Play className="size-4.5 fill-current" />}
-                    </IconBtn>
-                    <IconBtn label="Forward 10 seconds"><SkipForward className="size-4" /></IconBtn>
-                    <IconBtn label="Volume"><Volume2 className="size-4" /></IconBtn>
-                    <span className="ml-1.5 font-mono text-[12px] tabular-nums text-ink-200">
-                      06:12 / {v.runtime}
+                {/* ---- channel row: the creator is a place you can go ---- */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-ink-800 py-3.5">
+                  <Link to={`/channel/${channel?.handle ?? ''}`} className="group flex min-w-0 items-center gap-3">
+                    <Avatar name={v.creator} size={40} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[14px] font-medium text-white group-hover:text-violet-200">
+                        {v.creator}
+                      </span>
+                      <span className="block truncate font-mono text-[11px] tabular-nums text-ink-300">
+                        {channel ? `${fmt(channel.subscribers)} following` : ''}
+                      </span>
                     </span>
-                    <span className="ml-auto flex items-center gap-1">
-                      <IconBtn
-                        label={captions ? 'Turn captions off' : 'Turn captions on'}
-                        onClick={() => setCaptions((c) => !c)}
-                        active={captions}
+                  </Link>
+                  {channel && <SubscribeButton handle={channel.handle} size="sm" />}
+
+                  <div className="ml-auto flex flex-wrap items-center gap-2">
+                    {/* like and dislike share one control, the way a vote works */}
+                    <span className="flex items-center overflow-hidden rounded-sm border border-ink-600">
+                      <button
+                        onClick={() => { vote(v.id, 'up'); toast({ title: my === 'up' ? 'Like removed' : 'Liked' }) }}
+                        aria-pressed={my === 'up'}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1.5 text-[13px] transition-colors hover:bg-ink-800',
+                          my === 'up' ? 'text-cyan-300' : 'text-ink-100',
+                        )}
                       >
-                        <Subtitles className="size-4" />
-                      </IconBtn>
-                      <IconBtn label="Playback settings"><Settings2 className="size-4" /></IconBtn>
-                      <IconBtn label="Full screen"><Maximize className="size-4" /></IconBtn>
+                        <ThumbsUp className={cn('size-4', my === 'up' && 'fill-current')} />
+                        <span className="tabular-nums">{fmt(v.likes + (my === 'up' ? 1 : 0))}</span>
+                      </button>
+                      <span className="h-5 w-px bg-ink-700" />
+                      <button
+                        onClick={() => { vote(v.id, 'down'); toast({ title: my === 'down' ? 'Dislike removed' : 'Disliked' }) }}
+                        aria-pressed={my === 'down'}
+                        aria-label="Dislike"
+                        className={cn(
+                          'px-3 py-1.5 transition-colors hover:bg-ink-800',
+                          my === 'down' ? 'text-danger-400' : 'text-ink-100',
+                        )}
+                      >
+                        <ThumbsDown className={cn('size-4', my === 'down' && 'fill-current')} />
+                      </button>
                     </span>
+
+                    <Button size="sm" icon={<Share2 className="size-4" />} onClick={() => setShareOpen(true)}>
+                      Share
+                    </Button>
+                    <Button
+                      size="sm"
+                      icon={<Bookmark className={cn('size-4', saved && 'fill-current')} />}
+                      onClick={() => (viewer ? setSaveOpen(true) : nav('/login'))}
+                    >
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" icon={<Flag className="size-4" />} onClick={() => setReportOpen(true)}>
+                      Report
+                    </Button>
                   </div>
                 </div>
-              )}
 
-              {captions && playing && !adShowing && !failed && (
-                <p className="absolute inset-x-0 bottom-20 mx-auto max-w-lg rounded-xs bg-ink-950/85 px-3 py-1.5 text-center text-[14px] text-white">
-                  Placeholder caption line — English track.
-                </p>
-              )}
-            </div>
+                {/* ---- description ---- */}
+                <div className="mt-4 rounded-lg bg-ink-850 p-4">
+                  <p className="flex flex-wrap items-center gap-x-3 text-[13px] text-ink-300">
+                    <span className="font-mono tabular-nums text-ink-150">{fmt(v.views)} views</span>
+                    <span aria-hidden>·</span>
+                    <span>published {v.published}</span>
+                    <span aria-hidden>·</span>
+                    <span className="font-mono tabular-nums">{v.runtime}</span>
+                  </p>
+                  <p className="mt-2.5 max-w-[70ch] text-[15px] leading-relaxed text-ink-200">
+                    {v.synopsis}
+                  </p>
+                </div>
 
-            {/* ---- title block ---- */}
-            <div className="mt-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <BillingBoard billing={v.billing} />
-                <Letterboard>{v.category}</Letterboard>
-                <Letterboard>{v.genre}</Letterboard>
-                {v.captions.length > 0 && <Letterboard tone="ok">{`CC ${v.captions[0]}`}</Letterboard>}
+                <ChapterList video={v} />
               </div>
-              <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
-                {v.title}
-              </h1>
-              <p className="mt-2 text-[14px] text-ink-300">
-                {v.creator} · published {v.published} ·{' '}
-                <span className="font-mono tabular-nums">{fmt(v.views)} views</span>
-              </p>
-              <p className="mt-4 max-w-[70ch] text-[15px] leading-relaxed text-ink-200">{v.synopsis}</p>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Button icon={<ThumbsUp className="size-4" />} onClick={() => toast({ title: 'Liked', tone: 'ok' })}>
-                  {fmt(v.likes)}
-                </Button>
-                <Button
-                  icon={<Bookmark className={cn('size-4', saved && 'fill-current')} />}
-                  onClick={() => {
-                    setSaved((s) => !s)
-                    toast({ title: saved ? 'Removed from watchlist' : 'Saved to watchlist' })
-                  }}
-                >
-                  {saved ? 'Saved' : 'Watchlist'}
-                </Button>
-                <Button icon={<Share2 className="size-4" />} onClick={() => toast({ title: 'Link copied' })}>
-                  Share
-                </Button>
-                <Button variant="ghost" icon={<Flag className="size-4" />} onClick={() => setReportOpen(true)}>
-                  Report
-                </Button>
-                <Button variant="quiet" size="sm" className="ml-auto" onClick={() => setFailed(true)}>
-                  Demo: playback failure
-                </Button>
-              </div>
-            </div>
+              {/* ---- comments ---- */}
+              <div className="mt-10 border-t border-ink-800 pt-7">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="font-marquee text-[17px] font-bold text-white">
+                    {fmt(v.comments)} comments
+                  </h2>
+                  <div className="flex items-center gap-1">
+                    {(['top', 'new'] as const).map((o) => (
+                      <button
+                        key={o}
+                        onClick={() => setOrder(o)}
+                        className={cn(
+                          'letterboard rounded-xs px-2 py-1 transition-colors',
+                          order === o ? 'bg-ink-800 text-white' : 'text-ink-300 hover:text-white',
+                        )}
+                      >
+                        {o === 'top' ? 'Top' : 'Newest'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            {/* ---- comments ---- */}
-            <div className="mt-10 border-t border-ink-800 pt-7">
-              <Section title={`${COMMENTS.length} comments`}>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault()
@@ -524,113 +540,125 @@ export function Watch() {
                     setComment('')
                     toast({ title: 'Comment posted', tone: 'ok' })
                   }}
-                  className="flex gap-3"
+                  className="mt-5 flex gap-3"
                 >
-                  <Avatar name="You There" />
+                  <Avatar name={viewer?.name ?? 'Guest'} />
                   <div className="min-w-0 flex-1">
                     <Textarea
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="Add a comment"
+                      placeholder={viewer ? 'Add a comment' : 'Sign in to comment'}
+                      disabled={!viewer}
                       className="min-h-16"
                     />
-                    <div className="mt-2 flex justify-end gap-2">
-                      <Button size="sm" variant="quiet" onClick={() => setComment('')} type="button">
-                        Cancel
-                      </Button>
-                      <Button size="sm" variant="primary" type="submit" disabled={!comment.trim()}>
-                        Comment
-                      </Button>
-                    </div>
+                    {viewer && (
+                      <div className="mt-2 flex justify-end gap-2">
+                        <Button size="sm" variant="quiet" onClick={() => setComment('')} type="button">
+                          Cancel
+                        </Button>
+                        <Button size="sm" variant="primary" type="submit" disabled={!comment.trim()}>
+                          Comment
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </form>
 
                 <ul className="mt-6 space-y-5">
-                  {COMMENTS.map((c) => (
-                    <li key={c.id} className="flex gap-3">
-                      <Avatar name={c.who} />
-                      <div className="min-w-0">
-                        <p className="text-[13px]">
-                          <span className="font-medium text-white">{c.who}</span>{' '}
-                          <span className="text-ink-300">{c.at}</span>
-                        </p>
-                        <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>
-                        <div className="mt-1.5 flex items-center gap-3 text-[12px] text-ink-300">
-                          <button className="flex items-center gap-1 hover:text-white">
-                            <ThumbsUp className="size-3.5" /> {c.likes}
-                          </button>
-                          <button className="hover:text-white">Reply</button>
-                          <button className="hover:text-danger-400">Report</button>
+                  {comments.map((c) => {
+                    const byCreator = c.who === v.creator
+                    return (
+                      <li key={c.id} className="flex gap-3">
+                        <Avatar name={c.who} />
+                        <div className="min-w-0">
+                          <p className="flex flex-wrap items-center gap-2 text-[13px]">
+                            <span className={cn('font-medium', byCreator ? 'rounded-xs bg-ink-700 px-1.5 py-0.5 text-white' : 'text-white')}>
+                              {c.who}
+                            </span>
+                            <span className="text-ink-300">{c.at}</span>
+                          </p>
+                          <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>
+                          <div className="mt-1.5 flex items-center gap-3 text-[12px] text-ink-300">
+                            <button className="flex items-center gap-1 hover:text-white">
+                              <ThumbsUp className="size-3.5" /> {c.likes}
+                            </button>
+                            <button className="hover:text-white">Reply</button>
+                            <button className="hover:text-danger-400" onClick={() => toast({ title: 'Comment reported to the channel' })}>
+                              Report
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    )
+                  })}
                 </ul>
-              </Section>
+              </div>
             </div>
           </div>
 
-          {/* ---- related ---- */}
-          <aside className="min-w-0">
-            <p className="letterboard mb-3 text-ink-300">Also in {v.category}</p>
-            <ul className="space-y-3">
-              {related.map((r) => (
-                <li key={r.id}>
-                  <Link to={`/watch/${r.id}`} className="group flex gap-3">
-                    <span className="w-28 shrink-0 overflow-hidden rounded-xs">
-                      <span className="block aspect-video">
-                        <PosterPlate title={r.title} seed={r.seed} category={r.category} compact lettering={false} />
+          {/* ---- up next ---- */}
+          {!theater && (
+            <aside className="min-w-0">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="letterboard text-ink-300">Up next</p>
+                <span className="letterboard text-ink-300">
+                  Autoplay {autoplay ? 'on' : 'off'}
+                </span>
+              </div>
+              <ul className="space-y-3">
+                {related.map((r) => (
+                  <li key={r.id}>
+                    <Link to={`/watch/${r.id}`} className="group flex gap-3">
+                      <span className="w-32 shrink-0 overflow-hidden rounded-xs">
+                        <span className="block aspect-video">
+                          <PosterPlate title={r.title} seed={r.seed} category={r.category} compact lettering={false} />
+                        </span>
                       </span>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="font-marquee block truncate text-[14px] font-bold text-white group-hover:text-violet-200">
-                        {r.title}
+                      <span className="min-w-0">
+                        <span className="font-marquee block truncate text-[14px] font-bold text-white group-hover:text-violet-200">
+                          {r.title}
+                        </span>
+                        <span className="block truncate text-[12px] text-ink-300">{r.creator}</span>
+                        <span className="block font-mono text-[11px] tabular-nums text-ink-300">
+                          {fmt(r.views)} views · {r.runtime}
+                        </span>
                       </span>
-                      <span className="block truncate text-[12px] text-ink-300">{r.creator}</span>
-                      <span className="block font-mono text-[11px] tabular-nums text-ink-300">
-                        {r.runtime}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </aside>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          )}
         </div>
       </div>
 
       <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} title={v.title} />
+      <SaveToPlaylist videoId={v.id} open={saveOpen} onClose={() => setSaveOpen(false)} />
+
+      {/* ---- share, with the option to start where the viewer is ---- */}
+      <Modal open={shareOpen} onClose={() => setShareOpen(false)} title={`Share ${v.title}`}>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-sm border border-ink-600 bg-ink-900 px-3 py-2">
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-200">{shareUrl}</span>
+            <Button size="sm" onClick={() => copy(shareUrl, 'Link copied')}>Copy</Button>
+          </div>
+          <div className="flex items-center gap-2 rounded-sm border border-ink-600 bg-ink-900 px-3 py-2">
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-200">
+              {shareUrl}?t={Math.round(at)}
+            </span>
+            <Button size="sm" onClick={() => copy(`${shareUrl}?t=${Math.round(at)}`, `Link copied, starting at ${clock(at)}`)}>
+              Copy
+            </Button>
+          </div>
+          <p className="text-[13px] text-ink-300">
+            The second link opens at <span className="font-mono tabular-nums text-ink-150">{clock(at)}</span>,
+            where you are now.
+          </p>
+        </div>
+      </Modal>
     </FrontOfHouse>
   )
 }
-
-function IconBtn({
-  children,
-  label,
-  onClick,
-  active,
-}: {
-  children: React.ReactNode
-  label: string
-  onClick?: () => void
-  active?: boolean
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={cn(
-        'rounded-xs p-1.5 transition-colors hover:bg-white/12',
-        active ? 'text-cyan-300' : 'text-ink-100',
-      )}
-    >
-      {children}
-    </button>
-  )
-}
-
-/* ---------------------------------------------------------- report modal */
 
 export function ReportModal({
   open,

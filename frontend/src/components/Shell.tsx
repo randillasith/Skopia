@@ -5,7 +5,7 @@ import {
   Bell, Search, Menu, X, LayoutGrid, Clapperboard, Bookmark,
   History, Sparkles, CreditCard, Flag, LifeBuoy, User, Upload, BarChart3,
   Megaphone, Inbox, Users, ShieldCheck, ScrollText, Settings, Gauge, Receipt,
-  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, Check,
+  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, Check, ListVideo,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { NOTIFICATIONS } from '@/lib/data'
@@ -323,8 +323,9 @@ export function Wordmark({ to = '/' }: { to?: string }) {
 
 const VIEWER_NAV = [
   { to: '/browse', label: 'Lobby', icon: LayoutGrid },
+  { to: '/subscriptions', label: 'Following', icon: Users },
   { to: '/for-you', label: 'For you', icon: Sparkles },
-  { to: '/watchlist', label: 'Watchlist', icon: Bookmark },
+  { to: '/playlists', label: 'Playlists', icon: ListVideo },
   { to: '/history', label: 'History', icon: History },
 ]
 
@@ -419,6 +420,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
             </div>
             <nav className="flex flex-col gap-1 px-4 py-4">
               {[...VIEWER_NAV,
+                { to: '/watchlist', label: 'Watch later', icon: Bookmark },
                 { to: '/plans', label: 'Passes', icon: CreditCard },
                 { to: '/reports', label: 'My reports', icon: Flag },
                 { to: '/profile', label: 'Account', icon: User },

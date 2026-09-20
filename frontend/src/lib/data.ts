@@ -596,3 +596,72 @@ export const MODERATION_LOG: ModerationDecision[] = [
   { id: 'd-3', channelId: 'ch-03', video: 'Night Shift', who: 'anon_7781', at: '2026-09-17 21:15', by: 'r.perera', outcome: 'Author blocked', note: 'Third removal on this channel this week.' },
   { id: 'd-4', channelId: 'ch-01', video: 'Harbour Lights', who: 'M. Silva', at: '2026-09-17 11:30', by: 'd.fernando', outcome: 'Published', note: 'Held by the filter, read fine.' },
 ]
+
+/* ------------------------------------------------------------------ chapters */
+
+/** Seconds → "M:SS" or "H:MM:SS". */
+export const clock = (sec: number) => {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = Math.floor(sec % 60)
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+/** "48:12" or "1:12:40" → seconds. */
+export const seconds = (runtime: string) =>
+  runtime.split(':').reduce((acc, part) => acc * 60 + Number(part), 0)
+
+export type Chapter = { at: number; title: string }
+
+/**
+ * Authored chapters, for the few titles that have them. A video without
+ * chapters shows a plain scrubber — chapters are something a creator writes,
+ * not something the platform invents, so an empty list is the honest default.
+ */
+export const CHAPTERS: Record<string, Chapter[]> = {
+  'v-1041': [
+    { at: 0, title: 'Cold open — the dome at 4 a.m.' },
+    { at: 236, title: 'Who still works here' },
+    { at: 902, title: 'The winter the roof failed' },
+    { at: 1744, title: 'Rebuilding the drive' },
+    { at: 2410, title: 'First light' },
+  ],
+  'v-1053': [
+    { at: 0, title: 'The yard' },
+    { at: 415, title: 'Three generations' },
+    { at: 1690, title: 'The last cut' },
+    { at: 3320, title: 'After the closure' },
+  ],
+  'v-1056': [
+    { at: 0, title: 'What a lens is for' },
+    { at: 185, title: 'Curvature and focal length' },
+    { at: 604, title: 'The bathtub demonstration' },
+    { at: 940, title: 'Why your phone has five of them' },
+  ],
+  'v-1062': [
+    { at: 0, title: 'Why prove twice' },
+    { at: 302, title: 'Gluten, plainly' },
+    { at: 880, title: 'Eighteen loaves' },
+    { at: 1310, title: 'The one that failed' },
+  ],
+  'v-1076': [
+    { at: 0, title: 'Threading up' },
+    { at: 512, title: 'Forty years of Fridays' },
+    { at: 1830, title: 'What happens to the prints' },
+    { at: 2905, title: 'Four months left' },
+  ],
+}
+
+export const chaptersFor = (id: string): Chapter[] => CHAPTERS[id] ?? []
+
+/** Speeds a viewer can choose. 1 is not labelled "1×" but "Normal". */
+export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
+
+/**
+ * UC-FR1-01: the playback quality levels are an open decision in the project
+ * documentation, so the control exists and says so rather than inventing a
+ * ladder of resolutions the backend may never serve.
+ */
+export const QUALITY_UNDECIDED = true
