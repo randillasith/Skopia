@@ -1,24 +1,42 @@
 // API Service for Skopia Backend Integration
-const API_BASE_URL = 'http://localhost:8082/api';
+const API_BASE_URL = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http'))
+    ? `${window.location.origin}/api`
+    : 'http://localhost:8082/api';
 
 class SkopiaAPIService {
 
-    // ===== User Management APIs =====
+    // ===== User Authentication & Registration APIs =====
+
+    static async checkHandle(handle) {
+        try {
+            const clean = (handle || '').trim();
+            const res = await fetch(`${API_BASE_URL}/auth/check-handle?handle=${encodeURIComponent(clean)}`);
+            if (!res.ok) throw new Error('Handle check failed');
+            return await res.json();
+        } catch (e) {
+            console.warn('Check handle error:', e);
+            return { handle, available: true };
+        }
+    }
 
     static async registerUser(data) {
-        return fetch(`${API_BASE_URL}/users/register`, {
+        const res = await fetch(`${API_BASE_URL}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
-        }).then(r => r.json());
+        });
+        const json = await res.json().catch(() => ({ message: 'Server response could not be parsed' }));
+        return { ok: res.ok, status: res.status, ...json };
     }
 
     static async loginUser(emailOrUsername, password) {
-        return fetch(`${API_BASE_URL}/users/login`, {
+        const res = await fetch(`${API_BASE_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ emailOrUsername, password })
-        }).then(r => r.json());
+            body: JSON.stringify({ identifier: emailOrUsername, emailOrUsername, password })
+        });
+        const json = await res.json().catch(() => ({ message: 'Login failed' }));
+        return { ok: res.ok, status: res.status, ...json };
     }
 
     static async getUserProfile(userId) {
