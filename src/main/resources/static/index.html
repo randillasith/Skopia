@@ -140,6 +140,30 @@
 
       <!-- Dynamic Auth Header Controls -->
       <div class="flex items-center gap-space-sm justify-end min-w-[280px]" id="header-user-controls">
+        
+        <!-- Notification Bell Dropdown (Always visible for both guest and logged in) -->
+        <div class="relative" id="header-notification-center">
+          <button id="notification-bell-btn" type="button" aria-label="Notifications" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors relative cursor-pointer" onclick="toggleNotificationMenu()">
+            <span class="material-symbols-outlined text-[22px]">notifications</span>
+            <span id="notification-badge" class="hidden absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-tertiary-container ring-2 ring-surface animate-pulse"></span>
+          </button>
+
+          <!-- Notification Dropdown Panel -->
+          <div id="notification-dropdown" class="absolute right-0 top-full mt-2 hidden flex-col bg-surface-container-high rounded-2xl shadow-2xl z-50 w-80 sm:w-96 border border-surface-container-highest overflow-hidden">
+            <div class="px-4 py-3 bg-surface-container border-b border-surface-container-highest flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-[20px]">notifications</span>
+                <span class="font-bold text-sm text-on-surface">Notifications</span>
+                <span id="notification-count-tag" class="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[11px] font-bold">0</span>
+              </div>
+              <button type="button" onclick="clearAllNotifications()" class="text-xs text-outline hover:text-primary transition-colors cursor-pointer">Clear all</button>
+            </div>
+            <div id="notification-items-container" class="max-h-80 overflow-y-auto flex flex-col p-2 gap-1">
+              <!-- Dynamically populated notifications -->
+            </div>
+          </div>
+        </div>
+
         <!-- Guest State (Default) -->
         <div class="flex items-center gap-space-sm" id="header-guest-controls">
           <button class="flex items-center gap-space-xs px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md hover:bg-primary hover:text-on-primary shadow-sm transition-all cursor-pointer" onclick="openUploadModal()">
@@ -166,9 +190,10 @@
             <span class="material-symbols-outlined text-[18px]">add</span>
             <span>Upload</span>
           </button>
-          <div class="flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-gradient-to-r from-secondary-container to-surface-container-high ring-1 ring-secondary/30" id="active-tier-pill">
-            <span class="material-symbols-outlined text-secondary text-[16px]">workspace_premium</span>
-            <span class="font-label-sm text-label-sm text-on-secondary-container">Music Pass</span>
+          <!-- Dynamic Tier Pill -->
+          <div class="flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-high ring-1 ring-outline-variant/30" id="active-tier-pill">
+            <span class="material-symbols-outlined text-outline text-[16px]" id="active-tier-icon">person</span>
+            <span class="font-label-sm text-label-sm text-on-surface-variant" id="active-tier-text">Standard Pass</span>
           </div>
           <div class="relative">
             <button class="flex items-center gap-space-xs p-0.5 rounded-full hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer" onclick="toggleProfileDropdown()">
@@ -180,6 +205,9 @@
                 <div class="font-body-sm text-body-sm text-outline" id="dropdown-user-email">user@skopia.media</div>
                 <span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm" id="dropdown-user-role">REGISTERED_VIEWER</span>
               </div>
+              <a class="flex items-center gap-2 px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface hover:bg-surface-container rounded cursor-pointer" href="/profile.html">
+                <span class="material-symbols-outlined text-[16px]">account_circle</span> View Profile
+              </a>
               <a class="flex items-center gap-2 px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface hover:bg-surface-container rounded cursor-pointer" onclick="navigateTo('admin-users'); toggleProfileDropdown();">
                 <span class="material-symbols-outlined text-[16px]">manage_accounts</span> User Management
               </a>
@@ -277,22 +305,22 @@
         <div class="flex flex-col w-full">
           
           <!-- Sticky Sub-Header Callout Banner -->
-          <div class="sticky top-16 z-30 px-margin py-3 bg-surface-container-lowest/80 backdrop-blur-md">
-            <div class="max-w-7xl mx-auto rounded-xl p-4 bg-surface-container/90 shadow-[0_8px_30px_rgb(0,0,0,0.45)] flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="sticky top-16 z-30 px-margin py-3 bg-surface-container-lowest/80 backdrop-blur-md" id="sub-header-callout">
+            <div class="max-w-7xl mx-auto rounded-xl p-4 bg-surface-container/90 shadow-[0_8px_30px_rgb(0,0,0,0.45)] flex flex-col md:flex-row items-center justify-between gap-4" id="callout-card">
               <div class="flex items-center gap-3.5 min-w-0">
-                <div class="w-10 h-10 rounded-lg bg-secondary-container/30 flex items-center justify-center shrink-0 text-secondary">
+                <div class="w-10 h-10 rounded-lg bg-secondary-container/30 flex items-center justify-center shrink-0 text-secondary" id="callout-icon-wrap">
                   <span class="material-symbols-outlined text-[24px]">tv_gen</span>
                 </div>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="font-headline-sm text-headline-sm text-on-surface">Welcome to Skopia</span>
+                    <span class="font-headline-sm text-headline-sm text-on-surface" id="callout-title">Welcome to Skopia</span>
                   </div>
-                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate max-w-2xl">
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate max-w-2xl" id="callout-desc">
                     Stream free public broadcasts instantly or register to unlock exclusive 4K Hubs, save watch history, and join discussions.
                   </p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 shrink-0 w-full md:w-auto justify-end">
+              <div class="flex items-center gap-3 shrink-0 w-full md:w-auto justify-end" id="callout-action-btns">
                 <a class="px-4 py-2 rounded-full font-label-md text-label-md text-on-surface hover:text-primary hover:bg-surface-container-high transition-colors cursor-pointer" onclick="navigateTo('login')">Sign In</a>
                 <a class="px-5 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container hover:text-on-primary-container transition-all shadow-[0_0_20px_rgba(192,193,255,0.25)] flex items-center gap-1.5 cursor-pointer" onclick="navigateTo('login')">
                   <span>Create Free Account</span>
@@ -661,11 +689,66 @@
   </div>
 
   <!-- MODALS LAYER -->
-  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="report-modal"></div>
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="report-modal">
+    <div class="w-full max-w-lg bg-surface-container rounded-2xl shadow-2xl p-space-lg flex flex-col gap-space-md animate-fadeIn">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-error text-[24px]">flag</span>
+          <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface" id="report-modal-title">Report Content or Issue</h3>
+        </div>
+        <button class="p-1 rounded-full hover:bg-surface-container-highest text-on-surface-variant cursor-pointer" onclick="closeReportModal()" type="button">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <p class="font-body-sm text-body-sm text-on-surface-variant" id="report-modal-subtitle">
+        Submit a ticket directly to the Skopia Moderation &amp; Support desk. Our compliance team reviews flagged items within 2 hours.
+      </p>
+      <form class="flex flex-col gap-space-sm" onsubmit="handleReportSubmit(event)">
+        <label class="flex flex-col gap-1 font-label-sm text-label-sm text-on-surface-variant">
+          <span>Reason for Report</span>
+          <select id="report-reason" class="bg-surface-container-high rounded-lg p-space-sm text-on-surface font-body-sm text-body-sm focus:outline-none">
+            <option value="Inappropriate or Offensive Material">Inappropriate or Offensive Material</option>
+            <option value="Harassment or Hate Speech in Comments">Harassment or Hate Speech in Comments</option>
+            <option value="Copyright or Licensing Infringement">Copyright or Licensing Infringement</option>
+            <option value="Audio / Video Playback Distortion or Sync Glitch">Audio / Video Playback Distortion or Sync Glitch</option>
+            <option value="Incorrect Tier Lock / Access Gating Problem">Incorrect Tier Lock / Access Gating Problem</option>
+            <option value="Spam or Misleading Chapter Metadata">Spam or Misleading Chapter Metadata</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 font-label-sm text-label-sm text-on-surface-variant">
+          <span>Target Item / Reference</span>
+          <input id="report-target-input" class="bg-surface-container-high rounded-lg p-space-sm text-on-surface font-body-sm text-body-sm focus:outline-none" type="text" value="" readonly>
+        </label>
+        <label class="flex flex-col gap-1 font-label-sm text-label-sm text-on-surface-variant">
+          <span>Additional Context</span>
+          <textarea id="report-context-input" class="bg-surface-container-high rounded-lg p-space-sm text-on-surface font-body-sm text-body-sm focus:outline-none resize-none" placeholder="Describe the issue you encountered..." rows="3"></textarea>
+        </label>
+        <div class="flex items-center justify-end gap-space-sm pt-space-xs">
+          <button class="px-space-md py-space-xs rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md cursor-pointer" onclick="closeReportModal()" type="button">
+            Cancel
+          </button>
+          <button class="px-space-md py-space-xs rounded-full bg-error text-on-error font-label-md text-label-md font-bold hover:opacity-90 shadow-md cursor-pointer" type="submit">
+            Submit Report
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="upload-modal"></div>
   <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="staff-modal"></div>
   <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="status-modal"></div>
 
-  <script src="/app.js" defer></script>
+  <!-- FLOATING NOTIFICATION TOAST -->
+  <div id="global-notification-toast" class="fixed bottom-8 right-8 z-50 transform translate-y-28 opacity-0 transition-all duration-300 rounded-2xl bg-surface-container-highest/95 backdrop-blur-xl px-5 py-4 shadow-2xl flex items-center gap-3.5 border border-surface-container-high/80 max-w-md pointer-events-none">
+    <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0" id="toast-icon-wrap">
+      <span class="material-symbols-outlined text-[22px]" id="toast-icon">notifications_active</span>
+    </div>
+    <div class="flex flex-col min-w-[220px]">
+      <span class="font-bold text-sm text-on-surface" id="toast-title">Notification</span>
+      <span class="text-xs text-on-surface-variant line-clamp-2" id="toast-desc">Message body</span>
+    </div>
+  </div>
+
+  <script src="/app.js?v=2" defer></script>
 </body>
 </html>

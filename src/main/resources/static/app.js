@@ -18,12 +18,36 @@ document.addEventListener("DOMContentLoaded", () => {
   initApp();
 });
 
+let notifications = [];
+let toastTimeout = null;
+
 function initApp() {
+  loadNotifications();
   checkCurrentUser();
   setupNavigation();
   loadCategories();
   loadVideos();
   setupGlobalSearch();
+
+  // Polling for new videos every 25 seconds
+  setInterval(loadVideos, 25000);
+
+  // Close dropdowns when clicking outside
+  document.addEventListener("click", (e) => {
+    const notifBtn = document.getElementById("notification-bell-btn");
+    const notifDropdown = document.getElementById("notification-dropdown");
+    if (notifDropdown && notifBtn && !notifBtn.contains(e.target) && !notifDropdown.contains(e.target)) {
+      notifDropdown.classList.add("hidden");
+      notifDropdown.classList.remove("flex");
+    }
+
+    const profileBtn = document.getElementById("user-avatar-initial");
+    const profileDropdown = document.getElementById("profile-dropdown");
+    if (profileDropdown && profileBtn && !profileBtn.contains(e.target) && !profileDropdown.contains(e.target)) {
+      profileDropdown.classList.add("hidden");
+      profileDropdown.classList.remove("flex");
+    }
+  });
 
   // Handle hash navigation
   const hash = window.location.hash.replace("#", "") || "home";
@@ -33,6 +57,142 @@ function initApp() {
     const newHash = window.location.hash.replace("#", "") || "home";
     navigateTo(newHash);
   });
+}
+
+// ----------------------------------------------------
+// NOTIFICATION SYSTEM
+// ----------------------------------------------------
+
+function loadNotifications() {
+  try {
+    const saved = localStorage.getItem("skopia_notifications");
+    notifications = saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    notifications = [];
+  }
+  renderNotifications();
+}
+
+function saveNotifications() {
+  localStorage.setItem("skopia_notifications", JSON.stringify(notifications));
+  renderNotifications();
+}
+
+function addNotification(notif) {
+  const newNotif = {
+    id: Date.now() + Math.random(),
+    title: notif.title || "New Video Broadcast",
+    message: notif.message || "",
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    videoId: notif.videoId || null,
+    thumbnailUrl: notif.thumbnailUrl || null,
+    read: false
+  };
+  notifications.unshift(newNotif);
+  if (notifications.length > 30) notifications.pop();
+  saveNotifications();
+  showNotificationToast(newNotif.title, newNotif.message);
+}
+
+function toggleNotificationMenu() {
+  const menu = document.getElementById("notification-dropdown");
+  if (menu) {
+    menu.classList.toggle("hidden");
+    menu.classList.toggle("flex");
+  }
+}
+
+function clearAllNotifications() {
+  notifications = [];
+  saveNotifications();
+}
+
+function markNotificationAsRead(notifId) {
+  const n = notifications.find(x => x.id === notifId);
+  if (n) {
+    n.read = true;
+    saveNotifications();
+  }
+}
+
+function renderNotifications() {
+  const container = document.getElementById("notification-items-container");
+  const badge = document.getElementById("notification-badge");
+  const countTag = document.getElementById("notification-count-tag");
+  
+  const unreadCount = notifications.filter(n => !n.read).length;
+  
+  if (badge) {
+    if (unreadCount > 0) {
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
+  if (countTag) {
+    countTag.textContent = unreadCount;
+  }
+
+  if (!container) return;
+
+  if (notifications.length === 0) {
+    container.innerHTML = `
+      <div class="py-8 px-4 text-center flex flex-col items-center gap-2 text-outline">
+        <span class="material-symbols-outlined text-[28px] opacity-40">notifications_off</span>
+        <span class="text-xs">No notifications yet. You will be alerted when new videos are uploaded!</span>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = notifications.map(n => `
+    <div class="p-2.5 rounded-xl hover:bg-surface-container transition-colors flex items-start gap-3 cursor-pointer ${n.read ? 'opacity-70' : 'bg-surface-container/40'}" onclick="handleNotificationClick(${n.id}, ${n.videoId})">
+      <div class="w-9 h-9 rounded-lg bg-primary/20 text-primary flex items-center justify-center shrink-0 mt-0.5">
+        <span class="material-symbols-outlined text-[18px]">movie</span>
+      </div>
+      <div class="flex flex-col min-w-0 flex-1">
+        <div class="flex items-center justify-between gap-1">
+          <span class="font-bold text-xs text-on-surface truncate">${n.title}</span>
+          <span class="text-[10px] text-outline shrink-0">${n.time}</span>
+        </div>
+        <p class="text-[11px] text-on-surface-variant line-clamp-2 mt-0.5 leading-snug">${n.message}</p>
+        ${n.videoId ? `<span class="text-[10px] text-primary font-semibold mt-1 flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">play_circle</span> Watch Video</span>` : ''}
+      </div>
+      ${!n.read ? `<span class="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5"></span>` : ''}
+    </div>
+  `).join("");
+}
+
+function handleNotificationClick(notifId, videoId) {
+  markNotificationAsRead(notifId);
+  const menu = document.getElementById("notification-dropdown");
+  if (menu) {
+    menu.classList.add("hidden");
+    menu.classList.remove("flex");
+  }
+  if (videoId) {
+    watchVideo(videoId);
+  }
+}
+
+function showNotificationToast(title, desc) {
+  const toast = document.getElementById("global-notification-toast");
+  const titleEl = document.getElementById("toast-title");
+  const descEl = document.getElementById("toast-desc");
+  if (!toast) return;
+
+  if (titleEl) titleEl.textContent = title;
+  if (descEl) descEl.textContent = desc;
+
+  toast.classList.remove("translate-y-28", "opacity-0");
+  toast.classList.add("translate-y-0", "opacity-100");
+
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    toast.classList.add("translate-y-28", "opacity-0");
+    toast.classList.remove("translate-y-0", "opacity-100");
+  }, 5000);
 }
 
 // ----------------------------------------------------
@@ -100,6 +260,77 @@ function updateUserUI() {
   const dropdownRole = document.getElementById("dropdown-user-role");
   if (dropdownRole) dropdownRole.textContent = currentUser.roleType || currentUser.userType || "REGISTERED_VIEWER";
 
+  // Dynamic Tier Pill (Fixing: Do NOT show Music Pass / workspace_premium to non-premium users!)
+  const tierPill = document.getElementById("active-tier-pill");
+  const tierIcon = document.getElementById("active-tier-icon");
+  const tierText = document.getElementById("active-tier-text");
+  const isPremium = Boolean(currentUser.isPremium);
+  const roleStr = (currentUser.roleType || currentUser.userType || '').toUpperCase();
+  const isCreator = roleStr.includes("CREATOR");
+
+  if (tierPill) {
+    if (isCreator) {
+      tierPill.className = "flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-primary/20 ring-1 ring-primary/40";
+      if (tierIcon) {
+        tierIcon.className = "material-symbols-outlined text-primary text-[16px]";
+        tierIcon.textContent = "video_camera_back";
+      }
+      if (tierText) {
+        tierText.className = "font-label-sm text-label-sm text-primary font-bold";
+        tierText.textContent = "Creator Pro";
+      }
+    } else if (isPremium) {
+      tierPill.className = "flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-gradient-to-r from-secondary-container to-surface-container-high ring-1 ring-secondary/30";
+      if (tierIcon) {
+        tierIcon.className = "material-symbols-outlined text-secondary text-[16px]";
+        tierIcon.textContent = "workspace_premium";
+      }
+      if (tierText) {
+        tierText.className = "font-label-sm text-label-sm text-on-secondary-container font-bold";
+        tierText.textContent = "Music Pass";
+      }
+    } else {
+      // Non-premium user: show Standard Free Pass with simple person icon
+      tierPill.className = "flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-high ring-1 ring-outline-variant/30";
+      if (tierIcon) {
+        tierIcon.className = "material-symbols-outlined text-outline text-[16px]";
+        tierIcon.textContent = "person";
+      }
+      if (tierText) {
+        tierText.className = "font-label-sm text-label-sm text-on-surface-variant font-medium";
+        tierText.textContent = "Standard Free Pass";
+      }
+    }
+  }
+
+  // Update Sub-Header Callout Banner for Logged In User
+  const calloutTitle = document.getElementById("callout-title");
+  const calloutDesc = document.getElementById("callout-desc");
+  const calloutBtns = document.getElementById("callout-action-btns");
+  const calloutIconWrap = document.getElementById("callout-icon-wrap");
+
+  if (calloutTitle) {
+    calloutTitle.textContent = `Welcome back, ${nameDisplay}!`;
+  }
+  if (calloutDesc) {
+    calloutDesc.textContent = `Lossless Master Cinema stream is active. Browse uploaded broadcasts or publish to the catalog.`;
+  }
+  if (calloutIconWrap) {
+    calloutIconWrap.className = "w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0 text-primary";
+  }
+  if (calloutBtns) {
+    calloutBtns.innerHTML = `
+      <a class="px-4 py-2 rounded-full font-label-md text-label-md text-on-surface hover:text-primary hover:bg-surface-container-high transition-colors cursor-pointer flex items-center gap-1.5" href="/profile.html">
+        <span class="material-symbols-outlined text-[16px]">account_circle</span>
+        <span>My Profile</span>
+      </a>
+      <button class="px-5 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container hover:text-on-primary-container transition-all shadow-[0_0_20px_rgba(192,193,255,0.25)] flex items-center gap-1.5 cursor-pointer font-semibold" onclick="openUploadModal()">
+        <span class="material-symbols-outlined text-[16px]">add</span>
+        <span>Upload Video</span>
+      </button>
+    `;
+  }
+
   const box = document.getElementById("sidebar-account-box");
   if (box) {
     box.innerHTML = `
@@ -108,7 +339,14 @@ function updateUserUI() {
         <span class="font-label-md text-label-md tracking-tight text-on-surface">Signed In: ${nameDisplay}</span>
       </div>
       <p class="font-body-sm text-body-sm text-on-surface-variant">${currentUser.roleType || 'Member'} Account Active</p>
-      <a class="w-full text-center py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-secondary hover:text-on-surface font-label-md text-label-md transition-all cursor-pointer" onclick="navigateTo('admin-users')">User Management</a>
+      <div class="flex gap-2 w-full mt-1">
+        <a class="flex-1 text-center py-1.5 rounded-lg bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md transition-all cursor-pointer font-semibold flex items-center justify-center gap-1" href="/profile.html">
+          <span class="material-symbols-outlined text-[16px]">account_circle</span> Profile
+        </a>
+        <a class="flex-1 text-center py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-secondary hover:text-on-surface font-label-md text-label-md transition-all cursor-pointer flex items-center justify-center gap-1" onclick="navigateTo('admin-users')">
+          <span class="material-symbols-outlined text-[16px]">admin_panel_settings</span> Admin
+        </a>
+      </div>
     `;
   }
 }
@@ -118,6 +356,31 @@ function updateGuestUI() {
   const authControls = document.getElementById("header-auth-controls");
   if (guestControls) guestControls.classList.remove("hidden");
   if (authControls) authControls.classList.add("hidden");
+
+  // Reset Sub-Header Callout Banner for Guest
+  const calloutTitle = document.getElementById("callout-title");
+  const calloutDesc = document.getElementById("callout-desc");
+  const calloutBtns = document.getElementById("callout-action-btns");
+  const calloutIconWrap = document.getElementById("callout-icon-wrap");
+
+  if (calloutTitle) {
+    calloutTitle.textContent = "Welcome to Skopia";
+  }
+  if (calloutDesc) {
+    calloutDesc.textContent = "Stream free public broadcasts instantly or register to unlock exclusive 4K Hubs, save watch history, and join discussions.";
+  }
+  if (calloutIconWrap) {
+    calloutIconWrap.className = "w-10 h-10 rounded-lg bg-secondary-container/30 flex items-center justify-center shrink-0 text-secondary";
+  }
+  if (calloutBtns) {
+    calloutBtns.innerHTML = `
+      <a class="px-4 py-2 rounded-full font-label-md text-label-md text-on-surface hover:text-primary hover:bg-surface-container-high transition-colors cursor-pointer" onclick="navigateTo('login')">Sign In</a>
+      <a class="px-5 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container hover:text-on-primary-container transition-all shadow-[0_0_20px_rgba(192,193,255,0.25)] flex items-center gap-1.5 cursor-pointer" onclick="navigateTo('login')">
+        <span>Create Free Account</span>
+        <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+      </a>
+    `;
+  }
 
   const box = document.getElementById("sidebar-account-box");
   if (box) {
@@ -351,12 +614,43 @@ function renderSidebarCategories(categories) {
   `).join("");
 }
 
+function checkNewUploadedVideos(videos) {
+  if (!Array.isArray(videos)) return;
+  const knownRaw = localStorage.getItem("skopia_known_video_ids");
+  let knownIds = [];
+  try {
+    knownIds = knownRaw ? JSON.parse(knownRaw) : [];
+  } catch (e) {}
+
+  const currentIds = videos.map(v => v.id);
+
+  if (!knownRaw) {
+    localStorage.setItem("skopia_known_video_ids", JSON.stringify(currentIds));
+    return;
+  }
+
+  const newVideos = videos.filter(v => !knownIds.includes(v.id));
+
+  if (newVideos.length > 0) {
+    newVideos.forEach(v => {
+      addNotification({
+        title: "New Video Broadcast",
+        message: `"${v.title}" by ${v.creatorName || 'Skopia Creator'} is now available in the cinema feed!`,
+        videoId: v.id,
+        thumbnailUrl: v.thumbnailUrl
+      });
+    });
+    localStorage.setItem("skopia_known_video_ids", JSON.stringify(currentIds));
+  }
+}
+
 async function loadVideos() {
   try {
     const res = await fetch("/api/videos");
     if (res.ok) {
       const data = await res.json();
       allVideos = Array.isArray(data) ? data : [];
+      checkNewUploadedVideos(allVideos);
     } else {
       allVideos = [];
     }
@@ -777,8 +1071,27 @@ async function handleVideoUploadSubmit(e) {
     });
 
     if (res.ok) {
+      const createdVideo = await res.json().catch(() => null);
       closeUploadModal();
-      alert("Video published successfully! Added to the Skopia catalog.");
+      
+      const vId = createdVideo ? (createdVideo.id || createdVideo.videoId) : null;
+      addNotification({
+        title: "New Video Uploaded",
+        message: `"${title}" has been successfully published to the Skopia catalog!`,
+        videoId: vId,
+        thumbnailUrl: createdVideo ? createdVideo.thumbnailUrl : null
+      });
+
+      if (vId) {
+        try {
+          const known = JSON.parse(localStorage.getItem("skopia_known_video_ids") || "[]");
+          if (!known.includes(vId)) {
+            known.push(vId);
+            localStorage.setItem("skopia_known_video_ids", JSON.stringify(known));
+          }
+        } catch (e) {}
+      }
+
       await loadVideos();
       navigateTo("home");
     } else {
@@ -897,6 +1210,7 @@ function renderTheaterView() {
   if (!container) return;
 
   const v = currentVideo || (allVideos && allVideos.length > 0 ? allVideos[0] : null);
+  if (v) currentVideo = v;
 
   if (!v) {
     container.innerHTML = `
@@ -961,7 +1275,7 @@ function renderTheaterView() {
                   <span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">thumb_up</span>
                   <span id="like-count">${(v.likeCount ?? v.likesCount ?? 0).toLocaleString()}</span>
                 </button>
-                <button onclick="openReportModal()" class="p-space-xs rounded-full bg-surface-container-high hover:bg-error-container text-on-surface-variant transition-colors cursor-pointer" title="Report Video">
+                <button onclick="openReportModal('video', '${v.title}')" class="p-space-xs rounded-full bg-surface-container-high hover:bg-error-container text-on-surface-variant transition-colors cursor-pointer" title="Report Video">
                   <span class="material-symbols-outlined text-[18px]">flag</span>
                 </button>
               </div>
@@ -971,6 +1285,9 @@ function renderTheaterView() {
               <span class="font-bold text-on-surface text-label-sm uppercase tracking-wider">Description</span>
               <p class="font-body-md text-body-md text-on-surface leading-relaxed">${v.description || 'No description provided.'}</p>
             </div>
+
+            <!-- Interactive Comments & Discussion Section -->
+            <div id="theater-comments-container"></div>
           </div>
         </div>
 
@@ -1001,6 +1318,580 @@ function renderTheaterView() {
       </div>
     </div>
   `;
+
+  loadVideoComments(v);
+}
+
+// ----------------------------------------------------
+// THEATER COMMENTS & DISCUSSION SYSTEM
+// ----------------------------------------------------
+
+let currentComments = [];
+let currentCommentSort = 'top'; // 'top' or 'newest'
+
+async function loadVideoComments(video) {
+  const container = document.getElementById("theater-comments-container");
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/videos/${video.id}/comments`);
+    if (res.ok) {
+      const dbComments = await res.json();
+      if (Array.isArray(dbComments) && dbComments.length > 0) {
+        const commentMap = {};
+        const rootComments = [];
+
+        dbComments.forEach(c => {
+          commentMap[c.id] = {
+            id: c.id,
+            authorName: c.displayName || "Viewer",
+            avatarUrl: c.avatarUrl || `https://i.pravatar.cc/160?img=${(Math.abs((c.id || 1) % 50) + 1)}`,
+            badge: c.badge || (currentUser?.isPremium ? "Music Pass" : null),
+            timeAgo: formatTimeAgo(c.postedAt),
+            text: c.text,
+            likes: c.likeCount || 0,
+            isLiked: false,
+            isPinned: c.isPinned || false,
+            parentId: c.parentId,
+            replies: []
+          };
+        });
+
+        dbComments.forEach(c => {
+          if (c.parentId && commentMap[c.parentId]) {
+            commentMap[c.parentId].replies.push(commentMap[c.id]);
+          } else {
+            rootComments.push(commentMap[c.id]);
+          }
+        });
+
+        currentComments = rootComments;
+      } else {
+        currentComments = [];
+      }
+    } else {
+      currentComments = [];
+    }
+  } catch (err) {
+    currentComments = [];
+  }
+
+  renderCommentsSection();
+}
+
+function renderCommentsSection() {
+  const container = document.getElementById("theater-comments-container");
+  if (!container) return;
+
+  const totalCount = currentComments.reduce((acc, c) => acc + 1 + (c.replies ? c.replies.length : 0), 0);
+  const userInitial = currentUser ? (currentUser.displayName || currentUser.username || "U").charAt(0).toUpperCase() : "U";
+  const userDisplayName = currentUser ? (currentUser.displayName || currentUser.username) : "Guest";
+
+  container.innerHTML = `
+    <div class="bg-surface-container-low rounded-2xl p-space-md lg:p-space-lg shadow-md flex flex-col gap-space-md">
+      
+      <!-- Comments Header + Sort Filter -->
+      <div class="flex items-center justify-between flex-wrap gap-space-sm">
+        <div class="flex items-center gap-space-md">
+          <h2 class="font-headline-sm text-headline-sm font-bold text-on-surface" id="comment-count-heading">${totalCount === 1 ? '1 Comment' : totalCount.toLocaleString() + ' Comments'}</h2>
+          <div class="flex items-center gap-space-xs text-on-surface-variant hover:text-on-surface cursor-pointer font-label-md text-label-md transition-colors select-none" onclick="toggleCommentSort()">
+            <span class="material-symbols-outlined text-[18px]">sort</span>
+            <span id="comment-sort-label">Sort by: ${currentCommentSort === 'top' ? 'Top Comments' : 'Newest'}</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-space-xs text-outline font-label-sm text-label-sm">
+          <span class="material-symbols-outlined text-[16px] text-emerald-400">gavel</span>
+          <span>Community Guidelines Active</span>
+        </div>
+      </div>
+
+      <!-- Add Public Comment Box -->
+      <div class="flex gap-space-md items-start pt-space-xs">
+        ${currentUser && currentUser.avatarUrl ? `
+          <img alt="${userDisplayName}" class="w-10 h-10 rounded-full object-cover shadow-sm ring-1 ring-primary/40 flex-shrink-0" src="${currentUser.avatarUrl}">
+        ` : `
+          <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-primary-container to-secondary flex items-center justify-center font-bold text-on-primary-container shadow-sm ring-1 ring-primary/40 flex-shrink-0">
+            ${userInitial}
+          </div>
+        `}
+        <div class="flex-1 flex flex-col gap-space-sm">
+          <textarea id="main-comment-input" class="w-full bg-surface-container-high rounded-xl p-space-sm text-on-surface font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-highest transition-all resize-none ring-1 ring-transparent focus:ring-primary/40" placeholder="Add a public comment or praise for the performance..." rows="2"></textarea>
+          
+          <!-- Quick Emoji Bar -->
+          <div id="emoji-picker-bar" class="hidden flex-wrap gap-1.5 p-2 bg-surface-container-highest/80 rounded-lg">
+            ${['🎸', '👏', '✨', '🔥', '❤️', '🎵', '🙌', '💯', '🎻', '🎙️'].map(e => `
+              <button type="button" class="w-8 h-8 rounded hover:bg-surface-container flex items-center justify-center text-lg cursor-pointer transition-transform hover:scale-125" onclick="insertEmoji('${e}')">${e}</button>
+            `).join("")}
+          </div>
+
+          <div class="flex items-center justify-between">
+            <button type="button" onclick="toggleEmojiPicker()" class="flex items-center gap-1 text-outline hover:text-on-surface transition-colors cursor-pointer" title="Add Emoji">
+              <span class="material-symbols-outlined text-[18px]">sentiment_satisfied</span>
+              <span class="font-label-sm text-label-sm">Emoji</span>
+            </button>
+            <div class="flex items-center gap-space-xs">
+              <button type="button" onclick="cancelCommentInput()" class="px-space-md py-1 rounded-full text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" onclick="submitMainComment()" class="px-space-md py-1 rounded-full bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm cursor-pointer">
+                Comment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comments Feed -->
+      <div class="flex flex-col gap-space-md pt-space-xs" id="comments-feed-list">
+        ${renderCommentsFeedHtml()}
+      </div>
+
+      ${totalCount > 10 ? `
+        <!-- Load More Button -->
+        <button class="mt-space-xs py-space-sm rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-primary font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer" onclick="loadMoreCommentsNotice()">
+          <span>Load More Comments</span>
+          <span class="material-symbols-outlined text-[16px]">expand_more</span>
+        </button>
+      ` : ''}
+
+    </div>
+  `;
+}
+
+function renderCommentsFeedHtml() {
+  if (!currentComments || currentComments.length === 0) {
+    return `
+      <div class="py-12 px-4 rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container/20 text-center text-on-surface-variant flex flex-col items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[36px] text-outline">chat_bubble_outline</span>
+        <span class="font-label-md text-label-md text-on-surface font-semibold">No comments yet</span>
+        <span class="font-body-sm text-body-sm text-outline">Be the first to share your thoughts on this broadcast!</span>
+      </div>
+    `;
+  }
+
+  const pinned = currentComments.filter(c => c.isPinned);
+  let unpinned = currentComments.filter(c => !c.isPinned);
+
+  if (currentCommentSort === 'top') {
+    unpinned.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+  }
+
+  const ordered = [...pinned, ...unpinned];
+  return ordered.map(c => c.isPinned ? renderPinnedCommentHtml(c) : renderStandardCommentHtml(c)).join("");
+}
+
+function renderPinnedCommentHtml(c) {
+  return `
+    <div class="p-space-md rounded-xl bg-surface-container-high/60 shadow-sm flex flex-col gap-space-xs" id="comment-card-${c.id}">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-space-xs font-label-sm text-label-sm text-amber-300 font-bold">
+          <span class="material-symbols-outlined text-[14px]">push_pin</span>
+          <span>Pinned by ${c.authorName}</span>
+        </div>
+        <div class="relative">
+          <button class="text-outline hover:text-on-surface p-1 rounded cursor-pointer" onclick="toggleCommentMenu('${c.id}')">
+            <span class="material-symbols-outlined text-[16px]">more_vert</span>
+          </button>
+          <div id="cmenu-${c.id}" class="hidden absolute right-0 top-full mt-1 flex-col bg-surface-container-high rounded-xl p-1 shadow-lg z-20 min-w-[140px] border border-outline-variant/30">
+            <button onclick="openReportForComment('${escapeHtml(c.authorName)}', '${escapeHtml(c.text)}')" class="flex items-center gap-1.5 px-2 py-1 text-error text-label-sm font-label-sm hover:bg-surface-container rounded text-left w-full cursor-pointer">
+              <span class="material-symbols-outlined text-[14px]">flag</span>
+              <span>Report Comment</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-start gap-space-md pt-1">
+        <div class="w-9 h-9 rounded-full bg-cover bg-center ring-1 ring-amber-400/50 flex-shrink-0" style="background-image: url('${c.avatarUrl}');"></div>
+        <div class="flex-1 flex flex-col gap-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-label-md text-label-md font-bold text-on-surface bg-surface-container-highest px-2 py-0.5 rounded-full flex items-center gap-1">
+              ${c.authorName}
+              <span class="material-symbols-outlined text-[14px] text-primary">verified</span>
+            </span>
+            <span class="font-body-sm text-body-sm text-outline">${c.timeAgo}</span>
+          </div>
+          <p class="font-body-md text-body-md text-on-surface pt-0.5 break-words">
+            ${formatCommentText(c.text)}
+          </p>
+          <div class="flex items-center gap-space-md pt-1 flex-wrap">
+            <div class="flex items-center gap-1 text-on-surface-variant text-label-sm font-label-sm select-none">
+              <span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">favorite</span>
+              <span class="font-semibold text-primary">Creator Hearted</span>
+            </div>
+            <div class="flex items-center gap-1 text-on-surface-variant hover:text-on-surface text-label-sm font-label-sm cursor-pointer select-none ${c.isLiked ? 'text-primary font-bold' : ''}" onclick="toggleLikeComment('${c.id}')">
+              <span class="material-symbols-outlined text-[16px] ${c.isLiked ? 'text-primary' : ''}" style="${c.isLiked ? `font-variation-settings: 'FILL' 1;` : ''}">thumb_up</span>
+              <span id="clike-count-${c.id}">${c.likes}</span>
+            </div>
+            <div class="flex items-center gap-1 text-on-surface-variant hover:text-on-surface text-label-sm font-label-sm cursor-pointer select-none">
+              <span class="material-symbols-outlined text-[16px]">thumb_down</span>
+            </div>
+            <button onclick="toggleReplyBox('${c.id}')" class="text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm font-semibold cursor-pointer">Reply</button>
+          </div>
+
+          <!-- Inline Reply Box -->
+          <div id="reply-container-${c.id}" class="hidden pt-2">
+            <div class="flex gap-2 items-center">
+              <input id="reply-input-${c.id}" class="flex-1 bg-surface-container-highest rounded-lg px-3 py-1.5 text-body-sm text-on-surface focus:outline-none placeholder:text-outline" placeholder="Reply to ${c.authorName}..."/>
+              <button onclick="submitReplyComment('${c.id}')" class="px-3 py-1 rounded-full bg-primary text-on-primary text-label-sm font-semibold hover:bg-primary-container cursor-pointer">Reply</button>
+              <button onclick="toggleReplyBox('${c.id}')" class="px-2 py-1 text-on-surface-variant hover:text-on-surface text-label-sm cursor-pointer">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Replies list -->
+          ${c.replies && c.replies.length > 0 ? `
+            <div class="flex flex-col gap-2 pt-2 pl-3 border-l-2 border-surface-container-highest mt-2">
+              ${c.replies.map(r => `
+                <div class="flex items-start gap-2 pt-1">
+                  <div class="w-7 h-7 rounded-full bg-cover bg-center flex-shrink-0" style="background-image: url('${r.avatarUrl}');"></div>
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="font-label-sm font-semibold text-on-surface">${r.authorName}</span>
+                      <span class="font-body-sm text-[11px] text-outline">${r.timeAgo}</span>
+                    </div>
+                    <p class="font-body-sm text-on-surface">${formatCommentText(r.text)}</p>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : ''}
+
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStandardCommentHtml(c) {
+  return `
+    <div class="flex items-start gap-space-md" id="comment-card-${c.id}">
+      <div class="w-9 h-9 rounded-full bg-cover bg-center flex-shrink-0 ring-1 ring-outline-variant/30" style="background-image: url('${c.avatarUrl}');"></div>
+      <div class="flex-1 flex flex-col gap-1 min-w-0">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-label-md text-label-md font-semibold text-on-surface">${c.authorName}</span>
+            <span class="font-body-sm text-body-sm text-outline">${c.timeAgo}</span>
+            ${c.badge ? `<span class="px-1.5 py-0.2 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm">${c.badge}</span>` : ''}
+          </div>
+          <div class="relative">
+            <button class="text-outline hover:text-on-surface p-1 rounded cursor-pointer" onclick="toggleCommentMenu('${c.id}')">
+              <span class="material-symbols-outlined text-[16px]">more_vert</span>
+            </button>
+            <div id="cmenu-${c.id}" class="hidden absolute right-0 top-full mt-1 flex-col bg-surface-container-high rounded-xl p-1 shadow-lg z-20 min-w-[140px] border border-outline-variant/30">
+              <button onclick="openReportForComment('${escapeHtml(c.authorName)}', '${escapeHtml(c.text)}')" class="flex items-center gap-1.5 px-2 py-1 text-error text-label-sm font-label-sm hover:bg-surface-container rounded text-left w-full cursor-pointer">
+                <span class="material-symbols-outlined text-[14px]">flag</span>
+                <span>Report Comment</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="font-body-md text-body-md text-on-surface break-words">
+          ${formatCommentText(c.text)}
+        </p>
+        <div class="flex items-center gap-space-md pt-1 flex-wrap">
+          <div class="flex items-center gap-1 text-on-surface-variant hover:text-on-surface text-label-sm font-label-sm cursor-pointer select-none ${c.isLiked ? 'text-primary font-bold' : ''}" onclick="toggleLikeComment('${c.id}')">
+            <span class="material-symbols-outlined text-[16px] ${c.isLiked ? 'text-primary' : ''}" style="${c.isLiked ? `font-variation-settings: 'FILL' 1;` : ''}">thumb_up</span>
+            <span id="clike-count-${c.id}">${c.likes}</span>
+          </div>
+          <div class="flex items-center gap-1 text-on-surface-variant hover:text-on-surface text-label-sm font-label-sm cursor-pointer select-none">
+            <span class="material-symbols-outlined text-[16px]">thumb_down</span>
+          </div>
+          <button onclick="toggleReplyBox('${c.id}')" class="text-on-surface-variant hover:text-on-surface font-label-sm text-label-sm font-semibold cursor-pointer">Reply</button>
+        </div>
+
+        <!-- Inline Reply Box -->
+        <div id="reply-container-${c.id}" class="hidden pt-2">
+          <div class="flex gap-2 items-center">
+            <input id="reply-input-${c.id}" class="flex-1 bg-surface-container-highest rounded-lg px-3 py-1.5 text-body-sm text-on-surface focus:outline-none placeholder:text-outline" placeholder="Reply to ${c.authorName}..."/>
+            <button onclick="submitReplyComment('${c.id}')" class="px-3 py-1 rounded-full bg-primary text-on-primary text-label-sm font-semibold hover:bg-primary-container cursor-pointer">Reply</button>
+            <button onclick="toggleReplyBox('${c.id}')" class="px-2 py-1 text-on-surface-variant hover:text-on-surface text-label-sm cursor-pointer">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Replies list -->
+        ${c.replies && c.replies.length > 0 ? `
+          <div class="flex flex-col gap-2 pt-2 pl-3 border-l-2 border-surface-container-highest mt-2">
+            ${c.replies.map(r => `
+              <div class="flex items-start gap-2 pt-1">
+                <div class="w-7 h-7 rounded-full bg-cover bg-center flex-shrink-0" style="background-image: url('${r.avatarUrl}');"></div>
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-label-sm font-semibold text-on-surface">${r.authorName}</span>
+                    <span class="font-body-sm text-[11px] text-outline">${r.timeAgo}</span>
+                  </div>
+                  <p class="font-body-sm text-on-surface">${formatCommentText(r.text)}</p>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        ` : ''}
+
+      </div>
+    </div>
+  `;
+}
+
+async function submitMainComment() {
+  const targetVideo = currentVideo || (allVideos && allVideos.length > 0 ? allVideos[0] : null);
+  if (!targetVideo) return;
+  currentVideo = targetVideo;
+
+  const input = document.getElementById("main-comment-input");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) {
+    input.focus();
+    return;
+  }
+
+  const author = currentUser ? (currentUser.displayName || currentUser.username) : "Community Member";
+  const avatar = currentUser?.avatarUrl || "https://lh3.googleusercontent.com/aida/AEtjO1XdfrpZm-eIDF-UboqSB3t3Vg8Y-LIYsdSmRD4W-hGglwahLXiQLA6REjHSFEjt-L2YJpbbZQnK_Ce19ep64Y1SOWNWKxvb8HplgjRzl-FGNQoMJClQFR2t4VdLYkGAw57P72lRh1OHE9GTcpmM-ICicIkxvb0eN9lZixcsS2rqKxBPckxtHZuJm0vsdDaaptb_nAv04MYNqgoBtW4TIjXNBiYFAmXw5kT2JD2eWTZvYdL316Hixawz5lQ";
+  const badge = currentUser?.isPremium ? "Music Pass" : (currentUser ? "Viewer" : null);
+
+  const newCommentObj = {
+    id: "local-" + Date.now(),
+    authorName: author,
+    avatarUrl: avatar,
+    badge: badge,
+    isVerified: currentUser?.roleType === "CONTENT_CREATOR",
+    isPinned: false,
+    timeAgo: "Just now",
+    text: text,
+    likes: 0,
+    isLiked: false,
+    replies: []
+  };
+
+  currentComments.unshift(newCommentObj);
+  input.value = "";
+  const emojiBar = document.getElementById("emoji-picker-bar");
+  if (emojiBar) emojiBar.classList.add("hidden");
+  renderCommentsSection();
+
+  showGlobalNotification("Comment Posted", "Your comment has been published to the broadcast discussion.", "mode_comment");
+
+  try {
+    const effectiveViewerId = currentUser?.id ? currentUser.id : 1;
+    const res = await fetch(`/api/videos/${targetVideo.id}/comments?viewerId=${effectiveViewerId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: text,
+        parentId: null,
+        authorName: author,
+        avatarUrl: avatar
+      })
+    });
+    if (res.ok) {
+      const saved = await res.json();
+      if (saved && saved.id) {
+        newCommentObj.id = saved.id;
+      }
+    }
+  } catch (err) {
+    console.warn("Server comment save notice", err);
+  }
+}
+
+function cancelCommentInput() {
+  const input = document.getElementById("main-comment-input");
+  if (input) input.value = "";
+  const emojiBar = document.getElementById("emoji-picker-bar");
+  if (emojiBar) emojiBar.classList.add("hidden");
+}
+
+async function submitReplyComment(parentId) {
+  const targetVideo = currentVideo || (allVideos && allVideos.length > 0 ? allVideos[0] : null);
+  if (!targetVideo) return;
+  currentVideo = targetVideo;
+
+  const input = document.getElementById(`reply-input-${parentId}`);
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) {
+    input.focus();
+    return;
+  }
+
+  const author = currentUser ? (currentUser.displayName || currentUser.username) : "Community Member";
+  const avatar = currentUser?.avatarUrl || "https://lh3.googleusercontent.com/aida/AEtjO1XdfrpZm-eIDF-UboqSB3t3Vg8Y-LIYsdSmRD4W-hGglwahLXiQLA6REjHSFEjt-L2YJpbbZQnK_Ce19ep64Y1SOWNWKxvb8HplgjRzl-FGNQoMJClQFR2t4VdLYkGAw57P72lRh1OHE9GTcpmM-ICicIkxvb0eN9lZixcsS2rqKxBPckxtHZuJm0vsdDaaptb_nAv04MYNqgoBtW4TIjXNBiYFAmXw5kT2JD2eWTZvYdL316Hixawz5lQ";
+
+  const replyObj = {
+    id: "reply-" + Date.now(),
+    authorName: author,
+    avatarUrl: avatar,
+    timeAgo: "Just now",
+    text: text
+  };
+
+  const parent = currentComments.find(c => String(c.id) === String(parentId));
+  if (parent) {
+    if (!parent.replies) parent.replies = [];
+    parent.replies.push(replyObj);
+  }
+
+  renderCommentsSection();
+  showGlobalNotification("Reply Posted", `You replied to ${parent?.authorName || 'comment'}.`, "reply");
+
+  try {
+    const numericParentId = typeof parentId === "number" ? parentId : null;
+    const effectiveViewerId = currentUser?.id ? currentUser.id : 1;
+    await fetch(`/api/videos/${targetVideo.id}/comments?viewerId=${effectiveViewerId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: text,
+        parentId: numericParentId,
+        authorName: author,
+        avatarUrl: avatar
+      })
+    });
+  } catch (err) {
+    console.warn("Server reply save notice", err);
+  }
+}
+
+function toggleReplyBox(commentId) {
+  const box = document.getElementById(`reply-container-${commentId}`);
+  if (box) {
+    box.classList.toggle("hidden");
+    if (!box.classList.contains("hidden")) {
+      const inp = document.getElementById(`reply-input-${commentId}`);
+      if (inp) inp.focus();
+    }
+  }
+}
+
+function toggleLikeComment(commentId) {
+  const c = currentComments.find(q => String(q.id) === String(commentId));
+  if (!c) return;
+  c.isLiked = !c.isLiked;
+  c.likes = c.isLiked ? (c.likes + 1) : Math.max(0, c.likes - 1);
+  renderCommentsSection();
+}
+
+function toggleCommentMenu(commentId) {
+  const menu = document.getElementById(`cmenu-${commentId}`);
+  if (menu) {
+    menu.classList.toggle("hidden");
+    menu.classList.toggle("flex");
+  }
+}
+
+function toggleCommentSort() {
+  currentCommentSort = currentCommentSort === 'top' ? 'newest' : 'top';
+  renderCommentsSection();
+}
+
+function toggleEmojiPicker() {
+  const bar = document.getElementById("emoji-picker-bar");
+  if (bar) {
+    bar.classList.toggle("hidden");
+    bar.classList.toggle("flex");
+  }
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById("main-comment-input");
+  if (input) {
+    input.value += emoji;
+    input.focus();
+  }
+}
+
+function openReportForComment(author, text) {
+  document.querySelectorAll("[id^='cmenu-']").forEach(el => {
+    el.classList.add("hidden");
+    el.classList.remove("flex");
+  });
+  openReportModal('comment', `Comment by ${author}: "${text.substring(0, 50)}..."`);
+}
+
+function openReportModal(type = 'video', targetDetails = '') {
+  const modal = document.getElementById("report-modal");
+  if (!modal) return;
+  const titleEl = document.getElementById("report-modal-title");
+  const targetInput = document.getElementById("report-target-input");
+  const reasonSelect = document.getElementById("report-reason");
+
+  if (type === 'comment') {
+    if (titleEl) titleEl.textContent = "Report Comment or Discussion";
+    if (reasonSelect) reasonSelect.value = "Inappropriate or Offensive Material";
+    if (targetInput) targetInput.value = targetDetails || "Flagged User Comment";
+  } else {
+    if (titleEl) titleEl.textContent = "Report Video or Playback Issue";
+    if (reasonSelect) reasonSelect.value = "Copyright or Licensing Infringement";
+    if (targetInput) targetInput.value = targetDetails || (currentVideo ? currentVideo.title : "Stream Content");
+  }
+
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+}
+
+function closeReportModal() {
+  const modal = document.getElementById("report-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+}
+
+function handleReportSubmit(e) {
+  if (e) e.preventDefault();
+  closeReportModal();
+  showGlobalNotification("Report Submitted", "Your compliance ticket was submitted to the moderation desk.", "verified_user");
+}
+
+function loadMoreCommentsNotice() {
+  showGlobalNotification("Discussion Feed", "All active comments for this broadcast session are currently displayed.", "forum");
+}
+
+function formatCommentText(text) {
+  if (!text) return "";
+  const escaped = escapeHtml(text);
+  return escaped.replace(/\b(\d{1,2}):(\d{2})\b/g, (match, min, sec) => {
+    return `<a class="text-primary hover:underline font-mono cursor-pointer font-semibold" onclick="seekVideoTime(${parseInt(min, 10)}, ${parseInt(sec, 10)})">${match}</a>`;
+  });
+}
+
+function seekVideoTime(min, sec) {
+  const video = document.getElementById("html5-video");
+  if (video) {
+    video.currentTime = min * 60 + sec;
+    video.play();
+    isPlaying = true;
+    const playIcon = document.getElementById("play-icon");
+    if (playIcon) playIcon.textContent = "pause";
+  }
+}
+
+function formatTimeAgo(dateStr) {
+  if (!dateStr) return "Just now";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "Recently";
+    const now = new Date();
+    const diffSec = Math.floor((now - d) / 1000);
+    if (diffSec < 60) return "Just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return "1 day ago";
+    return `${diffDays} days ago`;
+  } catch (e) {
+    return "Recently";
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function togglePlay() {
