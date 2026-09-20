@@ -469,7 +469,7 @@ export function StudioEdit() {
         <aside className="space-y-5">
           <div>
             <p className="letterboard mb-2 text-ink-300">Thumbnail</p>
-            <Lightbox>
+            <Lightbox interactive>
               <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} category={v.category} compact /></span>
             </Lightbox>
             <Button size="sm" className="mt-2.5 w-full" icon={<Upload className="size-4" />}>Replace</Button>

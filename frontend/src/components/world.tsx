@@ -368,7 +368,7 @@ export function PosterPlate({
               x="18"
               y={baseY - (lines.length - 1 - i) * titleSize * 0.88}
               fill="#ffffff"
-              fontFamily="Archivo, sans-serif"
+              fontFamily="'Archivo Variable', Archivo, sans-serif"
               fontSize={titleSize}
               fontWeight="800"
               letterSpacing="-1.1"
@@ -378,7 +378,7 @@ export function PosterPlate({
           ))}
 
         {lettering && !compact && (creator || runtime) && (
-          <text x="18" y="170" fill="#B6C1D6" fontFamily="'JetBrains Mono', monospace"
+          <text x="18" y="170" fill="#B6C1D6" fontFamily="'JetBrains Mono Variable', monospace"
             fontSize="10" letterSpacing="1.1">
             {[creator, runtime].filter(Boolean).join('   ·   ').toUpperCase()}
           </text>
@@ -397,13 +397,29 @@ export function Lightbox({
 }: {
   children: React.ReactNode
   className?: string
+  /** Lifts and tracks the pointer. Use where the box is a link to something. */
   interactive?: boolean
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Written directly to the node. Routing pointer coordinates through state
+  // would re-render the whole shelf on every mousemove; the browser only needs
+  // two custom properties to redraw the gradient.
+  const track = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = ref.current
+    if (!el || e.pointerType !== 'mouse') return
+    const r = el.getBoundingClientRect()
+    el.style.setProperty('--mx', `${((e.clientX - r.left) / r.width) * 100}%`)
+    el.style.setProperty('--my', `${((e.clientY - r.top) / r.height) * 100}%`)
+  }
+
   return (
     <motion.div
+      ref={ref}
+      onPointerMove={interactive ? track : undefined}
       whileHover={interactive ? { y: -4 } : undefined}
       transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
-      className={cn('lightbox', className)}
+      className={cn('lightbox', interactive && 'lightbox-glance', className)}
     >
       {children}
     </motion.div>

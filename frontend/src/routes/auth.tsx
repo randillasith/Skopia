@@ -130,7 +130,7 @@ export function Lobby() {
 
           {/* one live lightbox */}
           <aside className="lg:sticky lg:top-8 lg:self-start">
-            <Lightbox>
+            <Lightbox interactive>
               <Link to={`/watch/${headline.id}`} className="block aspect-video">
                 <PosterPlate
                   title={headline.title}

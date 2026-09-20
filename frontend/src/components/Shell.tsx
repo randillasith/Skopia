@@ -42,13 +42,54 @@ const SessionCtx = createContext<SessionValue>({
 
 export const useSession = () => useContext(SessionCtx)
 
+/**
+ * Stands in for the session cookie so that a refresh does not sign you out.
+ *
+ * It holds an account id and nothing else — no role, no permission, nothing the
+ * page decides anything from. A real deployment stores no identity here at all:
+ * the cookie goes to the server, the server resolves the session, and the reply
+ * carries what this account may do. Editing this value would fool nothing but
+ * this prototype.
+ */
+const SESSION_KEY = 'skopia.session'
+/** Signing out has to be distinguishable from never having signed in, or a
+ *  refresh after signing out would quietly sign you back in. */
+const SIGNED_OUT = 'guest'
+/** Who the prototype opens as on a first visit, before anyone signs in. */
+const DEFAULT_IDENTITY = 'u-1007'
+
+function readStoredSession(): Viewer {
+  try {
+    const id = window.sessionStorage.getItem(SESSION_KEY)
+    if (id === SIGNED_OUT) return null
+    return accountById(id ?? DEFAULT_IDENTITY)
+  } catch {
+    // Private windows and blocked site data both throw here.
+    return accountById(DEFAULT_IDENTITY)
+  }
+}
+
+function writeStoredSession(id: string | null) {
+  try {
+    window.sessionStorage.setItem(SESSION_KEY, id ?? SIGNED_OUT)
+  } catch {
+    // Nothing to do — the session simply will not outlive the page.
+  }
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [viewer, setViewer] = useState<Viewer>(() => accountById('u-1007'))
+  const [viewer, setViewer] = useState<Viewer>(readStoredSession)
   const value = useMemo<SessionValue>(
     () => ({
       viewer,
-      signIn: (id: string) => setViewer(accountById(id)),
-      signOut: () => setViewer(null),
+      signIn: (id: string) => {
+        writeStoredSession(id)
+        setViewer(accountById(id))
+      },
+      signOut: () => {
+        writeStoredSession(null)
+        setViewer(null)
+      },
     }),
     [viewer],
   )
