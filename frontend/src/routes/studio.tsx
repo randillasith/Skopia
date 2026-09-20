@@ -3,17 +3,19 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import {
   Upload, Plus, AlertTriangle, Check, Film, Trash2, Archive, Eye, ThumbsUp,
-  MessageSquare, TrendingUp, FileVideo, Captions, ArrowLeft, ArrowRight,
+  MessageSquare, TrendingUp, FileVideo, Captions, ArrowLeft, ArrowRight, ShieldHalf,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, Table, Th, Td, Tr, EmptyState,
-  Modal, Placeholder, useToast, Checkbox, Section,
+  Modal, Placeholder, useToast, Checkbox, Section, Avatar,
 } from '@/components/primitives'
 import { PosterPlate, Letterboard, BillingBoard, Stations, Lightbox } from '@/components/world'
-import { BackOfHouse } from '@/components/Shell'
+import { BackOfHouse, FrontOfHouse, useSession } from '@/components/Shell'
 import { VIDEOS, CATEGORIES, GENRES, byId, fmt, UNDECIDED } from '@/lib/data'
+import { ACCOUNTS, CHANNELS, accountById, ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
+/** The library is scoped to the channel the signed-in account owns. */
 const MINE = VIDEOS.filter((v) => ['Meridian Films', 'Harbour Studio'].includes(v.creator))
 
 /* ========================================================= video library */
@@ -552,6 +554,273 @@ export function StudioAnalytics() {
         Figures are placeholders. Which metrics ship, and how they are calculated, is an open
         decision in the documentation.
       </p>
+    </BackOfHouse>
+  )
+}
+
+/* ====================================================== create a channel */
+
+/**
+ * Self-service. A registered account becomes a creator by naming a channel —
+ * there is no approval step and no administrator in the path. That is the whole
+ * point of the screen, so it says so rather than implying it by absence.
+ */
+export function CreateChannel() {
+  const nav = useNavigate()
+  const toast = useToast()
+  const { viewer } = useSession()
+  const [name, setName] = useState('')
+  const [handle, setHandle] = useState('')
+  const [touched, setTouched] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const slug = handle || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const taken = CHANNELS.some((c) => c.handle === slug)
+  const tooShort = slug.length > 0 && slug.length < 3
+  const error = taken ? 'That handle is already in use.' : tooShort ? 'Handles are at least three characters.' : ''
+  const ready = name.trim().length > 1 && slug.length >= 3 && !taken
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setTouched(true)
+    if (!ready) return
+    setBusy(true)
+    window.setTimeout(() => {
+      toast({ title: `${name} is yours. You can publish straight away.`, tone: 'ok' })
+      nav('/studio')
+    }, 650)
+  }
+
+  return (
+    <FrontOfHouse>
+      <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:py-16">
+        <p className="letterboard text-ink-300">Creator</p>
+        <h1 className="font-marquee mt-2 text-[clamp(1.9rem,5vw,2.8rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-white">
+          Open a channel
+        </h1>
+        <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-ink-200">
+          Everything you publish belongs to a channel. Nobody approves this — the channel exists
+          the moment you name it, and you can upload immediately.
+        </p>
+
+        <form onSubmit={submit} className="mt-9 space-y-5">
+          <Field label="Channel name" hint="What viewers see under every video.">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Meridian Films"
+              autoFocus
+            />
+          </Field>
+
+          <Field
+            label="Handle"
+            hint="The channel's address. Letters, numbers and hyphens."
+            error={touched ? error : ''}
+          >
+            <div className="flex items-stretch">
+              <span className="flex items-center rounded-l-sm border border-r-0 border-ink-600 bg-ink-900 px-3 font-mono text-[13px] text-ink-300">
+                skopia.lk/@
+              </span>
+              <Input
+                className="rounded-l-none"
+                value={handle}
+                onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                onBlur={() => setTouched(true)}
+                placeholder={slug || 'meridian'}
+              />
+            </div>
+          </Field>
+
+          <div className="rounded-lg border border-ink-700 bg-ink-850 p-4">
+            <p className="letterboard text-ink-300">What opening a channel gives you</p>
+            <ul className="mt-2.5 space-y-1.5 text-[14px] text-ink-200">
+              <li>· Publish, edit and withdraw your own videos</li>
+              <li>· Appoint moderators for this channel, and remove them</li>
+              <li>· See how your own videos perform</li>
+            </ul>
+            <p className="mt-3 border-t border-ink-700 pt-3 text-[13px] leading-relaxed text-ink-300">
+              It gives you nothing beyond your own channel. Staff work — advertising, the complaint
+              queue, platform settings — stays with the roles an administrator grants.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!ready}>
+              Create {name.trim() ? name.trim() : 'channel'}
+            </Button>
+            <Button type="button" size="lg" onClick={() => nav('/browse')}>
+              Not now
+            </Button>
+          </div>
+          <p className="text-[13px] text-ink-300">
+            Opening as <span className="text-ink-150">{viewer?.name}</span> · @{viewer?.handle}
+          </p>
+        </form>
+      </div>
+    </FrontOfHouse>
+  )
+}
+
+/* ======================================================= channel moderators */
+
+/**
+ * A channel owner grants and revokes moderation on their own channel. An
+ * administrator cannot do this for them, and a grant made here reaches nothing
+ * beyond this channel — both facts are stated on the screen because getting them
+ * wrong is how a permission model quietly becomes a lie.
+ */
+export function ChannelModerators() {
+  const { viewer } = useSession()
+  const channel = ownedChannel(viewer)!
+  const toast = useToast()
+  const [mods, setMods] = useState<string[]>(channel.moderators)
+  const [query, setQuery] = useState('')
+  const [confirm, setConfirm] = useState<string | null>(null)
+
+  const candidates = ACCOUNTS.filter(
+    (a) =>
+      a.id !== viewer?.id &&
+      !mods.includes(a.id) &&
+      query.length > 1 &&
+      (a.name.toLowerCase().includes(query.toLowerCase()) ||
+        a.handle.toLowerCase().includes(query.toLowerCase())),
+  ).slice(0, 4)
+
+  const grant = (a: (typeof ACCOUNTS)[number]) => {
+    setMods((m) => [...m, a.id])
+    setQuery('')
+    toast({ title: `${a.name} can now moderate comments on ${channel.name}.`, tone: 'ok' })
+  }
+
+  const revoke = (id: string) => {
+    const a = accountById(id)
+    setMods((m) => m.filter((x) => x !== id))
+    setConfirm(null)
+    toast({ title: `${a?.name ?? 'That account'} no longer moderates ${channel.name}.` })
+  }
+
+  const target = confirm ? accountById(confirm) : null
+
+  return (
+    <BackOfHouse title="Moderators">
+      <p className="max-w-[70ch] text-[14px] leading-relaxed text-ink-300">
+        Moderators you appoint can publish, remove and block comments on{' '}
+        <span className="text-ink-100">{channel.name}</span> — and nowhere else. They cannot touch
+        your videos, your analytics or your channel settings, and the role does not carry to any
+        other channel. Only you can grant it here; an administrator cannot appoint a moderator on
+        your behalf.
+      </p>
+
+      <Section title={`Moderating ${channel.name}`} className="mt-8">
+        {mods.length === 0 ? (
+          <EmptyState
+            icon={<ShieldHalf className="size-6" />}
+            title="No moderators yet"
+            body="You are moderating this channel on your own. Appoint someone below when the comments outgrow you."
+          />
+        ) : (
+          <ul className="divide-y divide-ink-800 rounded-lg border border-ink-700 bg-ink-850">
+            {mods.map((id) => {
+              const a = accountById(id)!
+              return (
+                <li key={id} className="flex flex-wrap items-center gap-3 p-3.5">
+                  <Avatar name={a.name} size={34} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-medium text-white">{a.name}</p>
+                    <p className="truncate font-mono text-[12px] text-ink-300">@{a.handle}</p>
+                  </div>
+                  <Letterboard tone="neutral">Comments only</Letterboard>
+                  <Button size="sm" variant="danger" onClick={() => setConfirm(id)}>
+                    Remove
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Appoint a moderator" className="mt-8">
+        <div className="max-w-xl">
+          <Field label="Find an account" hint="Search by name or handle. They must already have a Skopia account.">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Name or @handle"
+            />
+          </Field>
+          {candidates.length > 0 && (
+            <ul className="mt-2 divide-y divide-ink-800 overflow-hidden rounded-lg border border-ink-700 bg-ink-850">
+              {candidates.map((a) => (
+                <li key={a.id} className="flex items-center gap-3 p-3">
+                  <Avatar name={a.name} size={30} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] text-white">{a.name}</p>
+                    <p className="truncate font-mono text-[11px] text-ink-300">@{a.handle}</p>
+                  </div>
+                  <Button size="sm" onClick={() => grant(a)}>Appoint</Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {query.length > 1 && candidates.length === 0 && (
+            <p className="mt-2 text-[13px] text-ink-300">
+              No account matches “{query}”.
+            </p>
+          )}
+        </div>
+      </Section>
+
+      <Modal
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={`Remove ${target?.name ?? ''} as a moderator?`}
+        footer={
+          <>
+            <Button onClick={() => setConfirm(null)}>Keep them</Button>
+            <Button variant="danger" onClick={() => confirm && revoke(confirm)}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[14px] leading-relaxed text-ink-200">
+          They lose access to this channel's comment queue immediately. Decisions they already made
+          stay as they are, and stay attributed to them in the log.
+        </p>
+      </Modal>
+    </BackOfHouse>
+  )
+}
+
+/* ========================================================= channel settings */
+
+export function ChannelSettings() {
+  const { viewer } = useSession()
+  const channel = ownedChannel(viewer)!
+  const toast = useToast()
+  const [name, setName] = useState(channel.name)
+
+  return (
+    <BackOfHouse title="Channel settings">
+      <div className="max-w-xl space-y-5">
+        <Field label="Channel name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Handle" hint="Changing this breaks existing links to your channel.">
+          <Input value={channel.handle} readOnly className="text-ink-300" />
+        </Field>
+        <div>
+          <p className="letterboard text-ink-300">Opened</p>
+          <p className="mt-1 font-mono text-[13px] text-ink-150">{channel.created}</p>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <Button variant="primary" onClick={() => toast({ title: 'Channel updated.', tone: 'ok' })}>
+            Save changes
+          </Button>
+        </div>
+      </div>
     </BackOfHouse>
   )
 }

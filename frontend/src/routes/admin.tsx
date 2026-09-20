@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Users, Check, X, AlertTriangle, Ban, ShieldCheck, Plus, Megaphone, Eye,
+  Users, AlertTriangle, Ban, ShieldCheck, Plus, Megaphone, Eye,
   Download, Trash2, ScrollText,
 } from 'lucide-react'
 import {
@@ -11,9 +11,13 @@ import {
 import { Letterboard, BillingBoard } from '@/components/world'
 import { BackOfHouse } from '@/components/Shell'
 import {
-  ACCOUNTS, PERMISSIONS, ROLE_MATRIX, LOGS, VIDEOS, REPORTS, CAMPAIGNS, PLANS,
-  PAYMENTS, ANNOUNCEMENTS, ROLES, UNDECIDED, type Role, type Account,
+  LOGS, VIDEOS, REPORTS, CAMPAIGNS, PLANS,
+  PAYMENTS, ANNOUNCEMENTS, UNDECIDED,
 } from '@/lib/data'
+import {
+  ACCOUNTS, CHANNELS, GRANTS, STAFF_ROLES, channelById,
+  type Account, type StaffRole,
+} from '@/lib/session'
 import { cn } from '@/lib/cn'
 
 const ACCOUNT_TONE: Record<Account['status'], 'ok' | 'review' | 'bad' | 'soon'> = {
@@ -100,7 +104,11 @@ export function AdminAccounts() {
   const list = useMemo(
     () =>
       ACCOUNTS.filter((a) => {
-        if (role !== 'All' && a.role !== role) return false
+        if (role === 'staff' && a.staff.length === 0) return false
+        if (role === 'creator' && !a.channelId) return false
+        if (role === 'none' && (a.staff.length > 0 || a.channelId)) return false
+        if (role !== 'All' && ['marketing', 'support', 'admin'].includes(role)
+            && !a.staff.includes(role as StaffRole)) return false
         if (q.trim() && !`${a.name} ${a.handle} ${a.id}`.toLowerCase().includes(q.toLowerCase())) return false
         return true
       }),
@@ -114,11 +122,14 @@ export function AdminAccounts() {
     >
       <div className="flex flex-col gap-3 sm:flex-row">
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, handle or id" className="flex-1" />
-        <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Filter by role" className="sm:w-52">
-          <option>All</option>
-          {(Object.keys(ROLES) as Role[]).filter((r) => r !== 'guest').map((r) => (
-            <option key={r} value={r}>{ROLES[r].label}</option>
-          ))}
+        <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Filter accounts" className="sm:w-56">
+          <option value="All">Every account</option>
+          <option value="staff">Holds a staff role</option>
+          <option value="creator">Owns a channel</option>
+          <option value="none">Ordinary account</option>
+          <option value="marketing">{STAFF_ROLES.marketing.label}</option>
+          <option value="support">{STAFF_ROLES.support.label}</option>
+          <option value="admin">{STAFF_ROLES.admin.label}</option>
         </Select>
       </div>
 
@@ -132,10 +143,11 @@ export function AdminAccounts() {
         </div>
       ) : (
         <div className="mt-4 rounded-lg border border-ink-700 bg-ink-850">
-          <Table labels={["Account", "Role", "Status", "Joined", "Last seen", ""]}>
+          <Table labels={["Account", "Staff role", "Channel", "Status", "Joined", "Last seen", ""]}>
             <thead>
               <tr>
-                <Th>Account</Th><Th>Role</Th><Th>Status</Th><Th>Joined</Th><Th>Last seen</Th><Th />
+                <Th>Account</Th><Th>Staff role</Th><Th>Channel</Th><Th>Status</Th>
+                <Th>Joined</Th><Th>Last seen</Th><Th />
               </tr>
             </thead>
             <tbody>
@@ -152,17 +164,36 @@ export function AdminAccounts() {
                       </span>
                     </span>
                   </Td>
+                  {/* The only grant an administrator controls. Channel ownership
+                      is self-service and moderation is granted by channel owners,
+                      so both are shown as facts rather than as editable fields. */}
                   <Td>
                     <Select
-                      defaultValue={a.role}
-                      aria-label={`Role for ${a.name}`}
-                      className="w-40"
-                      onChange={() => toast({ title: `Role updated for ${a.name}`, tone: 'ok' })}
+                      defaultValue={a.staff[0] ?? 'none'}
+                      aria-label={`Staff role for ${a.name}`}
+                      className="w-44"
+                      onChange={(e) =>
+                        toast({
+                          title:
+                            e.target.value === 'none'
+                              ? `${a.name} no longer holds a staff role`
+                              : `${a.name} is now ${STAFF_ROLES[e.target.value as StaffRole].label}`,
+                          tone: 'ok',
+                        })
+                      }
                     >
-                      {(Object.keys(ROLES) as Role[]).filter((r) => r !== 'guest').map((r) => (
-                        <option key={r} value={r}>{ROLES[r].short}</option>
-                      ))}
+                      <option value="none">None</option>
+                      <option value="marketing">{STAFF_ROLES.marketing.label}</option>
+                      <option value="support">{STAFF_ROLES.support.label}</option>
+                      <option value="admin">{STAFF_ROLES.admin.label}</option>
                     </Select>
+                  </Td>
+                  <Td>
+                    {a.channelId ? (
+                      <span className="text-ink-150">{channelById(a.channelId)?.name}</span>
+                    ) : (
+                      <span className="text-ink-300">—</span>
+                    )}
                   </Td>
                   <Td><Letterboard tone={ACCOUNT_TONE[a.status]}>{a.status.toUpperCase()}</Letterboard></Td>
                   <Td><span className="font-mono tabular-nums text-ink-300">{a.joined}</span></Td>
@@ -217,57 +248,113 @@ export function AdminAccounts() {
 /* ================================================================= roles */
 
 export function AdminRoles() {
-  const toast = useToast()
-  const roles = Object.keys(ROLE_MATRIX) as (keyof typeof ROLE_MATRIX)[]
+  const staffCounts = (Object.keys(STAFF_ROLES) as StaffRole[]).map((r) => ({
+    role: r,
+    holders: ACCOUNTS.filter((a) => a.staff.includes(r)),
+  }))
+  const moderatorGrants = CHANNELS.flatMap((c) => c.moderators.map((m) => ({ channel: c, accountId: m })))
 
   return (
-    <BackOfHouse
-      title="Roles & permissions"
-      actions={<Button size="sm" variant="primary" onClick={() => toast({ title: 'Matrix saved', tone: 'ok' })}>Save matrix</Button>}
-    >
+    <BackOfHouse title="Roles &amp; permissions">
       <div className="flex items-start gap-2.5 rounded-sm border border-warning-500/35 bg-warning-500/8 px-4 py-3">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-400" />
         <p className="text-[13.5px] leading-relaxed text-ink-200">
-          The detailed role hierarchy and permission matrix are an open decision in the project
-          documentation. What follows is a working draft, not a confirmed specification.
+          The detailed permission set is an open decision in the project documentation. What follows
+          is a working draft, not a confirmed specification.
         </p>
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-ink-700 bg-ink-850">
-        <table className="w-full min-w-[760px] border-collapse text-left text-[13px]">
-          <thead>
-            <tr>
-              <Th className="w-64">Permission</Th>
-              {roles.map((r) => <Th key={r} className="text-center">{ROLES[r].short}</Th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {PERMISSIONS.map((p, pi) => (
-              <tr key={p}>
-                <Td className="font-medium text-white">{p}</Td>
-                {roles.map((r) => {
-                  const on = ROLE_MATRIX[r][pi]
+      <p className="mt-6 max-w-[74ch] text-[14px] leading-relaxed text-ink-200">
+        Three grants decide what an account can do, and they are independent of one another. You
+        control only the first. The other two are not yours to give: a channel is opened by whoever
+        wants one, and a moderator is appointed by the owner of the channel they moderate.
+      </p>
+
+      <Section title="What each grant carries, and who gives it" className="mt-8">
+        <div className="rounded-lg border border-ink-700 bg-ink-850">
+          <Table labels={['Can', 'Scope', 'Granted by']}>
+            <thead>
+              <tr><Th className="w-[46%]">Can</Th><Th>Scope</Th><Th>Granted by</Th></tr>
+            </thead>
+            <tbody>
+              {GRANTS.map((g) => (
+                <Tr key={g.what}>
+                  <Td className="font-medium text-white">{g.what}</Td>
+                  <Td>
+                    <Letterboard
+                      tone={
+                        g.scope === 'Platform' ? 'soon'
+                          : g.scope === 'Channel' ? 'live'
+                            : g.scope === 'Account' ? 'neutral' : 'dead'
+                      }
+                    >
+                      {g.scope}
+                    </Letterboard>
+                  </Td>
+                  <Td className="text-ink-300">{g.by}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+      </Section>
+
+      <Section title="Staff roles you have granted" className="mt-10">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {staffCounts.map(({ role, holders }) => (
+            <div key={role} className="rounded-lg border border-ink-700 bg-ink-850 p-4">
+              <p className="letterboard text-ink-300">{STAFF_ROLES[role].console}</p>
+              <p className="font-marquee mt-1 text-[15px] font-bold text-white">
+                {STAFF_ROLES[role].label}
+              </p>
+              <p className="font-marquee mt-3 text-[30px] font-bold tabular-nums leading-none text-white">
+                {holders.length}
+              </p>
+              <ul className="mt-3 space-y-1 border-t border-ink-800 pt-3">
+                {holders.map((h) => (
+                  <li key={h.id} className="truncate font-mono text-[12px] text-ink-300">
+                    @{h.handle}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Channel moderators — for reference only" className="mt-10">
+        <p className="mb-4 max-w-[70ch] text-[13.5px] leading-relaxed text-ink-300">
+          Listed so you can see them during an investigation. You cannot grant or revoke these; each
+          one is the channel owner's to change, and it reaches that channel alone.
+        </p>
+        {moderatorGrants.length === 0 ? (
+          <p className="text-[14px] text-ink-300">No channel has appointed a moderator.</p>
+        ) : (
+          <div className="rounded-lg border border-ink-700 bg-ink-850">
+            <Table labels={['Account', 'Moderates', 'Appointed by']}>
+              <thead>
+                <tr><Th>Account</Th><Th>Moderates</Th><Th>Appointed by</Th></tr>
+              </thead>
+              <tbody>
+                {moderatorGrants.map(({ channel, accountId }) => {
+                  const a = ACCOUNTS.find((x) => x.id === accountId)
+                  const owner = ACCOUNTS.find((x) => x.channelId === channel.id)
                   return (
-                    <Td key={r} className="text-center">
-                      <span
-                        className={cn(
-                          'inline-flex size-6 items-center justify-center rounded-xs border',
-                          on
-                            ? 'border-success-500/40 bg-success-500/12 text-success-400'
-                            : 'border-ink-700 bg-ink-900 text-ink-300',
-                        )}
-                        aria-label={on ? 'Allowed' : 'Not allowed'}
-                      >
-                        {on ? <Check className="size-3.5" strokeWidth={3} /> : <X className="size-3.5" />}
-                      </span>
-                    </Td>
+                    <Tr key={`${channel.id}-${accountId}`}>
+                      <Td>
+                        <span className="text-white">{a?.name ?? accountId}</span>
+                        <span className="ml-2 font-mono text-[11px] text-ink-300">@{a?.handle}</span>
+                      </Td>
+                      <Td>{channel.name}</Td>
+                      <Td className="text-ink-300">{owner?.name ?? '—'}</Td>
+                    </Tr>
                   )
                 })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              </tbody>
+            </Table>
+          </div>
+        )}
+      </Section>
     </BackOfHouse>
   )
 }

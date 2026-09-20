@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { ToastHost } from '@/components/primitives'
-import { SessionProvider, RequireRole } from '@/components/Shell'
+import {
+  SessionProvider, RequireAuth, RequireChannel, RequireModerator, RequireStaff,
+} from '@/components/Shell'
 
 import { Lobby, Login, Signup, ResetPassword, Onboarding } from '@/routes/auth'
 import {
@@ -10,7 +12,11 @@ import {
 } from '@/routes/viewer'
 import { Plans, Checkout, CheckoutResult, Subscription, BillingHistory } from '@/routes/billing'
 import { MyReports } from '@/routes/reports'
-import { StudioLibrary, StudioUpload, StudioEdit, StudioAnalytics } from '@/routes/studio'
+import {
+  StudioLibrary, StudioUpload, StudioEdit, StudioAnalytics,
+  CreateChannel, ChannelModerators, ChannelSettings,
+} from '@/routes/studio'
+import { ModerationQueue, ModerationHistory } from '@/routes/moderate'
 import { CampaignList, CampaignNew, CampaignDetail, CampaignPerformance } from '@/routes/campaigns'
 import { SupportQueue, ComplaintDetail, ComplaintHistory } from '@/routes/support'
 import {
@@ -44,16 +50,8 @@ export default function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/category/:name" element={<Category />} />
             <Route path="/watch/:id" element={<Watch />} />
-            <Route
-              element={
-                <RequireRole
-                  allow={['viewer', 'creator', 'marketing', 'support', 'admin']}
-                  console="Your account"
-                >
-                  <Outlet />
-                </RequireRole>
-              }
-            >
+            {/* Anything that belongs to an account rather than to the programme. */}
+            <Route element={<RequireAuth what="This"><Outlet /></RequireAuth>}>
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/history" element={<History />} />
               <Route path="/for-you" element={<ForYou />} />
@@ -67,31 +65,34 @@ export default function App() {
             <Route path="/plans" element={<Plans />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/checkout/result" element={<CheckoutResult />} />
-            <Route
-              element={
-                <RequireRole
-                  allow={['viewer', 'creator', 'marketing', 'support', 'admin']}
-                  console="Your pass and reports"
-                >
-                  <Outlet />
-                </RequireRole>
-              }
-            >
+            <Route element={<RequireAuth what="Your pass"><Outlet /></RequireAuth>}>
               <Route path="/subscription" element={<Subscription />} />
               <Route path="/billing" element={<BillingHistory />} />
               <Route path="/reports" element={<MyReports />} />
             </Route>
 
-            {/* creator studio */}
-            <Route element={<RequireRole allow={['creator', 'admin']} console="Creator Studio"><Outlet /></RequireRole>}>
+            {/* Creator Studio. Creating a channel is self-service, so it sits
+                outside the channel guard — that guard is what sends you here. */}
+            <Route element={<RequireAuth what="Creating a channel"><Outlet /></RequireAuth>}>
+              <Route path="/studio/create" element={<CreateChannel />} />
+            </Route>
+            <Route element={<RequireChannel><Outlet /></RequireChannel>}>
               <Route path="/studio" element={<StudioLibrary />} />
               <Route path="/studio/upload" element={<StudioUpload />} />
               <Route path="/studio/video/:id" element={<StudioEdit />} />
               <Route path="/studio/analytics" element={<StudioAnalytics />} />
+              <Route path="/studio/moderators" element={<ChannelModerators />} />
+              <Route path="/studio/channel" element={<ChannelSettings />} />
+            </Route>
+
+            {/* Channel-scoped moderation, granted by a channel owner. */}
+            <Route element={<RequireModerator><Outlet /></RequireModerator>}>
+              <Route path="/moderate" element={<ModerationQueue />} />
+              <Route path="/moderate/history" element={<ModerationHistory />} />
             </Route>
 
             {/* advertising */}
-            <Route element={<RequireRole allow={['marketing', 'admin']} console="The Box Office"><Outlet /></RequireRole>}>
+            <Route element={<RequireStaff role="marketing"><Outlet /></RequireStaff>}>
               <Route path="/campaigns" element={<CampaignList />} />
               <Route path="/campaigns/new" element={<CampaignNew />} />
               <Route path="/campaigns/performance" element={<CampaignPerformance />} />
@@ -99,14 +100,14 @@ export default function App() {
             </Route>
 
             {/* support */}
-            <Route element={<RequireRole allow={['support', 'admin']} console="The House Log"><Outlet /></RequireRole>}>
+            <Route element={<RequireStaff role="support"><Outlet /></RequireStaff>}>
               <Route path="/queue" element={<SupportQueue />} />
               <Route path="/queue/history" element={<ComplaintHistory />} />
               <Route path="/queue/:id" element={<ComplaintDetail />} />
             </Route>
 
             {/* administration */}
-            <Route element={<RequireRole allow={['admin']} console="The Projection Booth"><Outlet /></RequireRole>}>
+            <Route element={<RequireStaff role="admin"><Outlet /></RequireStaff>}>
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/accounts" element={<AdminAccounts />} />
               <Route path="/admin/roles" element={<AdminRoles />} />

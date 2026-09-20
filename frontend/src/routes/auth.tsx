@@ -5,6 +5,7 @@ import { Button, Field, Input, Checkbox } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, MarqueeRule, Letterboard } from '@/components/world'
 import { Wordmark, useSession } from '@/components/Shell'
 import { VIDEOS, CATEGORIES, GENRES, fmt } from '@/lib/data'
+import { ACCOUNTS, homeFor } from '@/lib/session'
 
 /* =============================================================== the lobby */
 
@@ -243,7 +244,7 @@ function AuthFrame({
 
 export function Login() {
   const nav = useNavigate()
-  const { setRole } = useSession()
+  const { signIn } = useSession()
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
   const [err, setErr] = useState('')
@@ -255,9 +256,15 @@ export function Login() {
     if (pw.length < 4) return setErr('That password is too short to be one of ours.')
     setErr('')
     setBusy(true)
+    // Without a backend there is nothing to authenticate against, so the
+    // address decides which demo account the session resolves to. A real sign-in
+    // posts the credentials, the server opens the session, and the reply carries
+    // no role the page could act on by itself.
     window.setTimeout(() => {
-      setRole('viewer')
-      nav('/browse')
+      const match = ACCOUNTS.find((a) => a.email.toLowerCase() === email.trim().toLowerCase())
+      const account = match ?? ACCOUNTS.find((a) => a.id === 'u-1007')!
+      signIn(account.id)
+      nav(homeFor(account))
     }, 700)
   }
 

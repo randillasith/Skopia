@@ -10,17 +10,6 @@
 
 export const UNDECIDED = '—' as const
 
-export type Role = 'guest' | 'viewer' | 'creator' | 'marketing' | 'support' | 'admin'
-
-export const ROLES: Record<Role, { label: string; short: string; home: string }> = {
-  guest: { label: 'Guest Viewer', short: 'Guest', home: '/' },
-  viewer: { label: 'Registered Viewer', short: 'Viewer', home: '/browse' },
-  creator: { label: 'Content Creator', short: 'Creator', home: '/studio' },
-  marketing: { label: 'Marketing Officer', short: 'Marketing', home: '/campaigns' },
-  support: { label: 'Support Officer', short: 'Support', home: '/queue' },
-  admin: { label: 'Platform Administrator', short: 'Admin', home: '/admin' },
-}
-
 /* ---------------------------------------------------------------- catalogue */
 
 /** The letterboard vocabulary. One lifecycle word per state, everywhere. */
@@ -492,50 +481,11 @@ export const CAMPAIGNS: Campaign[] = [
 
 /* ------------------------------------------------------------------- admin */
 
-export type Account = {
-  id: string
-  name: string
-  handle: string
-  role: Role
-  status: 'Active' | 'Suspended' | 'Blocked' | 'Invited'
-  joined: string
-  lastSeen: string
-}
-
-export const ACCOUNTS: Account[] = [
-  { id: 'u-1001', name: 'Punsara P. S.', handle: 'p.punsara', role: 'admin', status: 'Active', joined: '2026-02-11', lastSeen: '4 min ago' },
-  { id: 'u-1002', name: 'Laknadi K. S. S.', handle: 'k.laknadi', role: 'support', status: 'Active', joined: '2026-02-11', lastSeen: '1 h ago' },
-  { id: 'u-1003', name: 'Dhananjana W. M. I.', handle: 'd.fernando', role: 'support', status: 'Active', joined: '2026-03-02', lastSeen: '12 min ago' },
-  { id: 'u-1004', name: 'Madhusara J. P. M.', handle: 'm.madhusara', role: 'marketing', status: 'Active', joined: '2026-03-20', lastSeen: '2 h ago' },
-  { id: 'u-1005', name: 'Meridian Films', handle: 'meridian', role: 'creator', status: 'Active', joined: '2026-04-01', lastSeen: 'yesterday' },
-  { id: 'u-1006', name: 'Harbour Studio', handle: 'harbour', role: 'creator', status: 'Active', joined: '2026-04-14', lastSeen: '3 days ago' },
-  { id: 'u-1007', name: 'R. Perera', handle: 'r.perera', role: 'viewer', status: 'Active', joined: '2026-05-06', lastSeen: '20 min ago' },
-  { id: 'u-1008', name: 'M. Silva', handle: 'm.silva', role: 'viewer', status: 'Suspended', joined: '2026-05-19', lastSeen: '1 week ago' },
-  { id: 'u-1009', name: 'Basement Tapes', handle: 'basement', role: 'creator', status: 'Active', joined: '2026-06-02', lastSeen: '5 h ago' },
-  { id: 'u-1010', name: 'T. Nadeeka', handle: 't.nadeeka', role: 'viewer', status: 'Blocked', joined: '2026-06-28', lastSeen: '3 weeks ago' },
-]
-
-/** UC-FR6-01: the permission matrix detail is explicitly undecided. */
-export const PERMISSIONS = [
-  'Browse and watch',
-  'Comment and rate',
-  'Manage own videos',
-  'Manage any video',
-  'Manage campaigns',
-  'Work complaint queue',
-  'Administer plans and refunds',
-  'Manage accounts and roles',
-  'Change platform settings',
-] as const
-
-export const ROLE_MATRIX: Record<Exclude<Role, 'guest'>, boolean[]> = {
-  //          watch  comment  own   any   camp  queue  plans  accts  settings
-  viewer:    [true,  true,   false, false, false, false, false, false, false],
-  creator:   [true,  true,   true,  false, false, false, false, false, false],
-  marketing: [true,  true,   false, false, true,  false, false, false, false],
-  support:   [true,  true,   false, false, false, true,  false, false, false],
-  admin:     [true,  true,   true,  true,  true,  true,  true,  true,  true],
-}
+/**
+ * Accounts, the staff/channel/moderator grants and the permission table now live
+ * in lib/session.ts. They were moved out because a single flat role column could
+ * not express a moderator whose authority stops at one channel.
+ */
 
 export type LogEntry = {
   at: string
@@ -571,3 +521,45 @@ export const fmt = (n: number) =>
 
 export const featured = VIDEOS.filter((v) => v.billing === 'NOW SHOWING')
 export const continueWatching = VIDEOS.filter((v) => typeof v.progress === 'number')
+
+/* ------------------------------------------------------- channel moderation */
+
+/**
+ * Comments awaiting a channel moderator. Scoped to a channel, never platform
+ * wide — a moderator sees only the channels whose owner granted them the role.
+ */
+export type PendingComment = {
+  id: string
+  channelId: string
+  video: string
+  who: string
+  at: string
+  body: string
+  flag: 'Reported by a viewer' | 'Held by a filter' | 'First comment from this account'
+}
+
+export const MODERATION_QUEUE: PendingComment[] = [
+  { id: 'm-1', channelId: 'ch-01', video: 'The Longest Winter', who: 'T. Nadeeka', at: '18 min ago', body: 'Captions drift after about four minutes — reported it.', flag: 'Reported by a viewer' },
+  { id: 'm-2', channelId: 'ch-01', video: 'The Longest Winter', who: 'anon_4417', at: '1 h ago', body: 'Visit my page for free streams of everything on here', flag: 'Held by a filter' },
+  { id: 'm-3', channelId: 'ch-01', video: 'Salt and Iron', who: 'M. Silva', at: '3 h ago', body: 'Completely wasted my evening. Whoever cut this should not be allowed near an edit suite again.', flag: 'Reported by a viewer' },
+  { id: 'm-4', channelId: 'ch-03', video: 'Night Shift', who: 'K. Fernando', at: '5 h ago', body: 'Is there a longer cut anywhere? The ending felt abrupt.', flag: 'First comment from this account' },
+  { id: 'm-5', channelId: 'ch-01', video: 'Harbour Lights', who: 'anon_9902', at: 'yesterday', body: 'FIRST!!!! 🎉🎉🎉', flag: 'Held by a filter' },
+]
+
+export type ModerationDecision = {
+  id: string
+  channelId: string
+  video: string
+  who: string
+  at: string
+  by: string
+  outcome: 'Published' | 'Removed' | 'Author blocked'
+  note: string
+}
+
+export const MODERATION_LOG: ModerationDecision[] = [
+  { id: 'd-1', channelId: 'ch-01', video: 'The Longest Winter', who: 'R. Perera', at: '2026-09-18 14:02', by: 'd.fernando', outcome: 'Published', note: 'Reported in error — ordinary criticism.' },
+  { id: 'd-2', channelId: 'ch-01', video: 'Salt and Iron', who: 'anon_3310', at: '2026-09-18 09:44', by: 'd.fernando', outcome: 'Removed', note: 'Advertising an unrelated service.' },
+  { id: 'd-3', channelId: 'ch-03', video: 'Night Shift', who: 'anon_7781', at: '2026-09-17 21:15', by: 'r.perera', outcome: 'Author blocked', note: 'Third removal on this channel this week.' },
+  { id: 'd-4', channelId: 'ch-01', video: 'Harbour Lights', who: 'M. Silva', at: '2026-09-17 11:30', by: 'd.fernando', outcome: 'Published', note: 'Held by the filter, read fine.' },
+]
