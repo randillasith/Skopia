@@ -19,4 +19,7 @@ public class CommentResponse {
     private Long userId;
     private String displayName;
     private String avatarUrl;
+    private String badge;
+    private Integer likeCount;
+    private Boolean isPinned;
 }

@@ -10,4 +10,6 @@ import lombok.Setter;
 public class CreateCommentRequest {
     private String text;
     private Long parentId;
+    private String authorName;
+    private String avatarUrl;
 }
