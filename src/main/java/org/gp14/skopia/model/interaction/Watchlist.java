@@ -20,14 +20,15 @@ public class Watchlist {
     @Column(name = "watchlist_id")
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "viewer_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "viewer_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private RegisteredViewer viewer;
 
     @Column(name = "list_name", nullable = false, length = 100)
     private String listName;
 
-    @Column(name = "created_date", nullable = false, updatable = false)
+    @Column(name = "created_date", nullable = false, updatable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdDate;
 
     @Column(name = "is_public", nullable = false)

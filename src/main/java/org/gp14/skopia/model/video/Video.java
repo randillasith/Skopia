@@ -22,16 +22,19 @@ public class Video {
     @Column(name = "video_id")
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "creator_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "creator_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private ContentCreator creator;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tier_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tier_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private AccessTier accessTier;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "category_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private Category category;
 
     @Column(nullable = false, length = 255)
@@ -40,7 +43,7 @@ public class Video {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "upload_date", nullable = false, updatable = false)
+    @Column(name = "upload_date", nullable = false, updatable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime uploadDate;
 
     @Column(nullable = false)
@@ -54,6 +57,12 @@ public class Video {
 
     @Column(name = "video_status", nullable = false, length = 20)
     private String videoStatus = "PUBLIC";
+
+    @Column(name = "video_url", length = 500)
+    private String videoUrl;
+
+    @Column(name = "thumbnail_url", length = 500)
+    private String thumbnailUrl;
 
     @ManyToMany
     @JoinTable(
