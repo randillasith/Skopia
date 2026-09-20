@@ -314,6 +314,13 @@ public class VideoService {
                         }
                     } catch (Exception ignored) {}
 
+                    Boolean isPrem = false;
+                    try {
+                        if (c.getViewer() != null && c.getViewer().getIsPremium() != null) {
+                            isPrem = c.getViewer().getIsPremium();
+                        }
+                    } catch (Exception ignored) {}
+
                     return CommentResponse.builder()
                             .id(c.getId())
                             .text(c.getCommentText())
@@ -321,7 +328,10 @@ public class VideoService {
                             .parentId(parentId)
                             .userId(commentUserId)
                             .displayName(displayName != null ? displayName : "Viewer")
-                            .avatarUrl("https://i.pravatar.cc/160?img=33")
+                            .avatarUrl("https://i.pravatar.cc/160?img=" + (Math.abs((c.getId() != null ? c.getId().hashCode() : 1) % 50) + 1))
+                            .badge(isPrem ? "Music Pass" : null)
+                            .likeCount(0)
+                            .isPinned(false)
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -352,14 +362,24 @@ public class VideoService {
 
         Comment saved = commentRepository.save(comment);
 
+        String author = (request.getAuthorName() != null && !request.getAuthorName().isBlank())
+                ? request.getAuthorName()
+                : (viewer.getDisplayName() != null ? viewer.getDisplayName() : viewer.getUsername());
+        String avatar = (request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank())
+                ? request.getAvatarUrl()
+                : "https://i.pravatar.cc/160?img=" + (Math.abs((saved.getId() != null ? saved.getId().hashCode() : 1) % 50) + 1);
+
         return CommentResponse.builder()
                 .id(saved.getId())
                 .text(saved.getCommentText())
                 .postedAt(saved.getPostedDatetime() != null ? saved.getPostedDatetime().toInstant(ZoneOffset.UTC).toString() : LocalDateTime.now().toInstant(ZoneOffset.UTC).toString())
                 .parentId(saved.getParentComment() != null ? saved.getParentComment().getId() : null)
                 .userId(viewer.getId())
-                .displayName(viewer.getDisplayName() != null ? viewer.getDisplayName() : viewer.getUsername())
-                .avatarUrl("https://i.pravatar.cc/160?img=33")
+                .displayName(author)
+                .avatarUrl(avatar)
+                .badge(viewer.getIsPremium() ? "Music Pass" : null)
+                .likeCount(0)
+                .isPinned(false)
                 .build();
     }
 
