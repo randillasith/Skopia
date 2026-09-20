@@ -22,14 +22,16 @@ public class WatchHistory {
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("viewerId")
     @JoinColumn(name = "viewer_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private RegisteredViewer viewer;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("videoId")
     @JoinColumn(name = "video_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private Video video;
 
-    @Column(name = "watched_datetime", nullable = false)
+    @Column(name = "watched_datetime", nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime watchedDatetime;
 
     @Column(name = "last_position", nullable = false)

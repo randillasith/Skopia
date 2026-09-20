@@ -21,14 +21,16 @@ public class WatchlistItem {
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("watchlistId")
     @JoinColumn(name = "watchlist_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private Watchlist watchlist;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("videoId")
     @JoinColumn(name = "video_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     private Video video;
 
-    @Column(name = "added_date", nullable = false)
+    @Column(name = "added_date", nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime addedDate;
 
     @PrePersist
