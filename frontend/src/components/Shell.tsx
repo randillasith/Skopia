@@ -2,87 +2,262 @@ import { createContext, useContext, useMemo, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  Bell, Search, Menu, X, ChevronsUpDown, LayoutGrid, Clapperboard, Bookmark,
+  Bell, Search, Menu, X, LayoutGrid, Clapperboard, Bookmark,
   History, Sparkles, CreditCard, Flag, LifeBuoy, User, Upload, BarChart3,
   Megaphone, Inbox, Users, ShieldCheck, ScrollText, Settings, Gauge, Receipt,
-  SlidersHorizontal, MessageSquareWarning,
+  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, Check,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { ROLES, NOTIFICATIONS, type Role } from '@/lib/data'
+import { NOTIFICATIONS } from '@/lib/data'
+import {
+  DEMO_IDENTITIES, STAFF_ROLES, accountById, canStaff, describe,
+  homeFor, isCreator, moderatedChannels, ownedChannel,
+  type StaffRole, type Viewer,
+} from '@/lib/session'
+import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
 
 /* ---------------------------------------------------------------- session */
 
-type Session = { role: Role; setRole: (r: Role) => void }
-const SessionCtx = createContext<Session>({ role: 'guest', setRole: () => {} })
+/**
+ * Login is session-based: signing in asks the server to open a session and the
+ * browser carries nothing but the cookie for it. Signing out ends the session on
+ * the server. Nothing about who you are or what you may do is kept in the page,
+ * because a value the client can edit is not an authorisation.
+ *
+ * Here that server is absent, so `viewer` stands in for whatever the session
+ * resolves to — an Account, or null for a guest.
+ */
+type SessionValue = {
+  viewer: Viewer
+  signIn: (accountId: string) => void
+  signOut: () => void
+}
+
+const SessionCtx = createContext<SessionValue>({
+  viewer: null,
+  signIn: () => {},
+  signOut: () => {},
+})
+
 export const useSession = () => useContext(SessionCtx)
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<Role>('viewer')
-  const value = useMemo(() => ({ role, setRole }), [role])
+  const [viewer, setViewer] = useState<Viewer>(() => accountById('u-1007'))
+  const value = useMemo<SessionValue>(
+    () => ({
+      viewer,
+      signIn: (id: string) => setViewer(accountById(id)),
+      signOut: () => setViewer(null),
+    }),
+    [viewer],
+  )
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>
 }
 
-/* ----------------------------------------------------------- role switcher */
+/* ------------------------------------------------------------ account menu */
 
-export function RoleSwitcher({ compact = false }: { compact?: boolean }) {
-  const { role, setRole } = useSession()
+function GrantChip({ children, tone }: { children: React.ReactNode; tone: 'staff' | 'channel' | 'mod' }) {
+  return (
+    <span
+      className={cn(
+        'letterboard rounded-[3px] border px-1.5 py-0.5',
+        tone === 'staff' && 'border-violet-500/45 bg-violet-500/12 text-violet-200',
+        tone === 'channel' && 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
+        tone === 'mod' && 'border-ink-500 bg-ink-800 text-ink-150',
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+/**
+ * The account menu, and the prototype's identity switcher folded into it.
+ *
+ * It lists what the signed-in account actually holds rather than a single role,
+ * because the three grants are independent — see lib/session.ts. An account with
+ * nothing beyond signing up sees no grants at all, which is the common case and
+ * should look unremarkable.
+ */
+export function AccountMenu({ compact = false }: { compact?: boolean }) {
+  const { viewer, signIn, signOut } = useSession()
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
+  const own = ownedChannel(viewer)
+  const mod = moderatedChannels(viewer)
+
+  const go = (to: string) => {
+    setOpen(false)
+    nav(to)
+  }
+
+  if (!viewer) {
+    return (
+      <div className={cn('flex items-center gap-2', compact && 'w-full')}>
+        <Link
+          to="/login"
+          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-sm border border-ink-600 px-3 text-[13px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-white"
+        >
+          <LogIn className="size-3.5" />
+          Sign in
+        </Link>
+      </div>
+    )
+  }
 
   return (
-    <div className="relative">
+    <div className={cn('relative', compact && 'w-full')}>
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-haspopup="menu"
         className={cn(
-          'flex items-center gap-2 rounded-sm border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left transition-colors hover:border-ink-500',
-          compact && 'w-full',
+          'flex items-center gap-2.5 rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-ink-850',
+          compact && 'w-full border border-ink-600 px-2.5 py-2',
         )}
       >
-        <span className="min-w-0">
-          <span className="letterboard block text-ink-300">Viewing as</span>
-          <span className="block truncate text-[13px] font-medium text-white">
-            {ROLES[role].label}
+        <Avatar name={viewer.name} size={compact ? 32 : 28} />
+        <span className={cn('min-w-0', !compact && 'hidden xl:block')}>
+          <span className="block truncate text-[13px] font-medium leading-tight text-white">
+            {viewer.name}
+          </span>
+          <span className="block truncate font-mono text-[11px] leading-tight text-ink-300">
+            @{viewer.handle}
           </span>
         </span>
-        <ChevronsUpDown className="ml-auto size-3.5 shrink-0 text-ink-300" />
       </button>
+
       <AnimatePresence>
         {open && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <motion.ul
+            <motion.div
+              role="menu"
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute right-0 z-50 mt-1.5 w-60 overflow-hidden rounded-sm border border-ink-600 bg-ink-850 py-1 shadow-e4"
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className={cn(
+                'absolute z-50 mt-2 w-[19rem] overflow-hidden rounded-sm border border-ink-600 bg-ink-850 shadow-e4',
+                compact ? 'bottom-full right-0 mb-2 mt-0' : 'right-0',
+              )}
             >
-              <li className="letterboard px-3 py-2 text-ink-300">Switch role — prototype only</li>
-              {(Object.keys(ROLES) as Role[]).map((r) => (
-                <li key={r}>
-                  <button
-                    onClick={() => {
-                      setRole(r)
-                      setOpen(false)
-                      nav(ROLES[r].home)
-                    }}
-                    className={cn(
-                      'flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors hover:bg-ink-800',
-                      r === role ? 'text-cyan-300' : 'text-ink-100',
-                    )}
-                  >
-                    {ROLES[r].label}
-                    {r === role && <span className="letterboard text-cyan-300">Active</span>}
-                  </button>
-                </li>
-              ))}
-            </motion.ul>
+              {/* who you are */}
+              <div className="border-b border-ink-700 px-3.5 py-3">
+                <p className="truncate text-[14px] font-medium text-white">{viewer.name}</p>
+                <p className="truncate font-mono text-[11px] text-ink-300">{viewer.email}</p>
+                {(viewer.staff.length > 0 || own || mod.length > 0) && (
+                  <div className="mt-2.5 flex flex-wrap gap-1">
+                    {viewer.staff.map((r) => (
+                      <GrantChip key={r} tone="staff">{STAFF_ROLES[r].label}</GrantChip>
+                    ))}
+                    {own && <GrantChip tone="channel">Channel · {own.name}</GrantChip>}
+                    {mod.map((c) => (
+                      <GrantChip key={c.id} tone="mod">Moderator · {c.name}</GrantChip>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* what that lets you reach */}
+              <div className="py-1">
+                <MenuItem icon={User} onClick={() => go('/profile')}>Your account</MenuItem>
+                <MenuItem icon={CreditCard} onClick={() => go('/subscription')}>Your pass</MenuItem>
+                {own ? (
+                  <MenuItem icon={Tv} onClick={() => go('/studio')}>{own.name}</MenuItem>
+                ) : (
+                  <MenuItem icon={Tv} onClick={() => go('/studio/create')}>Create a channel</MenuItem>
+                )}
+                {mod.length > 0 && (
+                  <MenuItem icon={ShieldHalf} onClick={() => go('/moderate')}>
+                    Moderating {mod.length === 1 ? mod[0].name : `${mod.length} channels`}
+                  </MenuItem>
+                )}
+                {(['marketing', 'support', 'admin'] as StaffRole[])
+                  .filter((r) => viewer.staff.includes(r))
+                  .map((r) => (
+                    <MenuItem key={r} icon={ShieldCheck} onClick={() => go(STAFF_ROLES[r].home)}>
+                      {STAFF_ROLES[r].console}
+                    </MenuItem>
+                  ))}
+              </div>
+
+              <div className="border-t border-ink-700 py-1">
+                <MenuItem
+                  icon={LogOut}
+                  onClick={() => {
+                    signOut()
+                    setOpen(false)
+                    nav('/')
+                  }}
+                >
+                  Sign out
+                </MenuItem>
+              </div>
+
+              {/* the prototype device, fenced off and labelled */}
+              <div className="border-t border-ink-700 bg-ink-900/60 py-1">
+                <p className="letterboard px-3.5 pb-1 pt-2 text-ink-300">
+                  Switch identity — prototype only
+                </p>
+                {DEMO_IDENTITIES.map((d) => {
+                  const a = d.id ? accountById(d.id) : null
+                  const active = (viewer?.id ?? null) === d.id
+                  return (
+                    <button
+                      key={d.id ?? 'guest'}
+                      role="menuitem"
+                      onClick={() => {
+                        if (d.id) signIn(d.id)
+                        else signOut()
+                        setOpen(false)
+                        nav(d.id ? homeFor(accountById(d.id)) : '/')
+                      }}
+                      className="flex w-full items-start gap-2 px-3.5 py-1.5 text-left transition-colors hover:bg-ink-800"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            'block truncate text-[13px]',
+                            active ? 'text-cyan-300' : 'text-ink-100',
+                          )}
+                        >
+                          {a ? a.name : 'Guest'}
+                        </span>
+                        <span className="block truncate text-[11px] text-ink-300">{d.caption}</span>
+                      </span>
+                      {active && <Check className="mt-0.5 size-3.5 shrink-0 text-cyan-300" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </motion.div>
           </>
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function MenuItem({
+  icon: Icon,
+  onClick,
+  children,
+}: {
+  icon: typeof User
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] text-ink-100 transition-colors hover:bg-ink-800 hover:text-white"
+    >
+      <Icon className="size-4 shrink-0 text-ink-300" />
+      <span className="truncate">{children}</span>
+    </button>
   )
 }
 
@@ -159,7 +334,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
           </Link>
 
           <div className="hidden sm:block">
-            <RoleSwitcher />
+            <AccountMenu />
           </div>
 
           <button
@@ -210,7 +385,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
                 </NavLink>
               ))}
               <div className="mt-4">
-                <RoleSwitcher compact />
+                <AccountMenu compact />
               </div>
             </nav>
           </motion.div>
@@ -236,8 +411,10 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
 
 /* --------------------------------------------------- back of house (staff) */
 
+type ConsoleKey = 'creator' | 'moderator' | 'marketing' | 'support' | 'admin'
+
 const CONSOLES: Record<
-  Exclude<Role, 'guest' | 'viewer'>,
+  ConsoleKey,
   { name: string; groups: { label: string; items: { to: string; label: string; icon: typeof Gauge }[] }[] }
 > = {
   creator: {
@@ -249,6 +426,25 @@ const CONSOLES: Record<
           { to: '/studio', label: 'Video library', icon: Clapperboard },
           { to: '/studio/upload', label: 'Upload', icon: Upload },
           { to: '/studio/analytics', label: 'Analytics', icon: BarChart3 },
+        ],
+      },
+      {
+        label: 'Channel',
+        items: [
+          { to: '/studio/moderators', label: 'Moderators', icon: ShieldHalf },
+          { to: '/studio/channel', label: 'Channel settings', icon: Settings },
+        ],
+      },
+    ],
+  },
+  moderator: {
+    name: 'Moderation',
+    groups: [
+      {
+        label: 'Channels you moderate',
+        items: [
+          { to: '/moderate', label: 'Comment queue', icon: MessageSquareWarning },
+          { to: '/moderate/history', label: 'Decisions', icon: History },
         ],
       },
     ],
@@ -320,13 +516,15 @@ export function BackOfHouse({
   const loc = useLocation()
   // The console is decided by where you are, not by which role is selected —
   // otherwise a viewer opening an admin route sees the wrong console name.
-  const key: keyof typeof CONSOLES = loc.pathname.startsWith('/studio')
+  const key: ConsoleKey = loc.pathname.startsWith('/studio')
     ? 'creator'
-    : loc.pathname.startsWith('/campaigns')
-      ? 'marketing'
-      : loc.pathname.startsWith('/queue')
-        ? 'support'
-        : 'admin'
+    : loc.pathname.startsWith('/moderate')
+      ? 'moderator'
+      : loc.pathname.startsWith('/campaigns')
+        ? 'marketing'
+        : loc.pathname.startsWith('/queue')
+          ? 'support'
+          : 'admin'
   const console_ = CONSOLES[key]
 
   const rail = (
@@ -373,7 +571,7 @@ export function BackOfHouse({
         ))}
       </nav>
       <div className="border-t border-ink-800 p-3">
-        <RoleSwitcher compact />
+        <AccountMenu compact />
         <Link
           to="/browse"
           className="mt-2 flex items-center gap-2 rounded-sm px-2 py-2 text-[13px] text-ink-300 transition-colors hover:text-ink-100"
@@ -431,59 +629,125 @@ export function BackOfHouse({
   )
 }
 
-export { SlidersHorizontal }
-
-/* ------------------------------------------------------------- role guard */
+/* ------------------------------------------------------------------ guards */
 
 /**
- * Role-based access control decides reach (PRODUCT.md § Positioning).
- * A role that cannot reach a console is told so plainly and given the way
- * back — the control is never silently hidden.
+ * Every guard renders the same named refusal rather than hiding the link. Hiding
+ * a surface teaches nothing when somebody arrives from a shared URL or a
+ * bookmark, and it hides the one thing they need to know: who can let them in.
  */
-export function RequireRole({
-  allow,
-  console: consoleName,
-  children,
+function Denied({
+  heading,
+  explain,
+  action,
 }: {
-  allow: Role[]
-  console: string
-  children: React.ReactNode
+  heading: string
+  explain: React.ReactNode
+  action?: React.ReactNode
 }) {
-  const { role } = useSession()
-  if (allow.includes(role)) return <>{children}</>
-
+  const { viewer } = useSession()
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="mx-auto flex h-20 w-full max-w-[1500px] items-center px-4 sm:px-6 lg:px-8">
         <Wordmark to="/browse" />
       </header>
       <MarqueeRule />
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-16">
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-4 py-16">
         <p className="letterboard text-ink-300">Access</p>
-        <h1 className="font-marquee mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
-          {consoleName} is not open to your role
+        <h1 className="font-marquee mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white">
+          {heading}
         </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-ink-200">
-          You are signed in as <span className="text-white">{ROLES[role].label}</span>. This
-          console is reachable by{' '}
-          <span className="text-white">
-            {allow.map((r) => ROLES[r].label).join(', ')}
-          </span>
-          . Ask a Platform Administrator to change your role, or switch role below — the switcher
-          exists for this prototype only.
+        <p className="mt-3 text-[15px] leading-relaxed text-ink-200">{explain}</p>
+        <p className="mt-4 text-[13px] text-ink-300">
+          Signed in as <span className="text-ink-100">{viewer ? viewer.name : 'nobody'}</span>
+          {viewer && <> — {describe(viewer)}</>}.
         </p>
         <div className="mt-7 flex flex-wrap items-center gap-3">
+          {action}
           <Link
             to="/browse"
-            className="inline-flex h-10 items-center rounded-sm bg-violet-500 px-4 text-[14px] font-medium text-white transition-colors hover:bg-violet-400"
+            className="inline-flex h-10 items-center rounded-sm border border-ink-600 px-4 text-[14px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-white"
           >
-            Back to the lobby
+            Back to the programme
           </Link>
-          <div className="w-56">
-            <RoleSwitcher compact />
-          </div>
         </div>
       </main>
     </div>
+  )
+}
+
+const primaryAction =
+  'inline-flex h-10 items-center rounded-sm bg-violet-500 px-4 text-[14px] font-medium text-white transition-colors hover:bg-violet-400'
+
+/** Anything tied to an account: watchlist, pass, reports, notifications. */
+export function RequireAuth({ what, children }: { what: string; children: React.ReactNode }) {
+  const { viewer } = useSession()
+  if (viewer) return <>{children}</>
+  return (
+    <Denied
+      heading={`${what} belongs to an account`}
+      explain="Browsing and watching the free programme need no account. This does, because it is yours and has to be kept somewhere."
+      action={<Link to="/login" className={primaryAction}>Sign in</Link>}
+    />
+  )
+}
+
+/** The studio. Owning a channel is self-service, so this offers the way in. */
+export function RequireChannel({ children }: { children: React.ReactNode }) {
+  const { viewer } = useSession()
+  if (!viewer) {
+    return (
+      <Denied
+        heading="Creator Studio belongs to an account"
+        explain="Sign in first, then create a channel. Nobody has to approve it."
+        action={<Link to="/login" className={primaryAction}>Sign in</Link>}
+      />
+    )
+  }
+  if (isCreator(viewer)) return <>{children}</>
+  return (
+    <Denied
+      heading="You do not have a channel yet"
+      explain="Publishing happens through a channel. Creating one takes a name and a handle, and there is no approval step — an administrator is not involved."
+      action={<Link to="/studio/create" className={primaryAction}>Create a channel</Link>}
+    />
+  )
+}
+
+/** Channel-scoped moderation. The grant comes from a channel owner, not staff. */
+export function RequireModerator({ children }: { children: React.ReactNode }) {
+  const { viewer } = useSession()
+  if (viewer && (moderatedChannels(viewer).length > 0 || isCreator(viewer))) return <>{children}</>
+  return (
+    <Denied
+      heading="You do not moderate a channel"
+      explain="Moderation is granted per channel by the person who owns it, and it reaches only that channel's videos. An administrator cannot grant it for somebody else's channel."
+    />
+  )
+}
+
+/** Platform staff consoles. Only an administrator grants these. */
+export function RequireStaff({
+  role,
+  children,
+}: {
+  role: StaffRole
+  children: React.ReactNode
+}) {
+  const { viewer } = useSession()
+  if (canStaff(viewer, role)) return <>{children}</>
+  return (
+    <Denied
+      heading={`${STAFF_ROLES[role].console} is staff only`}
+      explain={
+        <>
+          This console needs the{' '}
+          <span className="text-white">{STAFF_ROLES[role].label}</span> role, which only an
+          administrator can grant. It is not something an account can take for itself, and owning
+          a channel does not confer it.
+        </>
+      }
+      action={<Link to="/help" className={primaryAction}>Ask for access</Link>}
+    />
   )
 }
