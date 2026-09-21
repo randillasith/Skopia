@@ -54,3 +54,7 @@ src/main/resources/application-local.properties
 # in uploads/ads/. The two files already tracked here stay tracked — git keeps
 # what it is already following — so this only stops new ones being committed.
 uploads/
+
+# A stray copy of the real application.properties, with a live database
+# password in it. Untracked here; .example is the file to copy from.
+src/main/resources/application.properties.backup
