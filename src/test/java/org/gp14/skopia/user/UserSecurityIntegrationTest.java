@@ -39,6 +39,7 @@ class UserSecurityIntegrationTest {
     @Autowired ActivityLogRepository activityLogs;
     Administrator admin;
     RegisteredViewer viewer;
+    RegisteredViewer otherViewer;
 
     @BeforeEach
     void setUp() {
@@ -53,6 +54,12 @@ class UserSecurityIntegrationTest {
         viewer.setPasswordHash(passwords.encode("correct-horse")); viewer.setAccountStatus("ACTIVE");
         viewer.setPreferredLanguage("en"); viewer.setIsPremium(false); viewer.setNotifyChannel("EMAIL");
         viewer = viewers.saveAndFlush(viewer);
+
+        otherViewer = new RegisteredViewer();
+        otherViewer.setUsername("other_viewer"); otherViewer.setEmail("other_viewer@example.test");
+        otherViewer.setPasswordHash(passwords.encode("another-horse")); otherViewer.setAccountStatus("ACTIVE");
+        otherViewer.setPreferredLanguage("en"); otherViewer.setIsPremium(false); otherViewer.setNotifyChannel("EMAIL");
+        otherViewer = viewers.saveAndFlush(otherViewer);
     }
 
     @Test
@@ -111,5 +118,81 @@ class UserSecurityIntegrationTest {
                 .andExpect(jsonPath("$[0].actorUserId").value(admin.getId()))
                 .andExpect(jsonPath("$[0].targetUserId").value(viewer.getId()))
                 .andExpect(jsonPath("$[0].detail").value(org.hamcrest.Matchers.containsString("Policy review")));
+    }
+
+    @Test
+    void nonAdminCannotModerateVideo() throws Exception {
+        mvc.perform(patch("/api/admin/videos/999/status")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ARCHIVED\",\"reason\":\"Policy review\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void publicVideoReadsStayPublicButMutationsAndPrivateShelfRequireAuthentication() throws Exception {
+        mvc.perform(get("/api/videos")).andExpect(status().isOk());
+        mvc.perform(get("/api/history").header("X-User-Id", viewer.getId()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/watchlist").header("X-User-Id", viewer.getId()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/videos").param("scope", "mine").header("X-User-Id", viewer.getId()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put("/api/videos/999")
+                        .header("X-User-Id", viewer.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ARCHIVED\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void reportsUseBearerOwnerAndComplaintQueueRequiresStaff() throws Exception {
+        String report = mvc.perform(post("/api/reports")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"viewerId\":" + otherViewer.getId() + ",\"type\":\"OTHER\",\"details\":\"Owner check\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.viewerId").value(viewer.getId()))
+                .andReturn().getResponse().getContentAsString();
+        long reportId = json.readTree(report).get("id").asLong();
+
+        mvc.perform(get("/api/reports/" + reportId)
+                        .header("Authorization", "Bearer " + tokens.issue(otherViewer.getId())))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/complaints/queue")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void selfServiceProfileAlwaysUsesBearerPrincipal() throws Exception {
+        mvc.perform(put("/api/users/me/profile")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
+                        .header("X-User-Id", otherViewer.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"displayName\":\"Changed by owner\",\"email\":\"changed@example.test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(viewer.getId()))
+                .andExpect(jsonPath("$.email").value("changed@example.test"));
+
+        assertThat(viewers.findById(otherViewer.getId()).orElseThrow().getEmail())
+                .isEqualTo("other_viewer@example.test");
+
+        mvc.perform(put("/api/users/me/profile")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"not-an-email\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void selfServiceDeactivationCannotTargetAnotherUserOrDeleteData() throws Exception {
+        mvc.perform(delete("/api/users/me")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
+                        .header("X-User-Id", otherViewer.getId()))
+                .andExpect(status().isNoContent());
+
+        assertThat(viewers.findById(viewer.getId()).orElseThrow().getAccountStatus()).isEqualTo("DEACTIVATED");
+        assertThat(viewers.existsById(otherViewer.getId())).isTrue();
     }
 }

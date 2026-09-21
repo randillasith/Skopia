@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import {
-  Upload, Plus, AlertTriangle, Check, Film, Trash2, Archive, Eye, ThumbsUp,
+  Upload, Plus, AlertTriangle, Check, Trash2, Archive, Eye, ThumbsUp,
   MessageSquare, TrendingUp, FileVideo, Captions, ArrowLeft, ArrowRight, ShieldHalf,
 } from 'lucide-react'
 import {
@@ -11,20 +11,61 @@ import {
 } from '@/components/primitives'
 import { PosterPlate, Letterboard, BillingBoard, Stations, Lightbox } from '@/components/world'
 import { BackOfHouse, FrontOfHouse, useSession } from '@/components/Shell'
-import { VIDEOS, CATEGORIES, GENRES, byId, fmt, UNDECIDED } from '@/lib/data'
+import { GENRES, fmt, UNDECIDED } from '@/lib/data'
+import { useCatalogue, useMyVideos, useVideo } from '@/lib/useCatalogue'
+import { studio, videoIdOf } from '@/lib/catalogue'
+import { actorId as actorIdOf } from '@/lib/session'
+import { ApiError } from '@/lib/api'
+import { Resolve } from '@/components/Loading'
 import { ACCOUNTS, CHANNELS, accountById, ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
-/** The library is scoped to the channel the signed-in account owns. */
-const MINE = VIDEOS.filter((v) => ['Meridian Films', 'Harbour Studio'].includes(v.creator))
+
+/**
+ * The studio only ever shows the signed-in account's own channel. Scoping it to
+ * a hard-coded list of creator names was left over from the flat role model, and
+ * it meant every creator saw the same two studios' videos as though they were
+ * their own.
+ */
+/* The shelf comes from the server, scoped to the caller — see lib/useCatalogue. */
 
 /* ========================================================= video library */
 
 export function StudioLibrary() {
   const nav = useNavigate()
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const { videos: MINE, loading, error, refresh } = useMyVideos()
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const toast = useToast()
-  const target = confirm ? byId(confirm) : undefined
+  const target = confirm ? MINE.find((v) => v.id === confirm) : undefined
+
+  /** Archiving keeps the record and hides it; deleting does not come back. */
+  const act = async (what: 'archive' | 'delete') => {
+    if (!target) return
+    const numeric = videoIdOf(target.id)
+    if (numeric == null) return
+    setBusy(true)
+    try {
+      if (what === 'archive') {
+        await studio.update(numeric, { status: 'ARCHIVED' }, actor)
+        toast({ title: 'Archived — hidden from viewers, record kept' })
+      } else {
+        await studio.remove(numeric, actor)
+        toast({ title: 'Video deleted', tone: 'bad' })
+      }
+      setConfirm(null)
+      refresh()
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'That did not go through.',
+        tone: 'bad',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <BackOfHouse
@@ -50,6 +91,21 @@ export function StudioLibrary() {
         ))}
       </div>
 
+      {loading || error ? (
+        <div className="mt-8">
+          <Resolve loading={loading} error={error} onRetry={refresh} what="Reading your library">
+            {null}
+          </Resolve>
+        </div>
+      ) : MINE.length === 0 ? (
+        <div className="mt-8">
+          <EmptyState
+            title="Nothing published yet"
+            body="Upload a video and it appears here with its billing, its views and its comments."
+            action={<Button variant="primary" onClick={() => nav('/studio/upload')}>Upload a video</Button>}
+          />
+        </div>
+      ) : (
       <div className="mt-8 rounded-lg border border-ink-700 bg-ink-850">
         <Table labels={["Title", "Billing", "Category", "Published", "Views", "Likes", "Captions", ""]}>
           <thead>
@@ -100,6 +156,7 @@ export function StudioLibrary() {
           </tbody>
         </Table>
       </div>
+      )}
 
       <Modal
         open={!!confirm}
@@ -109,11 +166,11 @@ export function StudioLibrary() {
         footer={
           <>
             <Button variant="quiet" onClick={() => setConfirm(null)}>Keep it</Button>
-            <Button variant="secondary" icon={<Archive className="size-4" />}
-              onClick={() => { setConfirm(null); toast({ title: 'Archived — hidden from viewers, record kept' }) }}>
+            <Button variant="secondary" icon={<Archive className="size-4" />} loading={busy}
+              onClick={() => act('archive')}>
               Archive instead
             </Button>
-            <Button variant="danger" onClick={() => { setConfirm(null); toast({ title: 'Video deleted', tone: 'bad' }) }}>
+            <Button variant="danger" loading={busy} onClick={() => act('delete')}>
               Delete permanently
             </Button>
           </>
@@ -135,39 +192,91 @@ const UPLOAD_STEPS = ['File', 'Details', 'Captions', 'Review', 'Published']
 export function StudioUpload() {
   const nav = useNavigate()
   const toast = useToast()
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const { categories, videos, refresh } = useCatalogue()
   const [step, setStep] = useState(0)
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
   const [genre, setGenre] = useState('')
   const [synopsis, setSynopsis] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [uploaded, setUploaded] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [publishing, setPublishing] = useState(false)
+
+  // The chosen file and what the browser can tell us about it. The duration is
+  // read from the file itself rather than asked for, because the person
+  // uploading should not have to know it and would often be wrong.
+  const [file, setFile] = useState<File | null>(null)
+  const [duration, setDuration] = useState(0)
+  const picker = useRef<HTMLInputElement>(null)
+  // The catalogue will not take a title without a poster, so one is asked for
+  // here rather than at the last station where refusing is most expensive.
+  const [poster, setPoster] = useState<File | null>(null)
+  const [posterUrl, setPosterUrl] = useState<string | null>(null)
+  const posterPicker = useRef<HTMLInputElement>(null)
 
   /** UC-FR1-03 extension 5b — warn on a possible duplicate before confirmation. */
-  const duplicate = VIDEOS.find(
+  const duplicate = videos.find(
     (v) => title.trim().length > 3 && v.title.toLowerCase().startsWith(title.trim().toLowerCase().slice(0, 6)),
   )
 
-  const startUpload = () => {
-    setUploaded(true)
-    let p = 0
-    const id = window.setInterval(() => {
-      p += 8 + Math.random() * 12
-      setProgress(Math.min(100, p))
-      if (p >= 100) {
-        window.clearInterval(id)
-        window.setTimeout(() => setStep(1), 400)
+  const choose = (chosen: File) => {
+    setFile(chosen)
+    // Nothing is sent yet: the file is held until the record it belongs to is
+    // complete, so a cancelled upload leaves no orphan on the server.
+    const probe = document.createElement('video')
+    probe.preload = 'metadata'
+    probe.onloadedmetadata = () => {
+      setDuration(Number.isFinite(probe.duration) ? probe.duration : 0)
+      URL.revokeObjectURL(probe.src)
+    }
+    probe.src = URL.createObjectURL(chosen)
+    if (!title.trim()) setTitle(chosen.name.replace(/\.[^.]+$/, ''))
+    setStep(1)
+  }
+
+  const publish = async (status: 'PUBLISHED' | 'DRAFT') => {
+    setPublishing(true)
+    try {
+      await studio.publish(
+        {
+          title: title.trim(),
+          description: synopsis.trim(),
+          categoryId: categories.find((c) => c.name === category)?.id ?? null,
+          accessType: 'FREE',
+          status,
+          durationSeconds: duration,
+          videoFile: file,
+          thumbnailFile: poster,
+        },
+        actor,
+      )
+      refresh()
+      if (status === 'PUBLISHED') {
+        setStep(4)
+        toast({ title: 'Published — now showing', tone: 'ok' })
+      } else {
+        toast({ title: 'Saved as a draft' })
+        nav('/studio')
       }
-    }, 180)
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'The upload did not go through.',
+        tone: 'bad',
+      })
+    } finally {
+      setPublishing(false)
+    }
   }
 
   const validateDetails = () => {
     const e: Record<string, string> = {}
     if (!title.trim()) e.title = 'A title is required before this record can be saved.'
     if (!category) e.category = 'Choose the category viewers will find this under.'
-    if (!genre) e.genre = 'Choose a genre.'
+    // Genre is not required, because the catalogue has nowhere to store it: a
+    // field that cannot be saved must not be able to block a publish.
     if (synopsis.trim().length < 20) e.synopsis = 'Write at least a sentence describing the video.'
+    if (!poster) e.poster = 'Choose a thumbnail — the catalogue will not take a title without one.'
     setErrors(e)
     if (Object.keys(e).length === 0) setStep(2)
   }
@@ -185,44 +294,37 @@ export function StudioUpload() {
           {/* ---- 0 · file ---- */}
           {step === 0 && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }}>
-              {!uploaded ? (
-                <button
-                  onClick={startUpload}
-                  className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-ink-600 bg-ink-850/50 px-6 py-16 text-center transition-colors hover:border-violet-500/60 hover:bg-violet-500/4"
-                >
-                  <FileVideo className="size-9 text-ink-300" />
-                  <p className="font-marquee mt-4 text-[19px] font-bold text-white">
-                    Choose a video file
-                  </p>
-                  <p className="mt-1.5 text-[14px] text-ink-300">or drag it here</p>
-                  <p className="mt-4 text-[12.5px] text-ink-300">
-                    Accepted formats and maximum size are not yet defined in the project
-                    documentation.
-                  </p>
-                </button>
-              ) : (
-                <div className="rounded-lg border border-ink-700 bg-ink-850 p-6">
-                  <div className="flex items-center gap-3">
-                    <Film className="size-5 text-cyan-400" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px] font-medium text-white">
-                        placeholder-master.mov
-                      </p>
-                      <p className="font-mono text-[12px] tabular-nums text-ink-300">
-                        {progress < 100 ? `Uploading… ${Math.round(progress)}%` : 'Upload complete'}
-                      </p>
-                    </div>
-                    {progress >= 100 && <Check className="size-5 text-success-400" />}
-                  </div>
-                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-ink-700">
-                    <motion.div
-                      className="h-full rounded-full bg-violet-500"
-                      animate={{ width: `${progress}%` }}
-                      transition={{ duration: 0.2 }}
-                    />
-                  </div>
-                </div>
-              )}
+              <input
+                ref={picker}
+                type="file"
+                accept="video/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const chosen = e.target.files?.[0]
+                  if (chosen) choose(chosen)
+                }}
+              />
+              <button
+                onClick={() => picker.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const dropped = e.dataTransfer.files?.[0]
+                  if (dropped) choose(dropped)
+                }}
+                className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-ink-600 bg-ink-850/50 px-6 py-16 text-center transition-colors hover:border-violet-500/60 hover:bg-violet-500/4"
+              >
+                <FileVideo className="size-9 text-ink-300" />
+                <p className="font-marquee mt-4 text-[19px] font-bold text-white">
+                  Choose a video file
+                </p>
+                <p className="mt-1.5 text-[14px] text-ink-300">or drag it here</p>
+                <p className="mt-4 text-[12.5px] text-ink-300">
+                  A video file is required. It is held here and sent when you publish, so leaving
+                  now uploads nothing.
+                </p>
+              </button>
+
             </motion.div>
           )}
 
@@ -250,10 +352,10 @@ export function StudioUpload() {
                 <Field label="Category" required error={errors.category}>
                   <Select value={category} onChange={(e) => setCategory(e.target.value)}>
                     <option value="">Choose one</option>
-                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                    {categories.map((c) => <option key={c.id}>{c.name}</option>)}
                   </Select>
                 </Field>
-                <Field label="Genre" required error={errors.genre}>
+                <Field label="Genre" hint="Not stored against a title yet." error={errors.genre}>
                   <Select value={genre} onChange={(e) => setGenre(e.target.value)}>
                     <option value="">Choose one</option>
                     {GENRES.map((g) => <option key={g}>{g}</option>)}
@@ -266,14 +368,39 @@ export function StudioUpload() {
                   placeholder="What is this video, in a sentence or two?" />
               </Field>
 
-              <Field label="Thumbnail" hint="16:9 recommended">
+              <Field label="Thumbnail" required hint="16:9 recommended" error={errors.poster}>
                 <div className="flex items-center gap-4">
                   <Lightbox className="w-40">
                     <span className="block aspect-video">
-                      <PosterPlate title={title || 'Untitled'} seed={title.length + 2} compact />
+                      {posterUrl ? (
+                        <img src={posterUrl} alt="" className="size-full object-cover" />
+                      ) : (
+                        <PosterPlate title={title || 'Untitled'} seed={title.length + 2} compact />
+                      )}
                     </span>
                   </Lightbox>
-                  <Button size="sm" icon={<Upload className="size-4" />}>Replace thumbnail</Button>
+                  <input
+                    ref={posterPicker}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const chosen = e.target.files?.[0]
+                      if (!chosen) return
+                      setPoster(chosen)
+                      setPosterUrl((old) => {
+                        if (old) URL.revokeObjectURL(old)
+                        return URL.createObjectURL(chosen)
+                      })
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    icon={<Upload className="size-4" />}
+                    onClick={() => posterPicker.current?.click()}
+                  >
+                    {poster ? 'Replace thumbnail' : 'Choose a thumbnail'}
+                  </Button>
                 </div>
               </Field>
 
@@ -365,10 +492,10 @@ export function StudioUpload() {
               <div className="mt-5 flex justify-between">
                 <Button variant="quiet" icon={<ArrowLeft className="size-4" />} onClick={() => setStep(2)}>Back</Button>
                 <div className="flex gap-2">
-                  <Button onClick={() => { toast({ title: 'Saved as a draft' }); nav('/studio') }}>
+                  <Button loading={publishing} onClick={() => publish('DRAFT')}>
                     Save as draft
                   </Button>
-                  <Button variant="primary" onClick={() => { setStep(4); toast({ title: 'Published — now showing', tone: 'ok' }) }}>
+                  <Button variant="primary" loading={publishing} onClick={() => publish('PUBLISHED')}>
                     Publish now
                   </Button>
                 </div>
@@ -403,14 +530,74 @@ export function StudioUpload() {
 export function StudioEdit() {
   const nav = useNavigate()
   const { id } = useParams()
-  const v = byId(id ?? '')
+  const { video: v, loading, error, reload } = useVideo(id)
+  const { categories, refresh } = useCatalogue()
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
   const toast = useToast()
 
-  if (!v) {
+  // The form is held here rather than read off the DOM on submit, so what is
+  // sent is what is on screen and an unchanged field is not sent as a change.
+  const [form, setForm] = useState({ title: '', category: '', synopsis: '', premium: false })
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (v) setForm({ title: v.title, category: v.category, synopsis: v.synopsis, premium: v.premium })
+  }, [v?.id])
+
+  const numeric = v ? videoIdOf(v.id) : null
+
+  const save = async () => {
+    if (numeric == null) return
+    setBusy(true)
+    try {
+      await studio.update(
+        numeric,
+        {
+          title: form.title.trim(),
+          description: form.synopsis.trim(),
+          categoryId: categories.find((c) => c.name === form.category)?.id ?? null,
+          accessType: form.premium ? 'PREMIUM' : 'FREE',
+        },
+        actor,
+      )
+      refresh()
+      reload()
+      toast({ title: 'Changes saved', tone: 'ok' })
+    } catch (cause) {
+      toast({ title: cause instanceof ApiError ? cause.message : 'Could not save that.', tone: 'bad' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const takeDown = async (what: 'archive' | 'delete') => {
+    if (numeric == null) return
+    setBusy(true)
+    try {
+      if (what === 'archive') {
+        await studio.update(numeric, { status: 'ARCHIVED' }, actor)
+        toast({ title: 'Archived' })
+        reload()
+      } else {
+        await studio.remove(numeric, actor)
+        toast({ title: 'Deleted', tone: 'bad' })
+        nav('/studio')
+      }
+      refresh()
+    } catch (cause) {
+      toast({ title: cause instanceof ApiError ? cause.message : 'That did not go through.', tone: 'bad' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading || error || !v) {
     return (
-      <BackOfHouse title="Video not found">
-        <EmptyState title="No such video" body="That record does not exist, or it has been deleted."
-          action={<Button onClick={() => nav('/studio')}>Back to library</Button>} />
+      <BackOfHouse title="Video">
+        <Resolve loading={loading} error={error} onRetry={reload} what="Opening the record">
+          <EmptyState title="No such video" body="That record does not exist, or it has been deleted."
+            action={<Button onClick={() => nav('/studio')}>Back to library</Button>} />
+        </Resolve>
       </BackOfHouse>
     )
   }
@@ -423,7 +610,7 @@ export function StudioEdit() {
           <Button size="sm" variant="quiet" onClick={() => nav(`/watch/${v.id}`)}>
             View as a viewer
           </Button>
-          <Button size="sm" variant="primary" onClick={() => toast({ title: 'Changes saved', tone: 'ok' })}>
+          <Button size="sm" variant="primary" loading={busy} onClick={save}>
             Save changes
           </Button>
         </>
@@ -431,23 +618,38 @@ export function StudioEdit() {
     >
       <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
         <div className="min-w-0 space-y-5">
-          <Field label="Title" required><Input defaultValue={v.title} /></Field>
+          <Field label="Title" required>
+            <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+          </Field>
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Category" required>
-              <Select defaultValue={v.category}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</Select>
+              <Select
+                value={form.category}
+                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+              >
+                {categories.map((c) => <option key={c.id}>{c.name}</option>)}
+              </Select>
             </Field>
-            <Field label="Genre" required>
-              <Select defaultValue={v.genre}>{GENRES.map((g) => <option key={g}>{g}</option>)}</Select>
+            {/* Genre is not stored against a title, so this cannot be saved. It
+                is shown disabled rather than removed while the decision is open. */}
+            <Field label="Genre" hint="Not recorded against a title yet.">
+              <Select disabled defaultValue={v.genre}>{GENRES.map((g) => <option key={g}>{g}</option>)}</Select>
             </Field>
           </div>
-          <Field label="Synopsis" required><Textarea defaultValue={v.synopsis} /></Field>
+          <Field label="Synopsis" required>
+            <Textarea value={form.synopsis} onChange={(e) => setForm((f) => ({ ...f, synopsis: e.target.value }))} />
+          </Field>
 
           <div className="rounded-lg border border-ink-700 bg-ink-850 p-5">
             <p className="text-[15px] font-medium text-white">Playback settings</p>
             <div className="mt-3 space-y-3">
               <Checkbox checked onChange={() => {}} label="Allow comments" />
               <Checkbox checked onChange={() => {}} label="Allow sharing" />
-              <Checkbox checked={v.premium} onChange={() => {}} label="Premium — requires an active pass" />
+              <Checkbox
+                checked={form.premium}
+                onChange={(premium) => setForm((f) => ({ ...f, premium }))}
+                label="Premium — requires an active pass"
+              />
             </div>
           </div>
 
@@ -458,10 +660,10 @@ export function StudioEdit() {
               comments for good.
             </p>
             <div className="mt-4 flex gap-2">
-              <Button variant="secondary" icon={<Archive className="size-4" />}
-                onClick={() => toast({ title: 'Archived' })}>Archive</Button>
-              <Button variant="danger" icon={<Trash2 className="size-4" />}
-                onClick={() => toast({ title: 'Deleted', tone: 'bad' })}>Delete</Button>
+              <Button variant="secondary" icon={<Archive className="size-4" />} loading={busy}
+                onClick={() => takeDown('archive')}>Archive</Button>
+              <Button variant="danger" icon={<Trash2 className="size-4" />} loading={busy}
+                onClick={() => takeDown('delete')}>Delete</Button>
             </div>
           </div>
         </div>
@@ -505,8 +707,23 @@ export function StudioEdit() {
 /* ============================================================== analytics */
 
 export function StudioAnalytics() {
+  const { videos: MINE, loading, error, refresh } = useMyVideos()
   const total = MINE.reduce((s, v) => s + v.views, 0)
-  const max = Math.max(...MINE.map((v) => v.views))
+  // Math.max of nothing is -Infinity, which would divide every bar to NaN.
+  const max = MINE.length ? Math.max(...MINE.map((v) => v.views)) : 0
+
+  if (loading || error || MINE.length === 0) {
+    return (
+      <BackOfHouse title="Analytics">
+        <Resolve loading={loading} error={error} onRetry={refresh} what="Reading your figures">
+          <EmptyState
+            title="Nothing to measure yet"
+            body="Analytics appear once you have published something and it has been watched."
+          />
+        </Resolve>
+      </BackOfHouse>
+    )
+  }
 
   return (
     <BackOfHouse title="Analytics">

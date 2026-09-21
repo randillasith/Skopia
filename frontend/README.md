@@ -60,9 +60,7 @@ platform-specific binary, failing later with a misleading `Cannot find native bi
 
 ## Who can do what
 
-Login is **session-based**. Everyone signs up as the same kind of account; nothing about it is
-special at creation. What an account can do beyond watching comes from three grants that are
-independent of one another — see `src/lib/session.ts`.
+Login uses a **signed bearer token**. The UI stores the token with the server account id, sends it in the `Authorization` header, and resolves the account again through `/api/auth/me` after a refresh. What an account can do beyond watching comes from three grants that are independent of one another — see `src/lib/session.ts`. Backend authorization remains authoritative.
 
 | Grant | Scope | Granted by |
 |---|---|---|
@@ -120,10 +118,16 @@ photography. Replace it with real imagery before this goes anywhere near product
 | Route | Use case |
 |---|---|
 | `/browse` | UC-FR1-01 — browse the catalogue, billing-ranked |
-| `/search` | UC-FR1-01 — search and filter, including the empty-result state |
+| `/explore` | UC-FR1-01 — discovery by genre across categories, live now, all channels |
+| `/trending` | UC-FR1-01 — ranked by views against age, not by all-time views |
+| `/queue-up` | UC-FR1-02 — what plays next, in order |
+| `/search` | UC-FR1-01 — search with suggestions, five filters, channel results, empty state |
 | `/category/:name` | UC-FR1-01 — browse by category |
-| `/watch/:id` | UC-FR1-01 — playback, controls, captions, pre-roll advertising, the playback-failure state (demo button), reporting |
-| `/watchlist` · `/history` | UC-FR1-02 — favourites, watch history with resume, empty states |
+| `/channel/:handle` | UC-FR1-01 — a creator's channel: latest release, sorted library, about, follow |
+| `/subscriptions` | UC-FR1-02 — the channels you follow, newest release first |
+| `/watch/:id` | UC-FR1-01 — playback with chapters, speed, volume, captions, theatre, full screen, keyboard control, pre-roll advertising, the playback-failure state, reporting, share-from-here |
+| `/watchlist` · `/history` | UC-FR1-02 — watch later, history with resume, pause and clear |
+| `/playlists` · `/playlist/:id` | UC-FR1-02 — create, rename, delete, visibility, play all, shuffle |
 | `/studio/create` | UC-FR1-03 — open a channel. Self-service, no approval step |
 | `/studio` | UC-FR1-03 — the creator's video library |
 | `/studio/upload` | UC-FR1-03 — staged upload with validation and the duplicate warning |
@@ -214,6 +218,45 @@ faked one), **Instrument Sans** is the interface workhorse, **JetBrains Mono** c
 references, timecodes and every figure in a table. All three are self-hosted through
 `@fontsource` — no CDN request, no third-party dependency, and the versions are pinned in
 `package-lock.json` so a build next year renders as it does today.
+
+### What came from the Stitch drafts, and what did not
+
+The drafts were read after the build, and three structural ideas in them were
+better than what was here: a **persistent left rail** instead of a top nav, an
+explicit **queue** separate from Watch later, and **access stated on every tile**.
+Those were adopted, along with verified marks, pinned comments, creator hearts,
+hashtags, live broadcasts and offline titles.
+
+Four things in the drafts were deliberately not adopted:
+
+- **Their palette.** Electric Indigo `#6366F1` and Vivid Crimson `#EC4899` are not the
+  project's colours. The brief names `#7559FF`, `#25C7F7`, `#5B3FE6` and `#080D1C`.
+- **Desktop only.** Their design document states a desktop focus with breakpoints at
+  1280/1536/1920 and nothing below. Everything here is verified at 390px.
+- **Invented plan detail.** The drafts price three tiers ($0 / $8.99 / $19.99), and specify
+  Dolby Atmos 7.1.4, 192kHz masters, Ed25519 DRM and an 80/20 artist split. Plan names,
+  prices and entitlements are recorded as undecided, so access here is `Free` or `Pass`
+  and stops there.
+- **A programmatic ad exchange.** The RTB/DSP screens invent real-time bidding, edge auction
+  clearing and named third-party partners (DV360, The Trade Desk, Amazon DSP, Magnite).
+  FR5 covers campaigns, targeting, scheduling and performance — not an ad exchange.
+
+### The player
+
+`src/components/player.tsx`. There is no stream behind it, so the clock is driven by a timer
+rather than a media element: the scrubber moves, chapters become current, and 2× genuinely
+reaches the end sooner. Every piece maps onto a real `<video>` — `time` becomes `currentTime`,
+`speed` becomes `playbackRate` — so wiring a stream in later is a substitution, not a rewrite.
+
+Keyboard control follows the conventions people already have: `Space`/`K` play, `J`/`L` ±10s,
+arrows ±5s, `0`–`9` jump to 0–90%, `M` mute, `C` captions, `F` full screen, `T` theatre,
+`<`/`>` speed. Handlers bail out when the caret is in a field — toggling captions from the
+comment box is the classic way this feature goes wrong.
+
+Two deliberate absences. **Quality** opens and states that the levels are undecided, rather than
+inventing a ladder of resolutions nobody has agreed to serve. **Picture-in-picture is not
+offered**: it needs a real media element, and a button that cannot do its job is worse than no
+button.
 
 **The glance** is the one desktop-only interaction. A lightbox is a backlit surface, so on a
 fine pointer it catches light where the cursor is: `Lightbox interactive` writes `--mx`/`--my`

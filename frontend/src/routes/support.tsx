@@ -1,41 +1,101 @@
-import { useMemo, useState } from 'react'
-import { Link, useParams, useNavigate} from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Inbox, Check, Send, UserPlus, AlertTriangle, Search as SearchIcon,
+  ArrowLeft, Inbox, Check, UserPlus, AlertTriangle, Search as SearchIcon,
 } from 'lucide-react'
 import {
   Button, Field, Select, Textarea, Table, Th, Td, Tr, Tabs, EmptyState,
   SearchInput, useToast, Avatar,
 } from '@/components/primitives'
 import { Letterboard } from '@/components/world'
-import { BackOfHouse } from '@/components/Shell'
-import { REPORTS, byId, type Priority, type ReportStatus } from '@/lib/data'
-import { REPORT_TONE } from '@/routes/reports'
+import { BackOfHouse, useSession } from '@/components/Shell'
+import { Resolve } from '@/components/Loading'
+import { ApiError } from '@/lib/api'
+import { actorId as actorIdOf } from '@/lib/session'
+import {
+  complaints, loadQueue, reports, referenceOf, subjectOf,
+  COMPLAINT_STATUS_LABEL, COMPLAINT_STATUS_TONE, REPORT_TYPE_LABEL,
+  type ComplaintHistoryEntry, type ComplaintPriority, type ComplaintStatus,
+  type QueueItem, type ServerReport,
+} from '@/lib/reports'
 
-const PRIORITY_TONE: Record<Priority, 'neutral' | 'soon' | 'review' | 'bad'> = {
-  Low: 'neutral', Normal: 'soon', High: 'review', Urgent: 'bad',
+const PRIORITY_TONE: Record<ComplaintPriority, 'neutral' | 'soon' | 'review' | 'bad'> = {
+  LOW: 'neutral', MEDIUM: 'soon', HIGH: 'review', URGENT: 'bad',
+}
+const PRIORITY_LABEL: Record<ComplaintPriority, string> = {
+  LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High', URGENT: 'Urgent',
 }
 
-const STATUSES: ReportStatus[] = ['Submitted', 'Under review', 'Needs info', 'Resolved', 'Closed']
-const PRIORITIES: Priority[] = ['Low', 'Normal', 'High', 'Urgent']
+const STATUSES: ComplaintStatus[] = [
+  'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED',
+]
+const PRIORITIES: ComplaintPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
+
+/** A complaint nobody is going to touch again. */
+const settled = (s: ComplaintStatus) => s === 'RESOLVED' || s === 'CLOSED'
+
+/**
+ * The queue, with each complaint's report fetched alongside it.
+ *
+ * `search` without an officer answers with the open queue, so which call is made
+ * depends on the tab: "assigned to me" is a different question from "what is
+ * open", not a filter over the same answer.
+ */
+function useQueue(officerId: number | null, scope: 'open' | 'mine') {
+  const [items, setItems] = useState<QueueItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [nonce, setNonce] = useState(0)
+
+  useEffect(() => {
+    const abort = new AbortController()
+    setLoading(true)
+    const rows =
+      scope === 'mine' && officerId != null
+        ? complaints.search({ officerId }, abort.signal)
+        : complaints.queue(abort.signal)
+    rows
+      .then((list) => loadQueue(list, abort.signal))
+      .then((joined) => {
+        setItems(joined)
+        setError(null)
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'Could not read the queue.')
+        setItems([])
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoading(false)
+      })
+    return () => abort.abort()
+  }, [officerId, scope, nonce])
+
+  return { items, loading, error, refresh: useCallback(() => setNonce((n) => n + 1), []) }
+}
 
 /* ============================================================ the queue */
 
 export function SupportQueue() {
   const nav = useNavigate()
+  const { viewer } = useSession()
+  const officerId = actorIdOf(viewer)
   const [tab, setTab] = useState('unassigned')
   const [q, setQ] = useState('')
+  const { items, loading, error, refresh } = useQueue(officerId, tab === 'mine' ? 'mine' : 'open')
 
   const list = useMemo(() => {
-    let l = REPORTS
-    if (tab === 'unassigned') l = l.filter((r) => !r.assignee)
-    if (tab === 'mine') l = l.filter((r) => r.assignee === 'D. Fernando')
-    if (tab === 'open') l = l.filter((r) => r.status !== 'Resolved' && r.status !== 'Closed')
-    if (q.trim()) l = l.filter((r) => `${r.id} ${r.subject} ${r.type}`.toLowerCase().includes(q.toLowerCase()))
+    let l = items
+    if (tab === 'unassigned') l = l.filter((i) => i.complaint.assignedOfficerId == null)
+    if (tab === 'open') l = l.filter((i) => !settled(i.complaint.status))
+    if (q.trim()) {
+      const t = q.toLowerCase()
+      l = l.filter((i) => `${referenceOf(i.complaint)} ${subjectOf(i)}`.toLowerCase().includes(t))
+    }
     return l
-  }, [tab, q])
+  }, [items, tab, q])
 
-  const urgent = REPORTS.filter((r) => r.priority === 'Urgent' && r.status !== 'Resolved')
+  const urgent = items.filter((i) => i.complaint.priority === 'URGENT' && !settled(i.complaint.status))
 
   return (
     <BackOfHouse title="Complaint queue">
@@ -48,8 +108,8 @@ export function SupportQueue() {
             </span>{' '}
             Urgent items are worked before anything else in the queue.
           </p>
-          <Button size="sm" onClick={() => nav(`/queue/${urgent[0].id}`)}>
-            Open {urgent[0].id}
+          <Button size="sm" onClick={() => nav(`/queue/${urgent[0].complaint.id}`)}>
+            Open {referenceOf(urgent[0].complaint)}
           </Button>
         </div>
       )}
@@ -60,51 +120,66 @@ export function SupportQueue() {
             value={tab}
             onChange={setTab}
             tabs={[
-              { id: 'unassigned', label: 'Unassigned', count: REPORTS.filter((r) => !r.assignee).length },
-              { id: 'mine', label: 'Assigned to me', count: REPORTS.filter((r) => r.assignee === 'D. Fernando').length },
-              { id: 'open', label: 'All open', count: REPORTS.filter((r) => r.status !== 'Resolved' && r.status !== 'Closed').length },
-              { id: 'all', label: 'Everything', count: REPORTS.length },
+              { id: 'unassigned', label: 'Unassigned', count: items.filter((i) => i.complaint.assignedOfficerId == null).length },
+              { id: 'mine', label: 'Assigned to me' },
+              { id: 'open', label: 'All open', count: items.filter((i) => !settled(i.complaint.status)).length },
+              { id: 'all', label: 'Everything', count: items.length },
             ]}
           />
         </div>
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a complaint" className="w-full sm:w-64" />
       </div>
 
-      {list.length === 0 ? (
+      {loading || error ? (
+        <div className="mt-8">
+          <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the queue">
+            {null}
+          </Resolve>
+        </div>
+      ) : list.length === 0 ? (
         <div className="mt-8">
           <EmptyState icon={<Inbox className="size-7" />} title="Queue is clear"
             body="Nothing matches this filter. Try another tab." />
         </div>
       ) : (
         <div className="mt-5 rounded-lg border border-ink-700 bg-ink-850">
-          <Table labels={["Reference", "Subject", "Type", "Status", "Priority", "Assignee", "Submitted"]}>
+          <Table labels={["Reference", "Subject", "Type", "Status", "Priority", "Assignee", "Raised"]}>
             <thead>
               <tr>
                 <Th>Reference</Th><Th>Subject</Th><Th>Type</Th><Th>Status</Th>
-                <Th>Priority</Th><Th>Assignee</Th><Th>Submitted</Th>
+                <Th>Priority</Th><Th>Assignee</Th><Th>Raised</Th>
               </tr>
             </thead>
             <tbody>
-              {list.map((r) => (
-                <Tr key={r.id} onClick={() => nav(`/queue/${r.id}`)}>
-                  <Td><span className="font-mono tabular-nums text-ink-100">{r.id}</span></Td>
-                  <Td><span className="font-medium text-white">{r.subject}</span></Td>
-                  <Td className="text-ink-300">{r.type}</Td>
-                  <Td><Letterboard tone={REPORT_TONE[r.status]}>{r.status.toUpperCase()}</Letterboard></Td>
-                  <Td><Letterboard tone={PRIORITY_TONE[r.priority]}>{r.priority.toUpperCase()}</Letterboard></Td>
-                  <Td className="text-ink-300">{r.assignee ?? <span className="text-ink-300">—</span>}</Td>
-                  <Td><span className="font-mono tabular-nums text-ink-300">{r.submitted}</span></Td>
+              {list.map(({ complaint, report }) => (
+                <Tr key={complaint.id} onClick={() => nav(`/queue/${complaint.id}`)}>
+                  <Td><span className="font-mono tabular-nums text-ink-100">{referenceOf(complaint)}</span></Td>
+                  <Td><span className="font-medium text-white">{subjectOf({ complaint, report })}</span></Td>
+                  <Td className="text-ink-300">{report ? REPORT_TYPE_LABEL[report.type] : '—'}</Td>
+                  <Td>
+                    <Letterboard tone={COMPLAINT_STATUS_TONE[complaint.status]}>
+                      {COMPLAINT_STATUS_LABEL[complaint.status].toUpperCase()}
+                    </Letterboard>
+                  </Td>
+                  <Td>
+                    <Letterboard tone={PRIORITY_TONE[complaint.priority]}>
+                      {PRIORITY_LABEL[complaint.priority].toUpperCase()}
+                    </Letterboard>
+                  </Td>
+                  {/* The API records who is assigned by id, not by name; there is
+                      no endpoint that turns an officer id into a person. */}
+                  <Td className="text-ink-300">
+                    {complaint.assignedOfficerId != null
+                      ? `Officer #${complaint.assignedOfficerId}`
+                      : '—'}
+                  </Td>
+                  <Td><span className="font-mono tabular-nums text-ink-300">{complaint.createdAt?.slice(0, 10)}</span></Td>
                 </Tr>
               ))}
             </tbody>
           </Table>
         </div>
       )}
-
-      <p className="mt-4 text-[12.5px] text-ink-300">
-        Status and priority value sets, and the assignment rules, are open decisions in the project
-        documentation — the values shown here are provisional.
-      </p>
     </BackOfHouse>
   )
 }
@@ -114,39 +189,119 @@ export function SupportQueue() {
 export function ComplaintDetail() {
   const nav = useNavigate()
   const { id } = useParams()
-  const r = REPORTS.find((x) => x.id === id)
   const toast = useToast()
-  const [status, setStatus] = useState<ReportStatus>(r?.status ?? 'Submitted')
-  const [priority, setPriority] = useState<Priority>(r?.priority ?? 'Normal')
-  const [resolution, setResolution] = useState('')
-  const [assigned, setAssigned] = useState(!!r?.assignee)
+  const { viewer } = useSession()
+  const officerId = actorIdOf(viewer)
+  const numericId = Number(id)
 
-  if (!r) {
+  const [item, setItem] = useState<QueueItem | null>(null)
+  const [history, setHistory] = useState<ComplaintHistoryEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [resolution, setResolution] = useState('')
+  const [nonce, setNonce] = useState(0)
+  const refresh = useCallback(() => setNonce((n) => n + 1), [])
+
+  // There is no endpoint that fetches one complaint, so it is found in the queue
+  // it belongs to. Its history comes from its own endpoint.
+  useEffect(() => {
+    if (!Number.isFinite(numericId)) {
+      setError('That is not a complaint reference.')
+      setLoading(false)
+      return
+    }
+    const abort = new AbortController()
+    setLoading(true)
+    complaints
+      .search({}, abort.signal)
+      .then(async (rows) => {
+        const found = rows.find((c) => c.id === numericId)
+        if (!found) {
+          // Not in the open queue — it may be assigned to this officer instead.
+          const mine = officerId != null ? await complaints.search({ officerId }, abort.signal) : []
+          const other = mine.find((c) => c.id === numericId)
+          if (!other) throw new ApiError(404, 'That reference is not in the queue.')
+          return other
+        }
+        return found
+      })
+      .then(async (complaint) => {
+        const report: ServerReport | null =
+          complaint.reportId != null
+            ? await reports.one(complaint.reportId, abort.signal).catch(() => null)
+            : null
+        setItem({ complaint, report })
+        setResolution(complaint.resolutionNotes ?? '')
+        setError(null)
+        return complaints.history(complaint.id, abort.signal).catch(() => [])
+      })
+      .then((entries) => setHistory(entries ?? []))
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'Could not open that complaint.')
+        setItem(null)
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoading(false)
+      })
+    return () => abort.abort()
+  }, [numericId, officerId, nonce])
+
+  /** Every handling action goes the same way, so failure is reported once. */
+  const handle = async (what: () => Promise<unknown>, said: string, tone?: 'ok' | 'bad') => {
+    if (officerId == null) return toast({ title: 'Sign in as an officer first.', tone: 'bad' })
+    setBusy(true)
+    try {
+      await what()
+      toast({ title: said, tone })
+      refresh()
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'That did not go through.',
+        tone: 'bad',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading || error || !item) {
     return (
-      <BackOfHouse title="Complaint not found">
-        <EmptyState title="No such complaint" body="That reference does not exist in the queue."
-          action={<Button onClick={() => nav('/queue')}>Back to the queue</Button>} />
+      <BackOfHouse title="Complaint">
+        <Resolve loading={loading} error={error} onRetry={refresh} what="Opening the complaint">
+          <EmptyState title="No such complaint" body="That reference does not exist in the queue."
+            action={<Button onClick={() => nav('/queue')}>Back to the queue</Button>} />
+        </Resolve>
       </BackOfHouse>
     )
   }
 
-  const target = r.target ? byId(r.target) : undefined
-  const resolved = status === 'Resolved' || status === 'Closed'
+  const { complaint, report } = item
+  const assigned = complaint.assignedOfficerId != null
+  const resolved = settled(complaint.status)
 
   return (
     <BackOfHouse
-      title={r.id}
+      title={referenceOf(complaint)}
       actions={
         !assigned ? (
-          <Button size="sm" variant="primary" icon={<UserPlus className="size-4" />}
-            onClick={() => { setAssigned(true); setStatus('Under review'); toast({ title: 'Assigned to you', tone: 'ok' }) }}>
+          <Button
+            size="sm"
+            variant="primary"
+            icon={<UserPlus className="size-4" />}
+            loading={busy}
+            onClick={() =>
+              handle(
+                () => complaints.assign(complaint.id, officerId!),
+                'Assigned to you',
+                'ok',
+              )
+            }
+          >
             Accept this complaint
           </Button>
-        ) : (
-          <Button size="sm" variant="primary" onClick={() => toast({ title: 'Handling saved', tone: 'ok' })}>
-            Save handling
-          </Button>
-        )
+        ) : null
       }
     >
       <Link to="/queue" className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-white">
@@ -156,39 +311,40 @@ export function ComplaintDetail() {
       <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_320px]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Letterboard tone={REPORT_TONE[status]}>{status.toUpperCase()}</Letterboard>
-            <Letterboard tone={PRIORITY_TONE[priority]}>{priority.toUpperCase()}</Letterboard>
-            <Letterboard>{r.type}</Letterboard>
+            <Letterboard tone={COMPLAINT_STATUS_TONE[complaint.status]}>
+              {COMPLAINT_STATUS_LABEL[complaint.status].toUpperCase()}
+            </Letterboard>
+            <Letterboard tone={PRIORITY_TONE[complaint.priority]}>
+              {PRIORITY_LABEL[complaint.priority].toUpperCase()}
+            </Letterboard>
+            {report && <Letterboard>{REPORT_TYPE_LABEL[report.type]}</Letterboard>}
           </div>
 
           <h2 className="font-marquee mt-3 text-[clamp(1.4rem,3vw,1.9rem)] font-extrabold tracking-[-0.025em] text-white">
-            {r.subject}
+            {subjectOf(item)}
           </h2>
 
-          <div className="mt-4 flex items-center gap-2.5 text-[13px] text-ink-300">
-            <Avatar name={r.reporter === 'you' ? 'You There' : r.reporter} size={26} />
-            Reported by {r.reporter === 'you' ? 'you' : r.reporter} on {r.submitted}
-            {target && (
+          <div className="mt-4 flex flex-wrap items-center gap-2.5 text-[13px] text-ink-300">
+            <Avatar name={`Viewer ${complaint.reportingViewerId ?? ''}`} size={26} />
+            Raised by viewer #{complaint.reportingViewerId ?? '—'} on{' '}
+            {complaint.createdAt?.slice(0, 10)}
+            {report?.contentReference && (
               <>
                 <span aria-hidden>·</span>
-                <Link to={`/watch/${target.id}`} className="text-cyan-300 hover:underline">
-                  {target.title}
-                </Link>
+                <span className="font-mono">{report.contentReference}</span>
               </>
             )}
           </div>
 
           <div className="mt-5 rounded-lg border border-ink-700 bg-ink-850 p-5">
             <p className="letterboard mb-2 text-ink-300">What was reported</p>
-            <p className="text-[14.5px] leading-relaxed text-ink-100">{r.detail}</p>
+            <p className="text-[14.5px] leading-relaxed text-ink-100">
+              {report?.details ?? 'The report behind this complaint could not be read.'}
+            </p>
           </div>
 
-          {/* resolution */}
           <div className="mt-6">
-            <Field
-              label="Resolution"
-              hint={resolved ? 'Recorded' : 'Required to resolve or close'}
-            >
+            <Field label="Resolution" hint={resolved ? 'Recorded' : 'Required to resolve or close'}>
               <Textarea
                 value={resolution}
                 onChange={(e) => setResolution(e.target.value)}
@@ -199,78 +355,122 @@ export function ComplaintDetail() {
               <Button
                 variant="primary"
                 icon={<Check className="size-4" />}
-                disabled={!resolution.trim()}
-                onClick={() => { setStatus('Resolved'); toast({ title: 'Resolved — reporter notified', tone: 'ok' }) }}
+                disabled={!resolution.trim() || busy}
+                onClick={() =>
+                  handle(
+                    () => complaints.resolve(complaint.id, resolution.trim(), officerId!),
+                    'Resolved — reporter notified',
+                    'ok',
+                  )
+                }
               >
                 Record resolution
               </Button>
-              <Button
-                icon={<Send className="size-4" />}
-                onClick={() => { setStatus('Needs info'); toast({ title: 'Reporter asked for more detail' }) }}
-              >
-                Ask the reporter for more
-              </Button>
-              {status === 'Resolved' && (
-                <Button variant="ghost" onClick={() => { setStatus('Closed'); toast({ title: 'Complaint closed — history kept' }) }}>
+              {complaint.status === 'RESOLVED' && (
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    handle(
+                      () => complaints.close(complaint.id, officerId!),
+                      'Complaint closed — history kept',
+                    )
+                  }
+                >
                   Close complaint
                 </Button>
               )}
             </div>
           </div>
 
-          {/* history */}
           <div className="mt-9">
             <p className="letterboard mb-3 text-ink-300">History</p>
-            <ol className="space-y-4 border-l border-ink-700 pl-4">
-              {r.history.map((h, i) => (
-                <li key={i} className="relative">
-                  <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-violet-500 ring-2 ring-canvas" />
-                  <p className="text-[13.5px] text-ink-100">{h.what}</p>
-                  <p className="mt-0.5 font-mono text-[11px] text-ink-300">{h.at} · {h.who}</p>
-                </li>
-              ))}
-            </ol>
+            {history.length === 0 ? (
+              <p className="text-[13.5px] text-ink-300">Nothing recorded yet beyond it being raised.</p>
+            ) : (
+              <ol className="space-y-4 border-l border-ink-700 pl-4">
+                {history.map((h, i) => (
+                  <li key={h.id ?? i} className="relative">
+                    <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-violet-500 ring-2 ring-canvas" />
+                    <p className="text-[13.5px] text-ink-100">{h.action ?? 'Updated'}</p>
+                    {h.notes && <p className="mt-0.5 text-[13px] text-ink-300">{h.notes}</p>}
+                    <p className="mt-0.5 font-mono text-[11px] text-ink-300">
+                      {h.performedAt?.replace('T', ' ').slice(0, 16)}
+                      {h.performedBy != null && ` · Officer #${h.performedBy}`}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
 
-        {/* controls */}
         <aside className="space-y-5">
           <div className="rounded-lg border border-ink-700 bg-ink-850 p-4">
             <p className="letterboard mb-3 text-ink-300">Handling</p>
             <div className="space-y-4">
               <Field label="Status">
-                <Select value={status} onChange={(e) => setStatus(e.target.value as ReportStatus)}>
+                <Select
+                  value={complaint.status}
+                  disabled={busy}
+                  onChange={(e) =>
+                    handle(
+                      () =>
+                        complaints.updateStatus(
+                          complaint.id,
+                          e.target.value as ComplaintStatus,
+                          complaint.priority,
+                          officerId!,
+                        ),
+                      'Status updated',
+                    )
+                  }
+                >
                   {STATUSES.map((s) => (
-                    // A complaint cannot be resolved or closed until a resolution is
-                    // recorded — the same rule the Record resolution button enforces.
+                    // Resolving or closing without a resolution is refused by the
+                    // server, so it is not offered here either.
                     <option
                       key={s}
-                      disabled={
-                        !resolution.trim() && (s === 'Resolved' || s === 'Closed') && status !== s
-                      }
+                      value={s}
+                      disabled={!resolution.trim() && settled(s) && complaint.status !== s}
                     >
-                      {s}
+                      {COMPLAINT_STATUS_LABEL[s]}
                     </option>
                   ))}
                 </Select>
               </Field>
               <Field label="Priority">
-                <Select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
-                  {PRIORITIES.map((p) => <option key={p}>{p}</option>)}
+                <Select
+                  value={complaint.priority}
+                  disabled={busy}
+                  onChange={(e) =>
+                    handle(
+                      () =>
+                        complaints.updateStatus(
+                          complaint.id,
+                          complaint.status,
+                          e.target.value as ComplaintPriority,
+                          officerId!,
+                        ),
+                      'Priority updated',
+                    )
+                  }
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+                  ))}
                 </Select>
               </Field>
-              <Field label="Assignee">
-                <Select defaultValue={r.assignee ?? ''}>
+              <Field label="Assignee" hint="Accepting a complaint assigns it to you.">
+                <Select disabled value={complaint.assignedOfficerId != null ? 'me' : ''}>
                   <option value="">Unassigned</option>
-                  <option>D. Fernando</option>
-                  <option>S. Wijesinghe</option>
-                  <option>K. Laknadi</option>
+                  <option value="me">Officer #{complaint.assignedOfficerId ?? ''}</option>
                 </Select>
               </Field>
             </div>
           </div>
 
-          {r.type === 'Inappropriate content' && (
+          {report?.type === 'INAPPROPRIATE_CONTENT' && (
             <div className="rounded-lg border border-warning-500/30 bg-warning-500/6 p-4">
               <p className="font-marquee text-[15px] font-bold text-warning-400">
                 Moderation may be needed
@@ -278,8 +478,7 @@ export function ComplaintDetail() {
               <p className="mt-1.5 text-[13px] leading-relaxed text-ink-300">
                 Content complaints can require an administrator to act on the title itself.
               </p>
-              <Button size="sm" className="mt-3 w-full"
-                onClick={() => nav('/admin/moderation')}>
+              <Button size="sm" className="mt-3 w-full" onClick={() => nav('/admin/moderation')}>
                 Refer to moderation
               </Button>
             </div>
@@ -294,12 +493,19 @@ export function ComplaintDetail() {
 
 export function ComplaintHistory() {
   const nav = useNavigate()
+  const { viewer } = useSession()
+  const officerId = actorIdOf(viewer)
+  const { items, loading, error, refresh } = useQueue(officerId, 'open')
   const [q, setQ] = useState('')
   const [type, setType] = useState('All')
 
-  const list = REPORTS.filter((r) => {
-    if (type !== 'All' && r.type !== type) return false
-    if (q.trim() && !`${r.id} ${r.subject} ${r.detail}`.toLowerCase().includes(q.toLowerCase())) return false
+  const list = items.filter(({ complaint, report }) => {
+    if (type !== 'All' && (!report || REPORT_TYPE_LABEL[report.type] !== type)) return false
+    if (q.trim()) {
+      const t = q.toLowerCase()
+      const hay = `${referenceOf(complaint)} ${subjectOf({ complaint, report })} ${report?.details ?? ''}`
+      if (!hay.toLowerCase().includes(t)) return false
+    }
     return true
   })
 
@@ -314,18 +520,23 @@ export function ComplaintHistory() {
           placeholder="Search references, subjects and detail" className="flex-1" />
         <Select value={type} onChange={(e) => setType(e.target.value)} aria-label="Type" className="sm:w-56">
           <option>All</option>
-          <option>Inappropriate content</option>
-          <option>Playback problem</option>
-          <option>Accessibility</option>
-          <option>Other</option>
+          {Object.values(REPORT_TYPE_LABEL).map((label) => (
+            <option key={label}>{label}</option>
+          ))}
         </Select>
       </div>
 
       <p className="mt-4 font-mono text-[12px] tabular-nums text-ink-300">
-        {list.length} {list.length === 1 ? 'complaint' : 'complaints'}
+        {loading ? 'Reading' : `${list.length} ${list.length === 1 ? 'complaint' : 'complaints'}`}
       </p>
 
-      {list.length === 0 ? (
+      {loading || error ? (
+        <div className="mt-6">
+          <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the history">
+            {null}
+          </Resolve>
+        </div>
+      ) : list.length === 0 ? (
         <div className="mt-6">
           <EmptyState icon={<SearchIcon className="size-7" />} title="Nothing matched"
             body="No complaint matched that search. Try a different word or clear the type filter."
@@ -333,23 +544,29 @@ export function ComplaintHistory() {
         </div>
       ) : (
         <div className="mt-4 rounded-lg border border-ink-700 bg-ink-850">
-          <Table labels={["Reference", "Subject", "Type", "Status", "Handled by", "Submitted", "Events"]}>
+          <Table labels={["Reference", "Subject", "Type", "Status", "Handled by", "Raised", "Events"]}>
             <thead>
               <tr>
                 <Th>Reference</Th><Th>Subject</Th><Th>Type</Th><Th>Status</Th>
-                <Th>Handled by</Th><Th>Submitted</Th><Th numeric>Events</Th>
+                <Th>Handled by</Th><Th>Raised</Th><Th>Closed</Th>
               </tr>
             </thead>
             <tbody>
-              {list.map((r) => (
-                <Tr key={r.id} onClick={() => nav(`/queue/${r.id}`)}>
-                  <Td><span className="font-mono tabular-nums text-ink-100">{r.id}</span></Td>
-                  <Td><span className="font-medium text-white">{r.subject}</span></Td>
-                  <Td className="text-ink-300">{r.type}</Td>
-                  <Td><Letterboard tone={REPORT_TONE[r.status]}>{r.status.toUpperCase()}</Letterboard></Td>
-                  <Td className="text-ink-300">{r.assignee ?? <span className="text-ink-300">—</span>}</Td>
-                  <Td><span className="font-mono tabular-nums text-ink-300">{r.submitted}</span></Td>
-                  <Td numeric>{r.history.length}</Td>
+              {list.map(({ complaint, report }) => (
+                <Tr key={complaint.id} onClick={() => nav(`/queue/${complaint.id}`)}>
+                  <Td><span className="font-mono tabular-nums text-ink-100">{referenceOf(complaint)}</span></Td>
+                  <Td><span className="font-medium text-white">{subjectOf({ complaint, report })}</span></Td>
+                  <Td className="text-ink-300">{report ? REPORT_TYPE_LABEL[report.type] : '—'}</Td>
+                  <Td>
+                    <Letterboard tone={COMPLAINT_STATUS_TONE[complaint.status]}>
+                      {COMPLAINT_STATUS_LABEL[complaint.status].toUpperCase()}
+                    </Letterboard>
+                  </Td>
+                  <Td className="text-ink-300">
+                    {complaint.assignedOfficerId != null ? `Officer #${complaint.assignedOfficerId}` : '—'}
+                  </Td>
+                  <Td><span className="font-mono tabular-nums text-ink-300">{complaint.createdAt?.slice(0, 10)}</span></Td>
+                  <Td><span className="font-mono tabular-nums text-ink-300">{complaint.closedAt?.slice(0, 10) ?? '—'}</span></Td>
                 </Tr>
               ))}
             </tbody>

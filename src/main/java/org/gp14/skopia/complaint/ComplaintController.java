@@ -8,6 +8,11 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.gp14.skopia.model.user.User;
+import org.gp14.skopia.report.Report;
+import org.gp14.skopia.report.ReportService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,16 +22,23 @@ import java.util.stream.Collectors;
 public class ComplaintController {
 
     private final ComplaintService complaintService;
+    private final ReportService reportService;
 
-    public ComplaintController(ComplaintService complaintService) {
+    public ComplaintController(ComplaintService complaintService, ReportService reportService) {
         this.complaintService = complaintService;
+        this.reportService = reportService;
     }
 
     // Creates a complaint from an existing report (call this once a report needs staff handling)
     @PostMapping
     public ResponseEntity<ComplaintResponse> createFromReport(@RequestParam Long reportId,
-                                                                @RequestParam Long viewerId) {
-        Complaint complaint = complaintService.createComplaintFromReport(reportId, viewerId);
+                                                                @RequestParam(required = false) Long viewerId,
+                                                                @AuthenticationPrincipal User principal) {
+        Report report = reportService.getReportById(reportId);
+        if (!principal.getId().equals(report.getViewerId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Report belongs to another account");
+        }
+        Complaint complaint = complaintService.createComplaintFromReport(reportId, principal.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -42,8 +54,9 @@ public class ComplaintController {
     // Step 2: officer assigns/accepts a complaint
     @PostMapping("/{id}/assign")
     public ResponseEntity<ComplaintResponse> assign(@PathVariable Long id,
-                                                      @Valid @RequestBody AssignComplaintRequest request) {
-        Complaint complaint = complaintService.assignComplaint(id, request.getOfficerId());
+                                                      @Valid @RequestBody AssignComplaintRequest request,
+                                                      @AuthenticationPrincipal User principal) {
+        Complaint complaint = complaintService.assignComplaint(id, principal.getId());
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -51,8 +64,9 @@ public class ComplaintController {
     @PutMapping("/{id}/status")
     public ResponseEntity<ComplaintResponse> updateStatus(@PathVariable Long id,
                                                             @Valid @RequestBody UpdateStatusPriorityRequest request,
-                                                            @RequestParam Long officerId) {
-        Complaint complaint = complaintService.updateStatusAndPriority(id, request, officerId);
+                                                            @RequestParam(required = false) Long officerId,
+                                                            @AuthenticationPrincipal User principal) {
+        Complaint complaint = complaintService.updateStatusAndPriority(id, request, principal.getId());
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -60,15 +74,18 @@ public class ComplaintController {
     @PostMapping("/{id}/resolve")
     public ResponseEntity<ComplaintResponse> resolve(@PathVariable Long id,
                                                        @Valid @RequestBody ResolveComplaintRequest request,
-                                                       @RequestParam Long officerId) {
-        Complaint complaint = complaintService.resolveComplaint(id, request, officerId);
+                                                       @RequestParam(required = false) Long officerId,
+                                                       @AuthenticationPrincipal User principal) {
+        Complaint complaint = complaintService.resolveComplaint(id, request, principal.getId());
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 
     // Step 7: close a resolved complaint
     @PostMapping("/{id}/close")
-    public ResponseEntity<ComplaintResponse> close(@PathVariable Long id, @RequestParam Long officerId) {
-        Complaint complaint = complaintService.closeComplaint(id, officerId);
+    public ResponseEntity<ComplaintResponse> close(@PathVariable Long id,
+                                                   @RequestParam(required = false) Long officerId,
+                                                   @AuthenticationPrincipal User principal) {
+        Complaint complaint = complaintService.closeComplaint(id, principal.getId());
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 

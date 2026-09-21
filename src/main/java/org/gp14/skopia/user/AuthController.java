@@ -18,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -53,6 +54,7 @@ public class AuthController {
         if (!USERNAME.matcher(username).matches()) return bad("Username must be 3-50 letters, numbers, or underscores");
         if (!EMAIL.matcher(email).matches()) return bad("A valid email address is required");
         if (rawPassword.length() < 8) return bad("Password must be at least 8 characters");
+        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > 72) return bad("Password must not exceed 72 UTF-8 bytes");
         if (users.existsByUsername(username)) return conflict("Username is already taken");
         if (users.existsByEmail(email)) return conflict("Email is already registered");
 

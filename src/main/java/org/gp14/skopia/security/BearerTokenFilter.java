@@ -4,8 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.gp14.skopia.model.user.Administrator;
-import org.gp14.skopia.model.user.User;
+import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.repository.UserRepository;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -34,7 +33,12 @@ public class BearerTokenFilter extends OncePerRequestFilter {
             Long id = tokens.verifyAndGetUserId(header.substring(7));
             User user = id == null ? null : users.findById(id).orElse(null);
             if (user != null && "ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
-                String role = user instanceof Administrator ? "ROLE_ADMINISTRATOR" : "ROLE_USER";
+                String role;
+                if (user instanceof Administrator) role = "ROLE_ADMINISTRATOR";
+                else if (user instanceof SupportOfficer) role = "ROLE_SUPPORT_OFFICER";
+                else if (user instanceof MarketingOfficer) role = "ROLE_MARKETING_OFFICER";
+                else if (user instanceof ContentCreator) role = "ROLE_CONTENT_CREATOR";
+                else role = "ROLE_USER";
                 var auth = new UsernamePasswordAuthenticationToken(user, null, List.of(new SimpleGrantedAuthority(role)));
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }

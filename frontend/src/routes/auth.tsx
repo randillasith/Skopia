@@ -1,34 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Play, Check } from 'lucide-react'
 import { Button, Field, Input, Checkbox } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, MarqueeRule, Letterboard } from '@/components/world'
 import { Wordmark, useSession } from '@/components/Shell'
 import { Tile } from './viewer'
-import { VIDEOS, CATEGORIES, GENRES, fmt } from '@/lib/data'
-import { ACCOUNTS, homeFor } from '@/lib/session'
+import { GENRES, fmt } from '@/lib/data'
+import { useCatalogue } from '@/lib/useCatalogue'
+import { homeFor } from '@/lib/session'
+import { accounts, ApiError } from '@/lib/accounts'
 
 /* =============================================================== the lobby */
 
 export function Lobby() {
   const nav = useNavigate()
-  const headline = VIDEOS[0]
-  const support = [VIDEOS[3], VIDEOS[7]]
+  // The landing page is the real catalogue, read without an account, because
+  // browsing needs none. An empty or unreachable catalogue simply means no
+  // shelves — the page above them still stands on its own.
+  const { videos, categories } = useCatalogue()
+  const headline = videos[0]
+  const support = [videos[3], videos[7]].filter(Boolean)
   // The justified tail is a typographic device, not a listing. Past a dozen or so
   // it stops reading as a block of type and becomes a wall; the shelves below
   // carry the rest.
-  const tail = VIDEOS.slice(1)
+  const tail = videos
+    .slice(1)
     .filter((v) => !support.includes(v) && v.billing === 'NOW SHOWING')
     .slice(0, 12)
 
-  // Browsing needs no account, so the landing page is the catalogue rather than a
-  // description of it. Only what is actually playable appears: a title still in
-  // review or not yet released is not the guest's business, and a shelf with one
-  // item on it looks worse than no shelf at all.
-  const shelves = CATEGORIES.map((category) => ({
-    category,
-    items: VIDEOS.filter(
-      (v) => v.category === category && (v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER'),
+  // Only what is actually playable appears: a title still in review or not yet
+  // released is not the guest's business, and a shelf with one item on it looks
+  // worse than no shelf at all.
+  const shelves = categories.map(({ name }) => ({
+    category: name,
+    items: videos.filter(
+      (v) => v.category === name && (v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER'),
     ).slice(0, 5),
   })).filter((s) => s.items.length >= 3)
 
@@ -50,7 +56,11 @@ export function Lobby() {
       </header>
       <MarqueeRule />
 
-      {/* ---- first viewport: billing block + one live lightbox ---- */}
+      {/* ---- first viewport: billing block + one live lightbox ----
+           The billing block bills a real title, so with nothing in the catalogue
+           there is nothing to bill and the section stands down rather than
+           rendering a headline that is not there. ---- */}
+      {headline && (
       <section className="mx-auto max-w-[1500px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-16">
         <div className="grid gap-10 lg:grid-cols-[1.9fr_1fr] lg:gap-14">
           {/* billing block — hierarchy by size and span, never a uniform grid */}
@@ -149,6 +159,7 @@ export function Lobby() {
           </aside>
         </div>
       </section>
+      )}
 
       {/* ---- the programme itself: a guest browses before signing up ---- */}
       {shelves.map(({ category, items }) => (
@@ -219,6 +230,10 @@ function AuthFrame({
   children: React.ReactNode
   foot: React.ReactNode
 }) {
+  // The panel beside the form bills a real title, so it is right rather than
+  // decorative. With nothing in the catalogue the panel simply has no billing.
+  const { videos } = useCatalogue()
+  const showing = videos.find((v) => v.billing === 'NOW SHOWING')
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1fr_1.05fr]">
       <div className="flex flex-col px-4 py-8 sm:px-8 lg:px-14">
@@ -237,15 +252,17 @@ function AuthFrame({
           <PosterPlate title="" seed={3} compact />
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-10">
-          <Letterboard tone="live">Now showing</Letterboard>
-          <p className="font-marquee mt-3 text-[clamp(1.8rem,3vw,2.6rem)] font-extrabold leading-[1] tracking-[-0.03em] text-white">
-            {VIDEOS[0].title}
-          </p>
-          <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-ink-300">
-            {VIDEOS[0].synopsis}
-          </p>
-        </div>
+        {showing && (
+          <div className="absolute inset-x-0 bottom-0 p-10">
+            <Letterboard tone="live">Now showing</Letterboard>
+            <p className="font-marquee mt-3 text-[clamp(1.8rem,3vw,2.6rem)] font-extrabold leading-[1] tracking-[-0.03em] text-white">
+              {showing.title}
+            </p>
+            <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-ink-300">
+              {showing.synopsis}
+            </p>
+          </div>
+        )}
       </aside>
     </div>
   )
@@ -256,27 +273,29 @@ function AuthFrame({
 export function Login() {
   const nav = useNavigate()
   const { signIn } = useSession()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [pw, setPw] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.includes('@')) return setErr('Enter the email address you registered with.')
-    if (pw.length < 4) return setErr('That password is too short to be one of ours.')
+    if (!identifier.trim()) return setErr('Enter your email address or handle.')
+    if (!pw) return setErr('Enter your password.')
     setErr('')
     setBusy(true)
-    // Without a backend there is nothing to authenticate against, so the
-    // address decides which demo account the session resolves to. A real sign-in
-    // posts the credentials, the server opens the session, and the reply carries
-    // no role the page could act on by itself.
-    window.setTimeout(() => {
-      const match = ACCOUNTS.find((a) => a.email.toLowerCase() === email.trim().toLowerCase())
-      const account = match ?? ACCOUNTS.find((a) => a.id === 'u-1007')!
-      signIn(account.id)
+    try {
+      // The server decides who this is and what the account holds. Nothing about
+      // the answer is chosen here, which is the whole point of asking.
+      const account = await signIn(identifier.trim(), pw)
       nav(homeFor(account))
-    }, 700)
+    } catch (cause) {
+      // A refusal and an unreachable API both arrive as ApiError, and both are
+      // worth saying plainly rather than leaving the form looking broken.
+      setErr(cause instanceof ApiError ? cause.message : 'Could not sign you in.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -293,31 +312,30 @@ export function Login() {
       }
     >
       <form onSubmit={submit} className="space-y-4" noValidate>
-        <Field label="Email" required error={err && !email.includes('@') ? err : undefined}>
+        <Field label="Email or handle" required>
           <Input
-            type="email"
-            value={email}
-            autoComplete="email"
-            placeholder="you@example.com"
-            onChange={(e) => setEmail(e.target.value)}
-            invalid={!!err && !email.includes('@')}
+            value={identifier}
+            autoComplete="username"
+            placeholder="you@example.com or @handle"
+            onChange={(e) => setIdentifier(e.target.value)}
+            invalid={!!err}
           />
         </Field>
-        <Field
-          label="Password"
-          required
-          error={err && email.includes('@') ? err : undefined}
-          hint=""
-        >
+        <Field label="Password" required>
           <Input
             type="password"
             value={pw}
             autoComplete="current-password"
             placeholder="••••••••"
             onChange={(e) => setPw(e.target.value)}
-            invalid={!!err && email.includes('@')}
+            invalid={!!err}
           />
         </Field>
+        {err && (
+          <p role="alert" className="text-[13px] text-danger-400">
+            {err}
+          </p>
+        )}
         <div className="flex items-center justify-between">
           <Checkbox checked label="Keep me signed in" onChange={() => {}} />
           <Link to="/reset" className="text-[13px] text-ink-300 hover:text-white">
@@ -336,6 +354,58 @@ export function Login() {
 
 export function Signup() {
   const nav = useNavigate()
+  const { signUp } = useSession()
+  const [name, setName] = useState('')
+  const [handle, setHandle] = useState('')
+  const [email, setEmail] = useState('')
+  const [pw, setPw] = useState('')
+  const [creator, setCreator] = useState(false)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // The handle is checked as it is typed because finding out it is taken after
+  // filling in everything else is the worst moment to be told.
+  const [taken, setTaken] = useState<boolean | null>(null)
+  useEffect(() => {
+    const clean = handle.trim().replace(/^@/, '')
+    if (clean.length < 3) {
+      setTaken(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      accounts
+        .handleAvailable(clean)
+        .then((r) => setTaken(!r.available))
+        .catch(() => setTaken(null))
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [handle])
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const clean = handle.trim().replace(/^@/, '')
+    if (clean.length < 3) return setErr('Pick a handle of at least three characters.')
+    if (!email.includes('@')) return setErr('Enter an email address we can reach you at.')
+    if (pw.length < 8) return setErr('Use a password of at least eight characters.')
+    if (new TextEncoder().encode(pw).length > 72) return setErr('Password must not exceed 72 UTF-8 bytes.')
+    setErr('')
+    setBusy(true)
+    try {
+      await signUp({
+        username: clean,
+        email: email.trim(),
+        password: pw,
+        displayName: name.trim() || clean,
+        roleType: creator ? 'CONTENT_CREATOR' : 'REGISTERED_VIEWER',
+      })
+      nav('/onboarding')
+    } catch (cause) {
+      setErr(cause instanceof ApiError ? cause.message : 'Could not create the account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <AuthFrame
       title="Create your account"
@@ -349,24 +419,66 @@ export function Signup() {
         </>
       }
     >
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          nav('/onboarding')
-        }}
-      >
+      <form className="space-y-4" onSubmit={submit} noValidate>
         <Field label="Display name" required>
-          <Input placeholder="How you appear on comments" autoComplete="name" />
+          <Input
+            value={name}
+            placeholder="How you appear on comments"
+            autoComplete="name"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Handle"
+          required
+          hint="Letters and numbers, at least three."
+          error={taken ? `@${handle.trim().replace(/^@/, '')} is already taken.` : undefined}
+        >
+          <Input
+            value={handle}
+            placeholder="@yourhandle"
+            autoComplete="username"
+            invalid={taken === true}
+            onChange={(e) => setHandle(e.target.value)}
+          />
         </Field>
         <Field label="Email" required>
-          <Input type="email" placeholder="you@example.com" autoComplete="email" />
+          <Input
+            type="email"
+            value={email}
+            placeholder="you@example.com"
+            autoComplete="email"
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </Field>
-        <Field label="Password" required hint="At least 8 characters">
-          <Input type="password" placeholder="••••••••" autoComplete="new-password" />
+        <Field label="Password" required hint="8–72 UTF-8 bytes">
+          <Input
+            type="password"
+            maxLength={72}
+            value={pw}
+            placeholder="••••••••"
+            autoComplete="new-password"
+            onChange={(e) => setPw(e.target.value)}
+          />
         </Field>
-        <Checkbox checked={false} onChange={() => {}} label="Email me about new titles and platform news" />
-        <Button type="submit" variant="primary" size="lg" className="w-full">
+        <Checkbox
+          checked={creator}
+          onChange={setCreator}
+          label="I want to publish videos — open a channel for me"
+        />
+        {err && (
+          <p role="alert" className="text-[13px] text-danger-400">
+            {err}
+          </p>
+        )}
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          loading={busy}
+          disabled={taken === true}
+          className="w-full"
+        >
           Create account
         </Button>
       </form>
@@ -421,6 +533,7 @@ export function ResetPassword() {
 
 export function Onboarding() {
   const nav = useNavigate()
+  const { categories } = useCatalogue()
   const [picked, setPicked] = useState<string[]>([])
   const toggle = (g: string) =>
     setPicked((p) => (p.includes(g) ? p.filter((x) => x !== g) : [...p, g]))
@@ -441,9 +554,9 @@ export function Onboarding() {
         <fieldset className="mt-8">
           <legend className="letterboard mb-3 text-ink-300">Categories</legend>
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
-              <Chip key={c} on={picked.includes(c)} onClick={() => toggle(c)}>
-                {c}
+            {categories.map((c) => (
+              <Chip key={c.id} on={picked.includes(c.name)} onClick={() => toggle(c.name)}>
+                {c.name}
               </Chip>
             ))}
           </div>

@@ -10,6 +10,7 @@ import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.video.dto.*;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -171,6 +172,7 @@ public class VideoService {
     public VideoResponse updateVideo(Long videoId, UpdateVideoRequest request, Long creatorId) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
+        requireCreatorOwnership(video, creatorId);
 
         if (request.getTitle() != null && !request.getTitle().isBlank()) {
             video.setTitle(request.getTitle().trim());
@@ -199,9 +201,27 @@ public class VideoService {
         return mapToVideoResponse(updated, creatorId);
     }
 
+    public VideoResponse moderateVideoStatus(Long videoId, String status, Long viewerId) {
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new IllegalArgumentException("Video not found"));
+        video.setVideoStatus(status.toUpperCase());
+        return mapToVideoResponse(videoRepository.save(video), viewerId);
+    }
+
+    @Transactional(readOnly = true)
+    public ContentCreator getVideoCreator(Long videoId) {
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new IllegalArgumentException("Video not found"));
+        if (video.getCreator() == null) {
+            throw new IllegalStateException("Video has no creator");
+        }
+        return video.getCreator();
+    }
+
     public boolean deleteVideo(Long videoId, Long creatorId) {
         Optional<Video> videoOpt = videoRepository.findById(videoId);
         if (videoOpt.isPresent()) {
+            requireCreatorOwnership(videoOpt.get(), creatorId);
             videoRepository.delete(videoOpt.get());
             return true;
         }
@@ -394,13 +414,16 @@ public class VideoService {
                     commentRepository.save(comment);
                     return true;
                 }
-            } catch (Exception e) {
-                comment.setCommentStatus("DELETED");
-                commentRepository.save(comment);
-                return true;
-            }
+            } catch (Exception ignored) { }
         }
         return false;
+    }
+
+    private void requireCreatorOwnership(Video video, Long creatorId) {
+        Long ownerId = video.getCreator() == null ? null : video.getCreator().getId();
+        if (creatorId == null || !creatorId.equals(ownerId)) {
+            throw new AccessDeniedException("Only the video's creator can change it");
+        }
     }
 
     @Transactional(readOnly = true)
