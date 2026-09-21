@@ -43,3 +43,9 @@ build/
 
 # Impeccable design-tool scratch and local review captures
 .impeccable/
+src/main/resources/application.properties
+src/main/resources/application-local.properties
+src/main/resources/application.properties.backup
+.env
+*.env
+!.env.example
