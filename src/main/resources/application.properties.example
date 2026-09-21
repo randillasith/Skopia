@@ -1,0 +1,30 @@
+spring.application.name=Skopia
+
+# Copy this file to application.properties and edit it for your machine. The
+# real application.properties is gitignored so nobody's local database settings
+# land in the repo. Credentials can also come from the environment: override
+# with SKOPIA_DB_URL / SKOPIA_DB_USER / SKOPIA_DB_PASSWORD.
+spring.datasource.url=${SKOPIA_DB_URL:jdbc:mysql://localhost:3306/skopia?createDatabaseIfNotExist=true&serverTimezone=UTC}
+spring.datasource.username=${SKOPIA_DB_USER:root}
+spring.datasource.password=${SKOPIA_DB_PASSWORD:}
+
+# `update` keeps rows between runs. schema.sql is the hand-written initial DB
+# (the EER diagram, as DDL); run it once against a fresh database if you would
+# rather own the schema yourself than let Hibernate derive it.
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.open-in-view=false
+
+server.port=8081
+
+# FR5 uploads advertisement creative, which is the largest thing the API takes.
+spring.servlet.multipart.max-file-size=100MB
+spring.servlet.multipart.max-request-size=100MB
+
+# --- FR5, advertisement management -------------------------------------------
+# Where uploaded creative is written, and the public prefix it is served under.
+skopia.ads.media.storage-dir=uploads/ads
+skopia.ads.media.public-base=/uploads/ads
+skopia.ads.media.max-bytes=52428800
+# How often the expiry job sweeps for campaigns whose end date has passed.
+skopia.ads.expiry.cron=0 */5 * * * *
