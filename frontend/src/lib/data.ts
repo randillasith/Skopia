@@ -541,10 +541,29 @@ export const LOGS: LogEntry[] = [
   { at: '2026-08-22 11:02:55', actor: 'system', action: 'report.route', target: 'RPT-2291', outcome: 'ok' },
 ]
 
-export const COMMENTS = [
-  { id: 'c-1', who: 'R. Perera', at: '2 days ago', body: 'The winter footage in the third act is extraordinary. Who shot it?', likes: 42 },
-  { id: 'c-2', who: 'T. Nadeeka', at: '4 days ago', body: 'Captions drift after about four minutes — reported it.', likes: 18 },
-  { id: 'c-3', who: 'Meridian Films', at: '4 days ago', body: 'Thanks for flagging — a fix is with the support team.', likes: 61 },
+/**
+ * `pinned` and `hearted` are the channel owner's two signals: one says read this
+ * first, the other says the creator saw you. Both belong to the channel, not the
+ * platform, which is why moderators can neither pin nor heart.
+ */
+export type Comment = {
+  id: string
+  who: string
+  at: string
+  body: string
+  likes: number
+  pinned?: boolean
+  hearted?: boolean
+  byCreator?: boolean
+  replies?: number
+}
+
+export const COMMENTS: Comment[] = [
+  { id: 'c-0', who: 'Meridian Films', at: '5 days ago', body: 'A note on the third act: the winter footage was shot over two separate seasons, four years apart, from the same position. The dome is the only thing in frame that did not change.', likes: 892, pinned: true, byCreator: true, replies: 34 },
+  { id: 'c-1', who: 'R. Perera', at: '2 days ago', body: 'The winter footage in the third act is extraordinary. Who shot it?', likes: 42, hearted: true, replies: 3 },
+  { id: 'c-2', who: 'T. Nadeeka', at: '4 days ago', body: 'Captions drift after about four minutes — reported it.', likes: 18, replies: 1 },
+  { id: 'c-3', who: 'Meridian Films', at: '4 days ago', body: 'Thanks for flagging — a fix is with the support team.', likes: 61, byCreator: true },
+  { id: 'c-4', who: 'Kasun Alwis', at: '6 days ago', body: 'Watched this twice. The second time with the commentary on the observatory logs open beside it, which I recommend.', likes: 128, replies: 7 },
 ]
 
 /* ------------------------------------------------------------------ helpers */
@@ -665,3 +684,54 @@ export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
  * ladder of resolutions the backend may never serve.
  */
 export const QUALITY_UNDECIDED = true
+
+/* --------------------------------------------------- access, live, identity */
+
+/**
+ * How a title is gated.
+ *
+ * `free` and `pass` are the only two states the documentation actually supports:
+ * something is open to everyone, or it needs an active pass. The Stitch drafts
+ * went further and invented per-category passes at named prices — a Music Pass
+ * at $8.99, an All-Access Master at $19.99 — but plan names, prices and
+ * entitlements are recorded as undecided in PRODUCT.md, so the badge says which
+ * of the two states applies and stops there.
+ */
+export type Access = 'free' | 'pass'
+export const accessOf = (v: Video): Access => (v.premium ? 'pass' : 'free')
+
+/** Channels whose identity the platform has checked. */
+export const VERIFIED = ['Meridian Films', 'Fern & Field', 'Northbound', 'Cadence Hall']
+export const isVerified = (creator: string) => VERIFIED.includes(creator)
+
+/**
+ * Live broadcasts. A live title has no fixed runtime and no resume position, so
+ * it is kept as a separate list rather than as another flag on Video — a "live"
+ * boolean would quietly make runtime and progress meaningless on those records.
+ */
+export type Live = {
+  id: string
+  title: string
+  creator: string
+  category: string
+  watching: number
+  startedAt: string
+  seed: number
+  premium: boolean
+}
+
+export const LIVE: Live[] = [
+  { id: 'lv-1', title: 'Night Shift — Episode 7 Premiere & Q&A', creator: 'Northbound', category: 'Series', watching: 4820, startedAt: '38 min ago', seed: 51, premium: true },
+  { id: 'lv-2', title: 'Cadence Hall: Friday Session, Live', creator: 'Cadence Hall', category: 'Music', watching: 1240, startedAt: '12 min ago', seed: 52, premium: false },
+  { id: 'lv-3', title: 'Open Workshop — Reading a Repair Manual', creator: 'Fern & Field', category: 'Learning', watching: 610, startedAt: '2 h ago', seed: 53, premium: false },
+]
+
+/** Hashtags, authored per title rather than derived from the category. */
+export const TAGS: Record<string, string[]> = {
+  'v-1041': ['observatory', 'winter', 'longform'],
+  'v-1053': ['shipbreaking', 'labour', 'gujarat'],
+  'v-1056': ['optics', 'explainer', 'physics'],
+  'v-1062': ['baking', 'chemistry', 'slowtv'],
+  'v-1076': ['35mm', 'projection', 'lastofitskind'],
+}
+export const tagsFor = (id: string) => TAGS[id] ?? []
