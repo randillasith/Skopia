@@ -20,6 +20,7 @@ import {
 import { ModerationQueue, ModerationHistory } from '@/routes/moderate'
 import { ChannelPage, Subscriptions } from '@/routes/channel'
 import { Playlists, PlaylistDetail } from '@/routes/playlists'
+import { Explore, Trending, Queue } from '@/routes/discover'
 import { CampaignList, CampaignNew, CampaignDetail, CampaignPerformance } from '@/routes/campaigns'
 import { SupportQueue, ComplaintDetail, ComplaintHistory } from '@/routes/support'
 import {
@@ -55,12 +56,15 @@ export default function App() {
             <Route path="/category/:name" element={<Category />} />
             <Route path="/watch/:id" element={<Watch />} />
             <Route path="/channel/:handle" element={<ChannelPage />} />
+            <Route path="/explore" element={<Explore />} />
+            <Route path="/trending" element={<Trending />} />
             {/* Anything that belongs to an account rather than to the programme. */}
             <Route element={<RequireAuth what="This"><Outlet /></RequireAuth>}>
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/playlists" element={<Playlists />} />
               <Route path="/playlist/:id" element={<PlaylistDetail />} />
+              <Route path="/queue-up" element={<Queue />} />
               <Route path="/history" element={<History />} />
               <Route path="/for-you" element={<ForYou />} />
               <Route path="/notifications" element={<Notifications />} />

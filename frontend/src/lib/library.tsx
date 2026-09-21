@@ -61,6 +61,23 @@ type LibraryValue = {
   recentSearches: string[]
   recordSearch: (q: string) => void
   forgetSearch: (q: string) => void
+
+  /**
+   * The queue: what plays after this, in order. Kept apart from playlists
+   * because it is temporary by nature — you build it for the next hour, not to
+   * keep — and apart from Watch later, which is the opposite (kept, unordered).
+   */
+  queue: string[]
+  isQueued: (videoId: string) => boolean
+  toggleQueue: (videoId: string) => boolean
+  playNext: (videoId: string) => void
+  dequeue: (videoId: string) => void
+  clearQueue: () => void
+
+  /** Titles taken for offline viewing. */
+  downloads: string[]
+  isDownloaded: (videoId: string) => boolean
+  toggleDownload: (videoId: string) => boolean
 }
 
 const KEY = 'skopia.library'
@@ -74,6 +91,8 @@ type Stored = {
   history: string[]
   historyPaused: boolean
   recentSearches: string[]
+  queue: string[]
+  downloads: string[]
 }
 
 const seed = (): Stored => ({
@@ -100,6 +119,8 @@ const seed = (): Stored => ({
   history: VIDEOS.filter((v) => typeof v.progress === 'number').map((v) => v.id),
   historyPaused: false,
   recentSearches: ['winter', 'harbour studio', 'captions'],
+  queue: ['v-1071', 'v-1064'],
+  downloads: ['v-1062'],
 })
 
 function read(): Stored {
@@ -136,7 +157,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [s])
 
   const toggleIn = useCallback(
-    (key: 'subscriptions' | 'bells' | 'watchLater', id: string) => {
+    (key: 'subscriptions' | 'bells' | 'watchLater' | 'queue' | 'downloads', id: string) => {
       let nowOn = false
       setS((prev) => {
         const has = prev[key].includes(id)
@@ -230,6 +251,20 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       },
       forgetSearch: (q) =>
         setS((p) => ({ ...p, recentSearches: p.recentSearches.filter((x) => x !== q) })),
+
+      queue: s.queue,
+      isQueued: (id) => s.queue.includes(id),
+      toggleQueue: (id) => toggleIn('queue', id),
+      // "Play next" jumps the line rather than appending, which is the whole
+      // reason it exists as a separate action from "Add to queue".
+      playNext: (id) =>
+        setS((p) => ({ ...p, queue: [id, ...p.queue.filter((x) => x !== id)] })),
+      dequeue: (id) => setS((p) => ({ ...p, queue: p.queue.filter((x) => x !== id) })),
+      clearQueue: () => setS((p) => ({ ...p, queue: [] })),
+
+      downloads: s.downloads,
+      isDownloaded: (id) => s.downloads.includes(id),
+      toggleDownload: (id) => toggleIn('downloads', id),
     }),
     [s, toggleIn],
   )

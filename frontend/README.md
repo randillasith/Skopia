@@ -120,6 +120,9 @@ photography. Replace it with real imagery before this goes anywhere near product
 | Route | Use case |
 |---|---|
 | `/browse` | UC-FR1-01 — browse the catalogue, billing-ranked |
+| `/explore` | UC-FR1-01 — discovery by genre across categories, live now, all channels |
+| `/trending` | UC-FR1-01 — ranked by views against age, not by all-time views |
+| `/queue-up` | UC-FR1-02 — what plays next, in order |
 | `/search` | UC-FR1-01 — search with suggestions, five filters, channel results, empty state |
 | `/category/:name` | UC-FR1-01 — browse by category |
 | `/channel/:handle` | UC-FR1-01 — a creator's channel: latest release, sorted library, about, follow |
@@ -217,6 +220,28 @@ faked one), **Instrument Sans** is the interface workhorse, **JetBrains Mono** c
 references, timecodes and every figure in a table. All three are self-hosted through
 `@fontsource` — no CDN request, no third-party dependency, and the versions are pinned in
 `package-lock.json` so a build next year renders as it does today.
+
+### What came from the Stitch drafts, and what did not
+
+The drafts were read after the build, and three structural ideas in them were
+better than what was here: a **persistent left rail** instead of a top nav, an
+explicit **queue** separate from Watch later, and **access stated on every tile**.
+Those were adopted, along with verified marks, pinned comments, creator hearts,
+hashtags, live broadcasts and offline titles.
+
+Four things in the drafts were deliberately not adopted:
+
+- **Their palette.** Electric Indigo `#6366F1` and Vivid Crimson `#EC4899` are not the
+  project's colours. The brief names `#7559FF`, `#25C7F7`, `#5B3FE6` and `#080D1C`.
+- **Desktop only.** Their design document states a desktop focus with breakpoints at
+  1280/1536/1920 and nothing below. Everything here is verified at 390px.
+- **Invented plan detail.** The drafts price three tiers ($0 / $8.99 / $19.99), and specify
+  Dolby Atmos 7.1.4, 192kHz masters, Ed25519 DRM and an 80/20 artist split. Plan names,
+  prices and entitlements are recorded as undecided, so access here is `Free` or `Pass`
+  and stops there.
+- **A programmatic ad exchange.** The RTB/DSP screens invent real-time bidding, edge auction
+  clearing and named third-party partners (DV360, The Trade Desk, Amazon DSP, Magnite).
+  FR5 covers campaigns, targeting, scheduling and performance — not an ad exchange.
 
 ### The player
 

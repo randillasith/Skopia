@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Play, Bookmark, Share2, Flag, ThumbsUp, ThumbsDown, Trash2, SearchX, Clock,
-  Bell, LifeBuoy, ChevronRight, X,
+  Bell, LifeBuoy, ChevronRight, X, ListEnd, Download, Hash, Pin, Heart,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, Toggle, EmptyState,
@@ -13,11 +13,12 @@ import { Player, ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import {
   VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt, clock, seconds,
-  type Video,
+  isVerified, tagsFor, type Video,
 } from '@/lib/data'
 import { CHANNELS, channelByName } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
 import { SearchBox } from '@/components/search'
+import { VerifiedMark } from './discover'
 import { SubscribeButton } from './channel'
 import { SaveToPlaylist } from './playlists'
 import { cn } from '@/lib/cn'
@@ -25,7 +26,7 @@ import { cn } from '@/lib/cn'
 /* ------------------------------------------------------------- poster tile */
 
 export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }) {
-  const { isSaved, toggleWatchLater } = useLibrary()
+  const { isSaved, toggleWatchLater, isQueued, toggleQueue } = useLibrary()
   const { viewer } = useSession()
   const nav = useNavigate()
   const toast = useToast()
@@ -42,11 +43,19 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
               <span className="block h-full bg-cyan-400" style={{ width: `${v.progress * 100}%` }} />
             </span>
           )}
-          {v.premium && (
-            <span className="letterboard absolute right-2 top-2 rounded-xs border border-gold-500/40 bg-ink-950/80 px-1.5 py-0.5 text-gold-400 backdrop-blur">
-              Pass
-            </span>
-          )}
+          {/* Access is stated on every tile, both ways round. Marking only the
+              gated ones leaves the rest ambiguous — a viewer cannot tell an
+              open title from one whose badge failed to render. */}
+          <span
+            className={cn(
+              'letterboard absolute right-2 top-2 rounded-full border px-2 py-0.5 backdrop-blur',
+              v.premium
+                ? 'border-gold-500/45 bg-gold-500/12 text-gold-400'
+                : 'border-success-500/35 bg-success-500/10 text-success-400',
+            )}
+          >
+            {v.premium ? 'Pass' : 'Free'}
+          </span>
           {/* Duration on the thumbnail. It is the first thing anyone checks
               before committing to something, and making them open the page to
               find it is a small tax paid on every browse. */}
@@ -71,6 +80,19 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
           >
             <Clock className={cn('size-3.5', saved && 'text-cyan-300')} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              if (!viewer) return nav('/login')
+              const added = toggleQueue(v.id)
+              toast({ title: added ? `Queued — ${v.title}` : 'Removed from queue' })
+            }}
+            aria-label={isQueued(v.id) ? `Take ${v.title} out of the queue` : `Add ${v.title} to the queue`}
+            title={isQueued(v.id) ? 'In the queue' : 'Add to queue'}
+            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
+          >
+            <ListEnd className={cn('size-3.5', isQueued(v.id) && 'text-cyan-300')} />
           </button>
           <button
             onClick={(e) => {
@@ -109,6 +131,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
           >
             {v.creator}
           </Link>
+          {isVerified(v.creator) && <VerifiedMark />}
           <span aria-hidden>·</span>
           <span className="shrink-0 font-mono tabular-nums">{fmt(v.views)}</span>
         </p>
@@ -525,7 +548,10 @@ export function Watch() {
   const v = byId(id ?? '')
   const toast = useToast()
   const { viewer } = useSession()
-  const { votes, vote, isSaved, recordWatch } = useLibrary()
+  const {
+    votes, vote, isSaved, recordWatch,
+    isQueued, toggleQueue, isDownloaded, toggleDownload, queue,
+  } = useLibrary()
   const [reportOpen, setReportOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
@@ -539,6 +565,15 @@ export function Watch() {
     () => (v ? VIDEOS.filter((x) => x.id !== v.id && x.category === v.category).slice(0, 6) : []),
     [v],
   )
+
+  // A pinned comment stays first under either order: pinning is the channel's
+  // instruction about what to read first, and a sort that overrides it silently
+  // undoes a decision somebody deliberately made.
+  const comments = useMemo(() => {
+    const rest = COMMENTS.filter((c) => !c.pinned)
+    const sorted = order === 'top' ? [...rest].sort((a, b) => b.likes - a.likes) : rest
+    return [...COMMENTS.filter((c) => c.pinned), ...sorted]
+  }, [order])
 
   // Watching is what puts something in history, so it is recorded here rather
   // than on any click that happened to lead here.
@@ -563,7 +598,8 @@ export function Watch() {
   const channel = channelByName(v.creator)
   const my = votes[v.id] ?? null
   const saved = isSaved(v.id)
-  const comments = order === 'top' ? [...COMMENTS].sort((a, b) => b.likes - a.likes) : COMMENTS
+  const queued = isQueued(v.id)
+  const downloaded = isDownloaded(v.id)
   const shareUrl = `${window.location.origin}/watch/${v.id}`
 
   const copy = (text: string, msg: string) => {
@@ -613,14 +649,28 @@ export function Watch() {
                 <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
                   {v.title}
                 </h1>
+                {tagsFor(v.id).length > 0 && (
+                  <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                    {tagsFor(v.id).map((t) => (
+                      <Link
+                        key={t}
+                        to={`/search?q=${encodeURIComponent(t)}`}
+                        className="flex items-center text-[13px] text-violet-300 transition-colors hover:text-violet-200"
+                      >
+                        <Hash className="size-3" />{t}
+                      </Link>
+                    ))}
+                  </p>
+                )}
 
                 {/* ---- channel row: the creator is a place you can go ---- */}
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-ink-800 py-3.5">
                   <Link to={`/channel/${channel?.handle ?? ''}`} className="group flex min-w-0 items-center gap-3">
                     <Avatar name={v.creator} size={40} />
                     <span className="min-w-0">
-                      <span className="block truncate text-[14px] font-medium text-white group-hover:text-violet-200">
+                      <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-white group-hover:text-violet-200">
                         {v.creator}
+                        {isVerified(v.creator) && <VerifiedMark />}
                       </span>
                       <span className="block truncate font-mono text-[11px] tabular-nums text-ink-300">
                         {channel ? `${fmt(channel.subscribers)} following` : ''}
@@ -666,6 +716,33 @@ export function Watch() {
                       onClick={() => (viewer ? setSaveOpen(true) : nav('/login'))}
                     >
                       Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      icon={<ListEnd className={cn('size-4', queued && 'text-cyan-300')} />}
+                      onClick={() => {
+                        if (!viewer) return nav('/login')
+                        const added = toggleQueue(v.id)
+                        toast({ title: added ? 'Added to the queue' : 'Removed from the queue' })
+                      }}
+                    >
+                      {queued ? 'Queued' : 'Queue'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      icon={<Download className={cn('size-4', downloaded && 'text-cyan-300')} />}
+                      onClick={() => {
+                        if (!viewer) return nav('/login')
+                        const on = toggleDownload(v.id)
+                        toast({
+                          title: on
+                            ? 'Taken for offline viewing'
+                            : 'Removed from offline titles',
+                          tone: on ? 'ok' : undefined,
+                        })
+                      }}
+                    >
+                      {downloaded ? 'Offline' : 'Download'}
                     </Button>
                     <Button size="sm" variant="ghost" icon={<Flag className="size-4" />} onClick={() => setReportOpen(true)}>
                       Report
@@ -744,32 +821,70 @@ export function Watch() {
                 </form>
 
                 <ul className="mt-6 space-y-5">
-                  {comments.map((c) => {
-                    const byCreator = c.who === v.creator
-                    return (
-                      <li key={c.id} className="flex gap-3">
-                        <Avatar name={c.who} />
-                        <div className="min-w-0">
-                          <p className="flex flex-wrap items-center gap-2 text-[13px]">
-                            <span className={cn('font-medium', byCreator ? 'rounded-xs bg-ink-700 px-1.5 py-0.5 text-white' : 'text-white')}>
-                              {c.who}
-                            </span>
-                            <span className="text-ink-300">{c.at}</span>
+                  {comments.map((c) => (
+                    <li
+                      key={c.id}
+                      className={cn(
+                        'flex gap-3',
+                        c.pinned && 'rounded-lg border border-ink-700 bg-ink-850 p-3.5',
+                      )}
+                    >
+                      <Avatar name={c.who} />
+                      <div className="min-w-0 flex-1">
+                        {c.pinned && (
+                          <p className="letterboard mb-1.5 flex items-center gap-1.5 text-ink-300">
+                            <Pin className="size-3" />
+                            Pinned by {v.creator}
                           </p>
-                          <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>
-                          <div className="mt-1.5 flex items-center gap-3 text-[12px] text-ink-300">
-                            <button className="flex items-center gap-1 hover:text-white">
-                              <ThumbsUp className="size-3.5" /> {c.likes}
+                        )}
+                        <p className="flex flex-wrap items-center gap-2 text-[13px]">
+                          <span
+                            className={cn(
+                              'flex items-center gap-1.5 font-medium',
+                              c.byCreator
+                                ? 'rounded-full bg-ink-700 px-2 py-0.5 text-white'
+                                : 'text-white',
+                            )}
+                          >
+                            {c.who}
+                            {isVerified(c.who) && <VerifiedMark />}
+                          </span>
+                          <span className="text-ink-300">{c.at}</span>
+                        </p>
+                        <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-ink-300">
+                          <button className="flex items-center gap-1 transition-colors hover:text-white">
+                            <ThumbsUp className="size-3.5" />
+                            <span className="tabular-nums">{fmt(c.likes)}</span>
+                          </button>
+                          <button aria-label="Dislike this comment" className="transition-colors hover:text-white">
+                            <ThumbsDown className="size-3.5" />
+                          </button>
+                          <button className="transition-colors hover:text-white">Reply</button>
+                          {c.replies ? (
+                            <button className="flex items-center gap-1 text-cyan-300 transition-colors hover:text-cyan-200">
+                              <ChevronRight className="size-3.5" />
+                              {c.replies} {c.replies === 1 ? 'reply' : 'replies'}
                             </button>
-                            <button className="hover:text-white">Reply</button>
-                            <button className="hover:text-danger-400" onClick={() => toast({ title: 'Comment reported to the channel' })}>
-                              Report
-                            </button>
-                          </div>
+                          ) : null}
+                          {/* The heart is the creator's, so it is shown rather
+                              than offered — a viewer cannot award one. */}
+                          {c.hearted && (
+                            <span className="flex items-center gap-1 text-danger-400" title={`${v.creator} hearted this`}>
+                              <Heart className="size-3.5 fill-current" />
+                              <span className="letterboard">Creator</span>
+                            </span>
+                          )}
+                          <button
+                            className="ml-auto transition-colors hover:text-danger-400"
+                            onClick={() => toast({ title: 'Comment reported to the channel' })}
+                          >
+                            Report
+                          </button>
                         </div>
-                      </li>
-                    )
-                  })}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               </div>
             </div>
@@ -779,7 +894,14 @@ export function Watch() {
           {!theater && (
             <aside className="min-w-0">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="letterboard text-ink-300">Up next</p>
+                <p className="letterboard text-ink-300">
+                  Up next
+                  {queue.length > 0 && (
+                    <Link to="/queue-up" className="ml-2 text-cyan-300 hover:underline">
+                      In queue: {queue.length}
+                    </Link>
+                  )}
+                </p>
                 <span className="letterboard text-ink-300">
                   Autoplay {autoplay ? 'on' : 'off'}
                 </span>
