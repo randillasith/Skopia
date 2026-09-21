@@ -1,123 +1,85 @@
 package org.gp14.skopia.user;
 
-import org.gp14.skopia.model.user.User;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.gp14.skopia.user.dto.*;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import java.util.HashMap;
+
 import java.util.List;
-import java.util.Map;
 
 @RestController
-@RequestMapping("/api/users")
-@CrossOrigin(origins = "*", maxAge = 3600)
+@RequestMapping("/api/admin/users")
+@Validated
 public class AdminUserController {
+    private final UserManagementService userManagementService;
 
-    @Autowired
-    private UserService userService;
-
-    @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegisterUserRequest request) {
-        if (request.getUsername() == null || request.getUsername().isEmpty()) {
-            return ResponseEntity.badRequest()
-                    .body(createErrorResponse("Missing required fields"));
-        }
-
-        LoginResponse response = userService.register(request);
-        if (response.getMessage().contains("already exists")) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
-        }
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        LoginResponse response = userService.login(request);
-        if (response.getMessage().contains("successful")) {
-            return ResponseEntity.ok(response);
-        }
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-    }
-
-    @GetMapping("/{userId}")
-    public ResponseEntity<?> getUserProfile(@PathVariable Long userId) {
-        UserResponse user = userService.getUserProfile(userId);
-        if (user == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(user);
-    }
-
-    @PutMapping("/{userId}/profile")
-    public ResponseEntity<?> updateProfile(@PathVariable Long userId, @RequestBody UpdateProfileRequest request) {
-        try {
-            UserResponse updated = userService.updateProfile(userId, request);
-            if (updated == null) {
-                return ResponseEntity.notFound().build();
-            }
-            return ResponseEntity.ok(updated);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(createErrorResponse(e.getMessage()));
-        }
-    }
-
-    @PostMapping("/{userId}/change-password")
-    public ResponseEntity<?> changePassword(@PathVariable Long userId, @RequestBody ChangePasswordRequest request) {
-        boolean success = userService.changePassword(userId, request);
-        if (!success) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(createErrorResponse("Failed to change password"));
-        }
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Password changed successfully");
-        return ResponseEntity.ok(response);
+    public AdminUserController(UserManagementService userManagementService) {
+        this.userManagementService = userManagementService;
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllUsers() {
-        List<User> users = userService.getAllUsers();
-        return ResponseEntity.ok(users);
+    public List<UserResponse> getUsers(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue = "100") @Min(1) @Max(100) int limit) {
+        return userManagementService.getUsers(q, status, role).stream().limit(limit).toList();
     }
 
-    @PutMapping("/{userId}/deactivate")
-    public ResponseEntity<?> deactivateUser(@PathVariable Long userId) {
-        boolean success = userService.deactivateUser(userId);
-        if (!success) {
-            return ResponseEntity.notFound().build();
-        }
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "User deactivated successfully");
-        return ResponseEntity.ok(response);
+    @GetMapping("/{id}")
+    public UserResponse getUser(@PathVariable Long id) {
+        return userManagementService.getUserById(id);
     }
 
-    @PutMapping("/{userId}/activate")
-    public ResponseEntity<?> activateUser(@PathVariable Long userId) {
-        boolean success = userService.activateUser(userId);
-        if (!success) {
-            return ResponseEntity.notFound().build();
-        }
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "User activated successfully");
-        return ResponseEntity.ok(response);
+    @PatchMapping("/{id}/status")
+    public UserResponse updateStatus(@PathVariable Long id,
+                                     @Valid @RequestBody UpdateAccountStatusRequest request,
+                                     HttpServletRequest httpRequest) {
+        return userManagementService.updateAccountStatus(id, request, clientIp(httpRequest));
     }
 
-    @DeleteMapping("/{userId}")
-    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
-        boolean success = userService.deleteUser(userId);
-        if (!success) {
-            return ResponseEntity.notFound().build();
-        }
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "User deleted successfully");
-        return ResponseEntity.ok(response);
+    @PostMapping("/staff")
+    public ResponseEntity<UserResponse> createStaff(@Valid @RequestBody CreateStaffRequest request,
+                                                     HttpServletRequest httpRequest) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(userManagementService.createStaffMember(request, clientIp(httpRequest)));
     }
 
-    private Map<String, String> createErrorResponse(String message) {
-        Map<String, String> error = new HashMap<>();
-        error.put("error", message);
-        return error;
+    @RequestMapping(value = "/staff/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    public UserResponse updateStaff(@PathVariable Long id,
+                                    @Valid @RequestBody UpdateStaffProfileRequest request,
+                                    HttpServletRequest httpRequest) {
+        return userManagementService.updateStaffProfile(id, request, clientIp(httpRequest));
+    }
+
+    @PatchMapping("/{id}/creator-verification")
+    public UserResponse updateCreatorVerification(@PathVariable Long id,
+                                                   @Valid @RequestBody UpdateCreatorStatusRequest request,
+                                                   HttpServletRequest httpRequest) {
+        return userManagementService.updateCreatorVerification(id, request, clientIp(httpRequest));
+    }
+
+    @GetMapping("/activity-logs")
+    public List<ActivityLogResponse> activityLogs(@RequestParam(required = false) Long userId,
+                                                   @RequestParam(required = false) String actionType,
+                                                   @RequestParam(defaultValue = "100") @Min(1) @Max(100) int limit) {
+        return userManagementService.getActivityLogs(userId, actionType).stream().limit(limit).toList();
+    }
+
+    @GetMapping("/stats")
+    public PlatformUserStatsResponse stats() {
+        return userManagementService.getPlatformUserStats();
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        return forwarded == null || forwarded.isBlank()
+                ? request.getRemoteAddr()
+                : forwarded.split(",", 2)[0].trim();
     }
 }
