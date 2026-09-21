@@ -101,8 +101,12 @@ export type SignUpInput = {
   displayName?: string
   firstName?: string
   lastName?: string
-  /** 'CONTENT_CREATOR' asks the server for a creator account. */
-  role?: string
+  /**
+   * 'CONTENT_CREATOR' asks the server for a creator account, anything else for
+   * an ordinary viewer. The field is named as the API names it — sending it as
+   * `role` is silently ignored and everybody becomes a viewer.
+   */
+  roleType?: string
   channelName?: string
 }
 

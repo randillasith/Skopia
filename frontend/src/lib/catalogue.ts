@@ -8,7 +8,7 @@
  * derived and which are simply not known yet.
  */
 
-import { request } from './api'
+import { request, submitForm } from './api'
 import type { Billing, Video } from './data'
 
 /* ------------------------------------------------------------ server shapes */
@@ -227,6 +227,58 @@ export const catalogue = {
 
   watchlist: (actorId: number | null, signal?: AbortSignal) =>
     request<ServerWatchlistEntry[]>('/api/watchlist', { actorId, signal }),
+}
+
+/* ----------------------------------------------------------------- studio */
+
+export type PublishInput = {
+  title: string
+  description: string
+  categoryId: number | null
+  /** 'FREE' or 'PREMIUM'. */
+  accessType: string
+  /** 'PUBLISHED' for a live title, 'DRAFT' for one nobody can see yet. */
+  status: string
+  durationSeconds: number
+  videoFile: File | null
+  thumbnailFile: File | null
+}
+
+export const studio = {
+  /**
+   * Publish a title, with its file if one was chosen.
+   *
+   * Sent as multipart because the file and the record are one submission: a
+   * record saved without its file is a title that cannot be played, and an
+   * orphaned upload is worse.
+   */
+  publish: (input: PublishInput, actorId: number | null) => {
+    const form = new FormData()
+    form.append('title', input.title)
+    form.append('description', input.description)
+    if (input.categoryId != null) form.append('categoryId', String(input.categoryId))
+    form.append('accessType', input.accessType)
+    form.append('status', input.status)
+    form.append('durationSeconds', String(Math.round(input.durationSeconds)))
+    if (input.videoFile) form.append('videoFile', input.videoFile)
+    if (input.thumbnailFile) form.append('thumbnailFile', input.thumbnailFile)
+    return submitForm<{ id: number; message: string }>('/api/videos', form, actorId)
+  },
+
+  update: (
+    id: number,
+    changes: {
+      title?: string
+      description?: string
+      categoryId?: number | null
+      accessType?: string
+      status?: string
+    },
+    actorId: number | null,
+  ) => request<{ message: string }>(`/api/videos/${id}`, { method: 'PUT', body: changes, actorId }),
+
+  remove: (id: number, actorId: number | null) =>
+    request<{ message: string }>(`/api/videos/${id}`, { method: 'DELETE', actorId }),
 }
 
 /** The numeric id behind a `Video`, or null for a row that is not a server row. */

@@ -379,7 +379,7 @@ export function Signup() {
         email: email.trim(),
         password: pw,
         displayName: name.trim() || clean,
-        role: creator ? 'CONTENT_CREATOR' : 'REGISTERED_VIEWER',
+        roleType: creator ? 'CONTENT_CREATOR' : 'REGISTERED_VIEWER',
       })
       nav('/onboarding')
     } catch (cause) {

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { catalogue } from './catalogue'
 import { actorId as actorIdOf } from './session'
-import { useSession } from '@/components/Shell'
+import { useSession } from './session-context'
 
 /**
  * Everything the viewer accumulates: who they follow, what they saved, what they

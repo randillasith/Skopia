@@ -102,6 +102,32 @@ export async function upload<T>(path: string, file: File, actorId: number | null
 }
 
 /**
+ * Post a form the caller has assembled, for endpoints that take several files
+ * and fields at once. Like `upload`, it must not set Content-Type: only the
+ * browser knows the multipart boundary it generated.
+ */
+export async function submitForm<T>(
+  path: string,
+  form: FormData,
+  actorId: number | null,
+  method = 'POST',
+): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (actorId != null) headers[ACTOR_HEADER] = String(actorId)
+
+  let response: Response
+  try {
+    response = await fetch(path, { method, headers, body: form })
+  } catch {
+    throw new ApiError(0, 'Could not reach Skopia. Check that the API is running.')
+  }
+
+  if (!response.ok) throw await toError(response)
+  const text = await response.text()
+  return (text ? JSON.parse(text) : undefined) as T
+}
+
+/**
  * Turn a failed response into an `ApiError`.
  *
  * The API answers with a JSON body carrying a human-readable message, but a

@@ -14,7 +14,7 @@ import {
 import { ApiError } from './api'
 import { catalogue, toVideo, type ServerCategory, type ServerComment } from './catalogue'
 import type { Video } from './data'
-import { useSession } from '@/components/Shell'
+import { useSession } from './session-context'
 import { actorId as actorIdOf } from './session'
 
 type CatalogueValue = {
@@ -293,4 +293,49 @@ export function useComments(videoId: number | null) {
   )
 
   return { comments, loading, error, post, remove }
+}
+
+/**
+ * The signed-in creator's own shelf.
+ *
+ * Asked for with `scope=mine` so the server decides what belongs to this
+ * account, rather than this page matching creator names — which is what made
+ * every creator see the same two studios' videos as though they were theirs.
+ */
+export function useMyVideos() {
+  const { viewer, resolving } = useSession()
+  const actor = actorIdOf(viewer)
+
+  const [videos, setVideos] = useState<Video[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [nonce, setNonce] = useState(0)
+
+  useEffect(() => {
+    if (resolving) return
+    if (actor == null) {
+      setVideos([])
+      setLoading(false)
+      return
+    }
+    const abort = new AbortController()
+    setLoading(true)
+    catalogue
+      .videos({ scope: 'mine' }, actor, abort.signal)
+      .then((rows) => {
+        setVideos(rows.map(toVideo))
+        setError(null)
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'Could not load your videos.')
+        setVideos([])
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoading(false)
+      })
+    return () => abort.abort()
+  }, [actor, resolving, nonce])
+
+  return { videos, loading, error, refresh: () => setNonce((n) => n + 1) }
 }
