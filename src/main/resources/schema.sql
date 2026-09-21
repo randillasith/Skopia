@@ -347,16 +347,39 @@ CREATE TABLE IF NOT EXISTS announcements (
     FOREIGN KEY (published_by) REFERENCES administrators(employee_no) ON DELETE CASCADE
 );
 
--- Advertisement Management
+-- =============================================================================
+-- Advertisement Management (FR5)
+--
+-- Four columns here are not on the EER diagram, and each earns its place:
+--   ad_campaigns.advertiser   the diagram assumed the officer's own department
+--                             was the advertiser; the campaign list is
+--                             unreadable without naming who a booking runs for.
+--   advertisements.ad_status  FR5 asks for Draft / Active / Inactive per
+--                             advertisement, which the diagram had only at
+--                             campaign level.
+--   ad_impressions.clicked_at when a click happened. was_clicked alone gives a
+--                             CTR but no click trend.
+--   created_at / updated_at   ordinary audit columns.
+-- =============================================================================
+
 CREATE TABLE IF NOT EXISTS ad_campaigns (
     campaign_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     created_by BIGINT NOT NULL,
     campaign_name VARCHAR(100) NOT NULL,
+    advertiser VARCHAR(150),
     start_date DATETIME NOT NULL,
     end_date DATETIME NOT NULL,
-    budget DECIMAL(12, 2) NOT NULL,
-    campaign_status VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED',
-    FOREIGN KEY (created_by) REFERENCES marketing_officers(employee_no) ON DELETE CASCADE
+    budget DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    -- DRAFT | SCHEDULED | ACTIVE | PAUSED | EXPIRED | ARCHIVED
+    campaign_status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES marketing_officers(employee_no) ON DELETE CASCADE,
+    -- The serving query filters on status and intersects the window; without
+    -- these it is a full scan on every pre-roll.
+    INDEX ix_campaign_status (campaign_status),
+    INDEX ix_campaign_window (start_date, end_date),
+    CONSTRAINT ck_campaign_window CHECK (end_date > start_date)
 );
 
 CREATE TABLE IF NOT EXISTS advertisements (
@@ -364,33 +387,63 @@ CREATE TABLE IF NOT EXISTS advertisements (
     campaign_id BIGINT NOT NULL,
     ad_title VARCHAR(100) NOT NULL,
     media_url VARCHAR(500) NOT NULL,
-    ad_type VARCHAR(50) NOT NULL,
-    ad_duration INT NOT NULL, -- in seconds
-    click_url VARCHAR(500),
-    FOREIGN KEY (campaign_id) REFERENCES ad_campaigns(campaign_id) ON DELETE CASCADE
+    ad_type VARCHAR(50) NOT NULL,              -- VIDEO | IMAGE
+    ad_duration INT NOT NULL DEFAULT 0,        -- seconds; 0 for a still image
+    click_url VARCHAR(500),                    -- NULL means not clickable
+    ad_status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',  -- DRAFT | ACTIVE | INACTIVE
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (campaign_id) REFERENCES ad_campaigns(campaign_id) ON DELETE CASCADE,
+    INDEX ix_ad_campaign (campaign_id),
+    INDEX ix_ad_status (ad_status)
 );
 
+-- Targeting. Exactly one of video_id and category_id is set: both would be
+-- ambiguous about what the placement targets, neither would target everything
+-- by accident. MySQL cannot express "exactly one" as a FOREIGN KEY, so the
+-- CHECK below is the schema-level half and AdPlacementService is the other.
 CREATE TABLE IF NOT EXISTS ad_placements (
     placement_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     ad_id BIGINT NOT NULL,
     video_id BIGINT,
     category_id BIGINT,
-    slot_position VARCHAR(50) NOT NULL DEFAULT 'PREROLL',
+    slot_position VARCHAR(50) NOT NULL DEFAULT 'PREROLL',  -- PREROLL | MIDROLL | POSTROLL | OVERLAY | LOBBY
     priority INT NOT NULL DEFAULT 1,
     active_from DATETIME NOT NULL,
     active_to DATETIME NOT NULL,
     FOREIGN KEY (ad_id) REFERENCES advertisements(ad_id) ON DELETE CASCADE,
     FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE CASCADE
+    FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE CASCADE,
+    INDEX ix_placement_video (video_id),
+    INDEX ix_placement_category (category_id),
+    INDEX ix_placement_slot (slot_position),
+    CONSTRAINT ck_placement_one_target
+        CHECK ((video_id IS NULL) <> (category_id IS NULL)),
+    -- The same creative twice in one slot on one title is a double billing.
+    UNIQUE KEY uq_placement_video (ad_id, video_id, slot_position),
+    UNIQUE KEY uq_placement_category (ad_id, category_id, slot_position)
 );
 
+-- Delivery log. A click lives on the impression it belongs to rather than in a
+-- table of its own: a click with no preceding impression cannot happen, and
+-- keeping them together makes CTR a count over one set of rows.
 CREATE TABLE IF NOT EXISTS ad_impressions (
     impression_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     placement_id BIGINT NOT NULL,
-    viewer_id BIGINT,
+    viewer_id BIGINT,                          -- NULL for a signed-out viewer
+    -- The title it ran against. Recorded separately from the placement because a
+    -- category placement names no title, and "which titles did this campaign run
+    -- against?" is a question only this column can answer.
+    video_id BIGINT,
     shown_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     was_clicked BOOLEAN NOT NULL DEFAULT FALSE,
+    clicked_at DATETIME,
     device_type VARCHAR(50),
     FOREIGN KEY (placement_id) REFERENCES ad_placements(placement_id) ON DELETE CASCADE,
-    FOREIGN KEY (viewer_id) REFERENCES registered_viewers(viewer_id) ON DELETE SET NULL
+    FOREIGN KEY (viewer_id) REFERENCES registered_viewers(viewer_id) ON DELETE SET NULL,
+    FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE SET NULL,
+    INDEX ix_impression_placement (placement_id),
+    INDEX ix_impression_video (video_id),
+    -- Every dashboard query is a range on shown_at.
+    INDEX ix_impression_shown_at (shown_at)
 );
