@@ -646,16 +646,38 @@ export function Watch() {
   }, [v?.id, numericId])
 
   // Where you stopped is written back as you watch, so picking the title up on
-  // another device lands in the right place. Once a minute is often enough to be
-  // useful and rare enough not to be a write per second.
-  const lastSaved = useRef(0)
+  // another device lands in the right place — and because that write is what
+  // puts the title in the viewer's history.
+  //
+  // The first second of playback is written immediately rather than waited for:
+  // history that only appears after half a minute means a short title is never
+  // recorded at all. After that it settles to twice a minute, which is often
+  // enough to be useful and rare enough not to be a write per second.
+  const lastSaved = useRef(-1)
+  // `at` as of the last render, readable from the cleanup below without making
+  // that effect re-run on every tick of the clock.
+  const lastWatched = useRef(0)
+  lastWatched.current = at
+
   useEffect(() => {
     if (numericId == null || !viewer || at <= 0) return
-    if (at - lastSaved.current < 60 && at > lastSaved.current) return
+    const first = lastSaved.current < 0
+    if (!first && Math.abs(at - lastSaved.current) < 30) return
     lastSaved.current = at
     const total = v ? seconds(v.runtime) : 0
-    catalogue.saveProgress(numericId, at, total > 0 && at >= total - 5, actor).catch(() => {})
+    catalogue.saveProgress(numericId, at, total > 0 && at >= total - 2, actor).catch(() => {})
   }, [at, numericId, actor, viewer])
+
+  // Leaving the page is the most important moment to record: it is where the
+  // viewer actually stopped, and it is the position that will be resumed from.
+  useEffect(() => {
+    if (numericId == null || !viewer) return
+    return () => {
+      const stopped = lastWatched.current
+      if (stopped <= 0) return
+      catalogue.saveProgress(numericId, stopped, false, actor).catch(() => {})
+    }
+  }, [numericId, actor, viewer])
 
   if (loading || error || !v) {
     return (
