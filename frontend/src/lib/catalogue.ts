@@ -198,14 +198,19 @@ export const catalogue = {
   deleteComment: (commentId: number, actorId: number | null) =>
     request<{ message: string }>(`/api/comments/${commentId}`, { method: 'DELETE', actorId }),
 
+  /**
+   * Both toggles answer with `active` — whether the flag is now on — and the
+   * like also returns the new total. The names are the server's; they are
+   * translated at the call site rather than guessed at here.
+   */
   toggleLike: (videoId: number, actorId: number | null) =>
-    request<{ liked: boolean; likeCount: number }>(`/api/videos/${videoId}/like`, {
+    request<{ active: boolean; count: number }>(`/api/videos/${videoId}/like`, {
       method: 'POST',
       actorId,
     }),
 
   toggleSaved: (videoId: number, actorId: number | null) =>
-    request<{ saved: boolean }>(`/api/videos/${videoId}/save`, { method: 'POST', actorId }),
+    request<{ active: boolean }>(`/api/videos/${videoId}/save`, { method: 'POST', actorId }),
 
   countView: (videoId: number) =>
     request<{ message: string }>(`/api/videos/${videoId}/view`, { method: 'POST' }),

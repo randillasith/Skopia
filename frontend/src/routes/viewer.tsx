@@ -678,9 +678,9 @@ export function Watch() {
     if (!viewer) return nav('/login')
     if (numericId == null) return
     try {
-      const { liked, likeCount } = await catalogue.toggleLike(numericId, actor)
-      setVideo((current) => (current ? { ...current, liked, likes: likeCount } : current))
-      toast({ title: liked ? 'Liked' : 'Like removed' })
+      const { active, count } = await catalogue.toggleLike(numericId, actor)
+      setVideo((current) => (current ? { ...current, liked: active, likes: count } : current))
+      toast({ title: active ? 'Liked' : 'Like removed' })
     } catch (cause) {
       toast({ title: cause instanceof ApiError ? cause.message : 'Could not record that.', tone: 'bad' })
     }

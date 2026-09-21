@@ -275,10 +275,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         if (Number.isFinite(numeric)) {
           catalogue
             .toggleSaved(numeric, actor)
-            .then(({ saved }) =>
+            .then(({ active }) =>
               setS((p) => ({
                 ...p,
-                watchLater: saved
+                watchLater: active
                   ? [...new Set([...p.watchLater, id])]
                   : p.watchLater.filter((x) => x !== id),
               })),
