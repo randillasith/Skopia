@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <meta content="web_dashboard" name="shell-type"/>
+  <title>Skopia — Lossless Cinema & User Management</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect"/>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=swap" rel="stylesheet"/>
+  <style>
+    @layer base {
+      html, body { margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+      main > :first-child { margin-top: 0 !important; }
+      main > :last-child { margin-bottom: 0 !important; }
+    }
+    ::-webkit-scrollbar { display: none; }
+  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container-highest": "#34343a",
+            "primary-container": "#8083ff",
+            "on-primary-fixed": "#07006c",
+            "primary-fixed": "#e1e0ff",
+            "error": "#ffb4ab",
+            "tertiary-container": "#f751a1",
+            "on-surface-variant": "#c7c4d7",
+            "on-primary": "#1000a9",
+            "on-tertiary": "#640039",
+            "on-background": "#e3e1e9",
+            "on-tertiary-fixed": "#3e0022",
+            "on-secondary": "#3c0091",
+            "on-primary-fixed-variant": "#2f2ebe",
+            "surface-dim": "#121318",
+            "on-error": "#690005",
+            "on-tertiary-container": "#570032",
+            "inverse-primary": "#494bd6",
+            "tertiary": "#ffb0cd",
+            "tertiary-fixed": "#ffd9e4",
+            "on-tertiary-fixed-variant": "#8c0053",
+            "on-surface": "#e3e1e9",
+            "on-secondary-fixed-variant": "#5516be",
+            "background": "#121318",
+            "secondary-fixed": "#e9ddff",
+            "tertiary-fixed-dim": "#ffb0cd",
+            "surface-variant": "#34343a",
+            "surface-tint": "#c0c1ff",
+            "secondary-container": "#571bc1",
+            "secondary": "#d0bcff",
+            "inverse-on-surface": "#2f3036",
+            "secondary-fixed-dim": "#d0bcff",
+            "surface": "#121318",
+            "inverse-surface": "#e3e1e9",
+            "outline": "#908fa0",
+            "on-error-container": "#ffdad6",
+            "outline-variant": "#464554",
+            "primary-fixed-dim": "#c0c1ff",
+            "primary": "#c0c1ff",
+            "surface-container-high": "#292a2f",
+            "surface-container": "#1e1f25",
+            "on-secondary-fixed": "#23005c",
+            "surface-bright": "#38393f",
+            "surface-container-low": "#1a1b21",
+            "surface-container-lowest": "#0d0e13",
+            "error-container": "#93000a",
+            "on-primary-container": "#0d0096",
+            "on-secondary-container": "#c4abff"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          spacing: {
+            "margin": "2rem",
+            "space-xs": "0.25rem",
+            "gutter": "1.25rem",
+            "space-lg": "1.5rem",
+            "space-xl": "2.5rem",
+            "space-sm": "0.5rem",
+            "space-md": "1rem"
+          },
+          fontFamily: {
+            "body-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "label-lg": ["Inter"],
+            "headline-sm": ["Plus Jakarta Sans"],
+            "headline-md": ["Plus Jakarta Sans"],
+            "body-lg": ["Inter"],
+            "headline-lg": ["Plus Jakarta Sans"],
+            "label-sm": ["Inter"],
+            "headline-xl": ["Plus Jakarta Sans"],
+            "label-md": ["Inter"]
+          },
+          fontSize: {
+            "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+            "body-sm": ["12px", { lineHeight: "18px", fontWeight: "400" }],
+            "label-lg": ["14px", { lineHeight: "20px", fontWeight: "600" }],
+            "headline-md": ["28px", { lineHeight: "36px", fontWeight: "700" }],
+            "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+            "headline-lg": ["36px", { lineHeight: "44px", fontWeight: "700" }],
+            "label-sm": ["10px", { lineHeight: "14px", fontWeight: "700" }],
+            "headline-xl": ["48px", { lineHeight: "56px", fontWeight: "800" }],
+            "label-md": ["12px", { lineHeight: "16px", fontWeight: "600" }]
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-background font-body-md text-on-surface selection:bg-secondary-container selection:text-on-secondary-container antialiased min-h-screen">
+
+  <!-- TOP GLOBAL HEADER BAR -->
+  <header class="fixed top-0 left-0 right-0 h-16 z-50 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.4)]">
+    <div class="h-16 w-full px-space-lg flex items-center justify-between gap-space-lg">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-space-md min-w-[220px] cursor-pointer" onclick="navigateTo('home')">
+        <span class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container font-headline-sm font-extrabold shadow-md">S</span>
+        <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface flex items-center gap-1.5">
+          Skopia<span class="text-primary text-body-sm font-label-md px-1.5 py-0.5 rounded bg-surface-container-high tracking-wider uppercase">TV</span>
+        </span>
+      </div>
+
+      <!-- Global Search Bar -->
+      <div class="flex-1 max-w-2xl mx-auto">
+        <div class="relative flex items-center w-full">
+          <span class="material-symbols-outlined absolute left-4 text-outline text-[20px] pointer-events-none">search</span>
+          <input id="globalSearch" class="w-full h-10 pl-11 pr-12 rounded-full bg-surface-container-low text-on-surface placeholder:text-outline text-body-md font-body-md focus:outline-none focus:bg-surface-container transition-all shadow-[0_2px_12px_rgba(0,0,0,0.2)]" placeholder="Search uploaded videos, music, tech, politics..." type="text"/>
+          <div class="absolute right-3 px-1.5 py-0.5 rounded bg-surface-container-highest text-outline text-label-sm font-label-sm uppercase tracking-wider">/</div>
+        </div>
+      </div>
+
+      <!-- Dynamic Auth Header Controls -->
+      <div class="flex items-center gap-space-sm justify-end min-w-[280px]" id="header-user-controls">
+        
+        <!-- Notification Bell Dropdown (Always visible for both guest and logged in) -->
+        <div class="relative" id="header-notification-center">
+          <button id="notification-bell-btn" type="button" aria-label="Notifications" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors relative cursor-pointer" onclick="toggleNotificationMenu()">
+            <span class="material-symbols-outlined text-[22px]">notifications</span>
+            <span id="notification-badge" class="hidden absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-tertiary-container ring-2 ring-surface animate-pulse"></span>
+          </button>
+
+          <!-- Notification Dropdown Panel -->
+          <div id="notification-dropdown" class="absolute right-0 top-full mt-2 hidden flex-col bg-surface-container-high rounded-2xl shadow-2xl z-50 w-80 sm:w-96 border border-surface-container-highest overflow-hidden">
+            <div class="px-4 py-3 bg-surface-container border-b border-surface-container-highest flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-[20px]">notifications</span>
+                <span class="font-bold text-sm text-on-surface">Notifications</span>
+                <span id="notification-count-tag" class="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[11px] font-bold">0</span>
+              </div>
+              <button type="button" onclick="clearAllNotifications()" class="text-xs text-outline hover:text-primary transition-colors cursor-pointer">Clear all</button>
+            </div>
+            <div id="notification-items-container" class="max-h-80 overflow-y-auto flex flex-col p-2 gap-1">
+              <!-- Dynamically populated notifications -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Guest State (Default) -->
+        <div class="flex items-center gap-space-sm" id="header-guest-controls">
+          <button class="flex items-center gap-space-xs px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md hover:bg-primary hover:text-on-primary shadow-sm transition-all cursor-pointer" onclick="openUploadModal()">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            <span>Upload</span>
+          </button>
+          <a class="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-high text-secondary hover:bg-surface-container-highest hover:text-on-surface font-label-md text-label-md transition-all cursor-pointer" onclick="navigateTo('login')">
+            <span class="material-symbols-outlined text-[16px]">workspace_premium</span>
+            <span>Explore Plans</span>
+          </a>
+          <a class="px-4 py-2 rounded-full text-on-surface hover:text-primary hover:bg-surface-container-high font-label-lg text-label-lg transition-all cursor-pointer" onclick="navigateTo('login')">Sign In</a>
+          <a class="flex items-center gap-1.5 px-5 py-2 rounded-full bg-secondary-container text-on-secondary-container hover:bg-primary-container hover:text-on-primary-container font-label-lg text-label-lg transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)] cursor-pointer" href="/register.html">
+            <span>Register</span>
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </a>
+          <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-pointer" onclick="navigateTo('login')">
+            <span class="material-symbols-outlined text-on-primary text-[18px]">person</span>
+          </div>
+        </div>
+
+        <!-- Logged In State -->
+        <div class="hidden items-center gap-space-md" id="header-auth-controls">
+          <button class="hidden sm:flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md hover:bg-primary hover:text-on-primary shadow-md transition-all cursor-pointer" onclick="openUploadModal()">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            <span>Upload</span>
+          </button>
+          <!-- Dynamic Tier Pill -->
+          <div class="flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-high ring-1 ring-outline-variant/30" id="active-tier-pill">
+            <span class="material-symbols-outlined text-outline text-[16px]" id="active-tier-icon">person</span>
+            <span class="font-label-sm text-label-sm text-on-surface-variant" id="active-tier-text">Standard Pass</span>
+          </div>
+          <div class="relative">
+            <button class="flex items-center gap-space-xs p-0.5 rounded-full hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer" onclick="toggleProfileDropdown()">
+              <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold text-sm shadow-sm" id="user-avatar-initial">N</div>
+            </button>
+            <div class="absolute right-0 top-full mt-2 hidden flex-col bg-surface-container-high rounded-xl p-2 shadow-2xl z-50 min-w-[200px] border border-surface-container-highest" id="profile-dropdown">
+              <div class="px-space-sm py-space-xs border-b border-surface-container-highest mb-1">
+                <div class="font-label-md text-label-md font-bold text-on-surface" id="dropdown-user-name">User Name</div>
+                <div class="font-body-sm text-body-sm text-outline" id="dropdown-user-email">user@skopia.media</div>
+                <span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm" id="dropdown-user-role">REGISTERED_VIEWER</span>
+              </div>
+              <a class="flex items-center gap-2 px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface hover:bg-surface-container rounded cursor-pointer" href="/profile.html">
+                <span class="material-symbols-outlined text-[16px]">account_circle</span> View Profile
+              </a>
+              <a class="flex items-center gap-2 px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface hover:bg-surface-container rounded cursor-pointer" onclick="navigateTo('admin-users'); toggleProfileDropdown();">
+                <span class="material-symbols-outlined text-[16px]">manage_accounts</span> User Management
+              </a>
+              <a class="flex items-center gap-2 px-space-sm py-space-xs font-label-sm text-label-sm text-on-surface hover:bg-surface-container rounded cursor-pointer" onclick="navigateTo('studio'); toggleProfileDropdown();">
+                <span class="material-symbols-outlined text-[16px]">video_settings</span> Creator Studio
+              </a>
+              <a class="flex items-center gap-2 px-space-sm py-space-xs font-label-sm text-label-sm text-error hover:bg-surface-container rounded cursor-pointer" onclick="signOutUser(); toggleProfileDropdown();">
+                <span class="material-symbols-outlined text-[16px]">logout</span> Sign Out
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- FIXED LEFT SIDEBAR -->
+  <aside class="fixed left-0 top-16 bottom-0 w-64 bg-surface-container-low/95 backdrop-blur-xl z-40 flex flex-col justify-between overflow-y-auto">
+    <div class="py-space-md px-space-sm flex flex-col gap-space-md">
+      
+      <!-- Discover Nav -->
+      <div class="px-space-sm">
+        <div class="text-label-sm font-label-sm text-outline uppercase tracking-wider px-3 mb-1">Discover</div>
+        <nav class="flex flex-col gap-0.5">
+          <a class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg transition-all bg-surface-container-high text-primary font-label-lg cursor-pointer" data-nav="home" onclick="navigateTo('home')">
+            <span class="material-symbols-outlined text-[20px]">home</span><span>Home</span>
+          </a>
+          <a class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" data-nav="explore" onclick="navigateTo('explore')">
+            <span class="material-symbols-outlined text-[20px]">explore</span><span>Explore</span>
+          </a>
+          <a class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" data-nav="trending" onclick="navigateTo('trending')">
+            <span class="material-symbols-outlined text-[20px]">local_fire_department</span><span>Trending</span>
+          </a>
+          <a class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" data-nav="admin-users" onclick="navigateTo('admin-users')">
+            <span class="material-symbols-outlined text-[20px] text-secondary">manage_accounts</span><span>User Management</span>
+          </a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-primary hover:bg-surface-container transition-all font-label-md text-label-md cursor-pointer mt-1" onclick="openUploadModal()">
+            <span class="material-symbols-outlined text-[20px]">upload_file</span><span class="font-semibold">Upload Video</span>
+          </a>
+        </nav>
+      </div>
+
+      <!-- Guest Mode Banner / User Account Status -->
+      <div class="mx-space-sm p-space-md rounded-xl bg-surface-container/70 shadow-[0_4px_16px_rgba(0,0,0,0.3)] flex flex-col gap-space-sm" id="sidebar-account-box">
+        <div class="flex items-center gap-2 text-primary">
+          <span class="material-symbols-outlined text-[20px]">lock_open</span>
+          <span class="font-label-md text-label-md tracking-tight text-on-surface">Guest Mode Active</span>
+        </div>
+        <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">Sign in to track watch history, save to Watchlist, and manage permissions.</p>
+        <a class="w-full text-center py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-primary hover:text-on-surface font-label-md text-label-md transition-all cursor-pointer" onclick="navigateTo('login')">Sign In</a>
+      </div>
+
+      <!-- Dynamic Categories Filter List -->
+      <div class="px-space-sm">
+        <div class="text-label-sm font-label-sm text-outline uppercase tracking-wider px-3 mb-1">Categories</div>
+        <nav class="flex flex-col gap-0.5" id="sidebar-categories-nav">
+          <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" onclick="filterByCategory('Music')">
+            <span class="material-symbols-outlined text-[20px]">music_note</span><span>Music</span>
+          </a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" onclick="filterByCategory('Politics & Current Affairs')">
+            <span class="material-symbols-outlined text-[20px]">campaign</span><span>Politics & Current Affairs</span>
+          </a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" onclick="filterByCategory('Tech & AI')">
+            <span class="material-symbols-outlined text-[20px]">memory</span><span>Tech & AI</span>
+          </a>
+          <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all font-label-md text-label-md cursor-pointer" onclick="filterByCategory('Education')">
+            <span class="material-symbols-outlined text-[20px]">school</span><span>Education</span>
+          </a>
+        </nav>
+      </div>
+
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="p-space-md mt-auto flex flex-col gap-2 bg-surface-container-lowest/50">
+      <div class="flex items-center gap-3 text-body-sm font-body-sm text-outline pt-1">
+        <a class="hover:text-on-surface-variant transition-colors cursor-pointer" onclick="alert('Skopia Terms of Service 2026')">Terms</a>
+        <span>•</span>
+        <a class="hover:text-on-surface-variant transition-colors cursor-pointer" onclick="alert('Skopia Privacy Policy')">Privacy</a>
+        <span>•</span>
+        <span>© 2026 Skopia</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEW CANVAS -->
+  <div class="pl-64">
+    <main class="relative pt-16 min-h-screen w-full bg-background" id="main-content">
+
+      <!-- ==================================================== -->
+      <!-- VIEW 1: UNREGISTERED / GUEST HOME FEED (#home) -->
+      <!-- ==================================================== -->
+      <section class="view-panel" id="view-home">
+        <div class="flex flex-col w-full">
+          
+          <!-- Sticky Sub-Header Callout Banner -->
+          <div class="sticky top-16 z-30 px-margin py-3 bg-surface-container-lowest/80 backdrop-blur-md" id="sub-header-callout">
+            <div class="max-w-7xl mx-auto rounded-xl p-4 bg-surface-container/90 shadow-[0_8px_30px_rgb(0,0,0,0.45)] flex flex-col md:flex-row items-center justify-between gap-4" id="callout-card">
+              <div class="flex items-center gap-3.5 min-w-0">
+                <div class="w-10 h-10 rounded-lg bg-secondary-container/30 flex items-center justify-center shrink-0 text-secondary" id="callout-icon-wrap">
+                  <span class="material-symbols-outlined text-[24px]">tv_gen</span>
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-headline-sm text-headline-sm text-on-surface" id="callout-title">Welcome to Skopia</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant truncate max-w-2xl" id="callout-desc">
+                    Stream free public broadcasts instantly or register to unlock exclusive 4K Hubs, save watch history, and join discussions.
+                  </p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 shrink-0 w-full md:w-auto justify-end" id="callout-action-btns">
+                <a class="px-4 py-2 rounded-full font-label-md text-label-md text-on-surface hover:text-primary hover:bg-surface-container-high transition-colors cursor-pointer" onclick="navigateTo('login')">Sign In</a>
+                <a class="px-5 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container hover:text-on-primary-container transition-all shadow-[0_0_20px_rgba(192,193,255,0.25)] flex items-center gap-1.5 cursor-pointer" onclick="navigateTo('login')">
+                  <span>Create Free Account</span>
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Feed Container -->
+          <div class="px-margin py-space-lg flex flex-col gap-space-xl max-w-7xl mx-auto w-full">
+            
+            <!-- Category & Filter Strip -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="flex items-center gap-2 overflow-x-auto pb-1" id="feed-filter-chips">
+                <button class="filter-chip px-4 py-1.5 rounded-full font-label-md text-label-md bg-on-surface text-surface-container-lowest font-semibold shrink-0 shadow-sm cursor-pointer" onclick="filterFeedByTag('all')">All Content</button>
+                <button class="filter-chip px-4 py-1.5 rounded-full font-label-md text-label-md bg-surface-container-highest text-primary hover:bg-surface-bright transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer" onclick="filterFeedByTag('free')">
+                  <span class="w-2 h-2 rounded-full bg-tertiary-container animate-ping"></span>
+                  <span>Free to Watch</span>
+                </button>
+                <button class="filter-chip px-4 py-1.5 rounded-full font-label-md text-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors shrink-0 cursor-pointer" onclick="filterFeedByTag('Music')">Music</button>
+                <button class="filter-chip px-4 py-1.5 rounded-full font-label-md text-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors shrink-0 cursor-pointer" onclick="filterFeedByTag('Politics & Current Affairs')">Politics & Current Affairs</button>
+                <button class="filter-chip px-4 py-1.5 rounded-full font-label-md text-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors shrink-0 cursor-pointer" onclick="filterFeedByTag('Tech & AI')">Tech & AI</button>
+                <button class="filter-chip px-4 py-1.5 rounded-full font-label-md text-label-md bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors shrink-0 cursor-pointer" onclick="filterFeedByTag('Education')">Education</button>
+              </div>
+              <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low shrink-0 self-start md:self-auto">
+                <span class="material-symbols-outlined text-[16px] text-tertiary">public</span>
+                <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Public Access Filter Active</span>
+              </div>
+            </div>
+
+            <!-- Hero Featured Spotlight (Dynamic from Uploaded Videos) -->
+            <div class="relative w-full rounded-2xl overflow-hidden bg-surface-container-lowest shadow-[0_20px_50px_rgba(0,0,0,0.6)]" id="hero-spotlight-card"></div>
+
+            <!-- SECTION 1: Free To Watch Now (Dynamic Uploaded Videos) -->
+            <div class="flex flex-col gap-space-md">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">Free to Watch Now</h2>
+                    <span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-secondary-container/40 text-secondary font-bold uppercase tracking-wider">Public Access</span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Uploaded public videos on Skopia. Click any card to play immediately.</p>
+                </div>
+              </div>
+
+              <!-- Dynamic Free Videos Grid -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter" id="free-videos-grid"></div>
+            </div>
+
+            <!-- Category Notice Bar -->
+            <div class="p-space-md rounded-xl bg-surface-container/60 shadow-[0_4px_16px_rgba(0,0,0,0.3)] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0 text-primary">
+                  <span class="material-symbols-outlined text-[18px]">info</span>
+                </div>
+                <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+                  <strong class="text-on-surface font-semibold">How access works on Skopia:</strong> Categories contain open public free streams alongside subscriber masterclasses.
+                </p>
+              </div>
+              <a class="px-4 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-secondary hover:text-on-surface font-label-md text-label-md whitespace-nowrap transition-colors cursor-pointer" onclick="navigateTo('login')">View Pricing Tiers</a>
+            </div>
+
+            <!-- SECTION 2: Subscriber Exclusive Hubs (Premium Uploaded Videos) -->
+            <div class="flex flex-col gap-space-md">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">Subscriber Exclusive Hubs</h2>
+                    <span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container font-bold uppercase tracking-wider flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">lock</span> Tier Gated
+                    </span>
+                  </div>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Previews of premium uploaded streams. Sign in with active pass to play.</p>
+                </div>
+              </div>
+
+              <!-- Dynamic Premium Videos Grid -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter" id="premium-videos-grid"></div>
+            </div>
+
+            <!-- Viewer Privileges Comparison Table -->
+            <div class="p-space-xl rounded-2xl bg-surface-container-low shadow-[0_12px_40px_rgba(0,0,0,0.5)] flex flex-col gap-space-lg">
+              <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                  <span class="font-label-sm text-label-sm text-primary uppercase tracking-wider font-bold">Why Register an Account?</span>
+                  <h2 class="font-headline-md text-headline-md text-on-surface mt-1">Compare Viewer Privileges</h2>
+                </div>
+                <a class="px-5 py-2.5 rounded-full bg-primary text-on-primary font-label-lg text-label-lg hover:bg-primary-container hover:text-on-primary-container transition-all shadow-[0_0_20px_rgba(192,193,255,0.3)] cursor-pointer" onclick="navigateTo('login')">Create Free Account</a>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="bg-surface-container">
+                      <th class="p-4 rounded-l-xl font-label-md text-label-md text-outline uppercase tracking-wider">Features</th>
+                      <th class="p-4 font-label-md text-label-md text-on-surface-variant text-center"><span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface">Guest</span></th>
+                      <th class="p-4 font-label-md text-label-md text-primary text-center"><span class="px-2.5 py-1 rounded-full bg-surface-container-high text-primary">Registered (Free)</span></th>
+                      <th class="p-4 rounded-r-xl font-label-md text-label-md text-secondary text-center"><span class="px-2.5 py-1 rounded-full bg-secondary-container/40 text-secondary">Premium Pass</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="bg-surface-container-low">
+                      <td class="p-4 font-body-md text-body-md text-on-surface">Browse & Stream Free Public Videos</td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                    </tr>
+                    <tr class="bg-surface-container-low/60">
+                      <td class="p-4 font-body-md text-body-md text-on-surface">Watch History & Saved Playlists</td>
+                      <td class="p-4 text-center text-outline"><span class="material-symbols-outlined text-[18px]">lock</span></td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                    </tr>
+                    <tr class="bg-surface-container-low">
+                      <td class="p-4 font-body-md text-body-md text-on-surface">Comments, Likes & Creator Interactions</td>
+                      <td class="p-4 text-center text-outline"><span class="material-symbols-outlined text-[18px]">lock</span></td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                      <td class="p-4 text-center text-tertiary"><span class="material-symbols-outlined text-[20px]">check_circle</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== -->
+      <!-- VIEW 2: VIDEO THEATER WATCH PANEL (#watch) -->
+      <!-- ==================================================== -->
+      <section class="view-panel hidden" id="view-theater"></section>
+
+      <!-- ==================================================== -->
+      <!-- VIEW 3: USER MANAGEMENT DASHBOARD (#admin-users) -->
+      <!-- ==================================================== -->
+      <section class="view-panel hidden" id="view-admin-users"></section>
+
+      <!-- ==================================================== -->
+      <!-- VIEW 4: MEMBER LOGIN & REGISTRATION PORTAL (#login) -->
+      <!-- ==================================================== -->
+      <section class="view-panel hidden" id="view-login">
+        <div class="relative w-full max-w-7xl mx-auto px-margin py-space-xl flex items-center justify-center min-h-[calc(100vh-10rem)]">
+          <div class="absolute -top-24 left-1/4 w-96 h-96 bg-secondary-container/20 rounded-full blur-[120px] pointer-events-none"></div>
+          <div class="absolute -bottom-24 right-1/4 w-[480px] h-[480px] bg-primary-container/15 rounded-full blur-[140px] pointer-events-none"></div>
+
+          <!-- Asymmetric Split Master Frame -->
+          <div class="w-full grid grid-cols-1 lg:grid-cols-12 gap-gutter items-stretch relative z-10">
+            
+            <!-- Left Cinema Showcase Showcase Card (5 cols) -->
+            <div class="hidden lg:flex lg:col-span-5 flex-col justify-between rounded-xl bg-surface-container-lowest relative overflow-hidden shadow-2xl p-space-xl min-h-[680px]">
+              <div class="absolute inset-0 z-0 opacity-45 scale-105 transition-transform duration-1000 hover:scale-100 bg-cover bg-center" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCCOY7L0qVHMiBjme1nrPrE2GeEZFdsROCnLb6mwcxby2mO7p35DhhGn40enXweNjZEKWhpnXhAJmzuUJyKgA9Nm72oelQOKalrrlksGF_xvB9Hem9_ilRAFOp29NNreOshpV33Ou6uUnhC7Ih1--ikMzoQlZsjiuyk-Fk4y37iycTjl_JrXp6iHvlCFd4hz_1ubmCndXlqizr5t2F1GRm2SajneeSBU5oUMWR2puLzcJBzDohvPL5GAw')">
+                <div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/70 to-transparent"></div>
+                <div class="absolute inset-0 bg-gradient-to-r from-surface-container-lowest/80 via-transparent to-surface-container-lowest/40"></div>
+              </div>
+
+              <div class="relative z-10 flex flex-col gap-space-md">
+                <div class="flex items-center justify-between">
+                  <span class="inline-flex items-center gap-space-xs px-space-md py-space-xs rounded-full bg-surface-container-high/80 backdrop-blur-md text-on-surface">
+                    <span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+                    <span class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary">Live Master Premiere</span>
+                  </span>
+                  <span class="font-label-sm text-label-sm uppercase tracking-widest px-space-sm py-space-xs bg-surface-container/60 backdrop-blur-sm rounded text-on-surface-variant">Dolby Vision • 4K</span>
+                </div>
+                <div class="mt-space-lg flex flex-col gap-space-xs">
+                  <span class="font-label-md text-label-md text-primary tracking-widest uppercase font-bold">Featured Hub Premiere</span>
+                  <h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Chronicles of the Deep Orbit</h2>
+                  <p class="font-body-md text-body-md text-on-surface-variant max-w-sm">Original episodic space odyssey captured natively in 65mm IMAX with multi-channel binaural master stems.</p>
+                </div>
+              </div>
+
+              <div class="relative z-10 py-space-md my-auto">
+                <div class="rounded-lg bg-surface-container/70 backdrop-blur-xl p-space-md shadow-lg flex flex-col gap-space-sm">
+                  <div class="flex items-center justify-between">
+                    <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Acoustic & Visual Fidelity</span>
+                    <span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+                  </div>
+                  <div class="flex flex-wrap gap-space-xs pt-space-xs">
+                    <span class="px-space-sm py-space-xs rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface">Dolby Atmos 7.1</span>
+                    <span class="px-space-sm py-space-xs rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface">24-bit Lossless Stems</span>
+                    <span class="px-space-sm py-space-xs rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface">HDR10+ Ultra</span>
+                    <span class="px-space-sm py-space-xs rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface">120 FPS Native</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="relative z-10 flex flex-col gap-space-md">
+                <div class="flex items-center gap-space-md">
+                  <div class="flex -space-x-3 overflow-hidden">
+                    <div class="inline-block h-9 w-9 rounded-full bg-surface-container-highest overflow-hidden shadow-md">
+                      <img class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBt022jOCvQKCx6mPnj8zR4_pXDT3-Dolsr4_JMX8TP2T1LDYwkLmZy8KQW2Huxamv4pgdARvDeyEUyd6Teron1W83cQ8oWCsp8jzsNmKn8qPlESLBeXGNF7TqCdJl5PQFE3Zs892xLMFcybuVHyxDJm8Q_Mw4QpQKYD8fGsmvf3qGH0AkmLWo9bUJe57KwhZsO45eUQC0LWSJSaaZWIju6CBvUMuAYZsuzgpPMqnfPj453gUoSGUOsqQ" alt="Filmmaker avatar"/>
+                    </div>
+                    <div class="inline-block h-9 w-9 rounded-full bg-surface-container-highest overflow-hidden shadow-md">
+                      <img class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCExzLwXsawifeZiapGXUhFlnSMwJcoRGmnO0VScSwHk4IwX6yYh4AhXKimkAnyOMmIIX5-Dj_NWBT7glKdGaw84efKd9AcUYaZvIzXtTC60paQGSD5HeI-rbo1cwxbOHQH_mhGWxpw0YahPANLnatjsUDYXevSg7QWImAS8iVuF06wODSFMFWL-Dt7HbQM4VlChEANK8uZxrU4EEXKqhzh42_d4Y2GvrZKVyvUPTuuKii8Uvk5tLuTAQ" alt="Creative Director avatar"/>
+                    </div>
+                    <div class="inline-block h-9 w-9 rounded-full bg-surface-container-highest overflow-hidden shadow-md">
+                      <img class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAm-ZmxXOqN7cJ3b1jD0_yM8ju5pLSeTyNOigMaiIDiphJ7E9Bx3LVZ0Oq61hbBiAUP9SiuCD8mtouU1E2WY0WomUIh0xTZH22yjH90awvBxcPXqaDUOlwK3ILoLZSLZ15t-C1A0AQYnQWgaEqnyMIOVb8RP4TRTA7mhNC_rhYd19M4SORpNbAU0Fu57ralfmoiCt0hc8NqheytTLf3cjZl06rD5r-tuP-bCs_EXN_WgXklCR3wtJwIMg" alt="Audio Engineer avatar"/>
+                    </div>
+                  </div>
+                  <div class="flex flex-col">
+                    <div class="flex items-center gap-1 text-tertiary">
+                      <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                      <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                      <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                      <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                      <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">star</span>
+                    </div>
+                    <span class="font-body-sm text-body-sm text-on-surface">Join <strong class="text-on-surface font-semibold">450K+</strong> Cinema Aficionados</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between pt-space-sm text-on-surface-variant font-body-sm text-body-sm">
+                  <span>VIP Master Vault • Live Creator Channels</span>
+                  <span class="font-label-sm text-label-sm uppercase text-primary font-semibold">Instant Access</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Focal Login Container (7 cols) -->
+            <div class="col-span-1 lg:col-span-7 flex flex-col justify-center">
+              <div class="w-full max-w-xl mx-auto rounded-xl bg-surface-container-low/90 backdrop-blur-2xl p-space-lg md:p-space-xl shadow-2xl flex flex-col gap-space-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary-container to-transparent opacity-75"></div>
+                
+                <div class="flex flex-col gap-space-xs">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-space-xs px-space-sm py-space-xs rounded-full bg-surface-container text-primary text-label-sm font-label-sm uppercase tracking-wider">
+                      <span class="material-symbols-outlined text-[14px]">lock</span>
+                      <span>Member Portal</span>
+                    </div>
+                    <span class="font-label-sm text-label-sm px-space-sm py-space-xs rounded-full bg-surface-container-high text-on-surface-variant transition-all" id="role-pill-badge">Streaming Mode</span>
+                  </div>
+                  <h1 class="font-headline-md text-headline-md text-on-surface tracking-tight mt-space-xs">Welcome to Skopia</h1>
+                  <p class="font-body-md text-body-md text-on-surface-variant" id="role-subtitle">Access your lossless live events, active Hub Passes, and personalized cinema queue.</p>
+                </div>
+
+                <!-- Role Selector Tab Switcher -->
+                <div class="grid grid-cols-2 p-1 bg-surface-container-lowest rounded-lg">
+                  <button class="flex items-center justify-center gap-space-xs py-space-sm rounded-md transition-all font-label-lg text-label-lg bg-surface-container-high text-on-surface shadow-sm cursor-pointer" id="tab-viewer" onclick="switchLoginRole('viewer')" type="button">
+                    <span class="material-symbols-outlined text-[18px]">smart_display</span>
+                    <span>Viewer Account</span>
+                  </button>
+                  <button class="flex items-center justify-center gap-space-xs py-space-sm rounded-md transition-all font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface cursor-pointer" id="tab-creator" onclick="switchLoginRole('creator')" type="button">
+                    <span class="material-symbols-outlined text-[18px]">movie_edit</span>
+                    <span>Creator Studio</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-secondary-container text-on-secondary-container">Pro</span>
+                  </button>
+                </div>
+
+                <!-- Single Sign-On Options -->
+                <div class="flex flex-col gap-space-sm">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-space-sm">
+                    <button class="group flex items-center justify-center gap-space-xs py-space-sm px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high transition-all text-on-surface font-label-md text-label-md cursor-pointer shadow-sm active:scale-[0.98]" type="button" onclick="alert('Google Sign-In Connected')">
+                      <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"></path>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"></path>
+                      </svg>
+                      <span class="truncate">Google</span>
+                    </button>
+                    <button class="group flex items-center justify-center gap-space-xs py-space-sm px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high transition-all text-on-surface font-label-md text-label-md cursor-pointer shadow-sm active:scale-[0.98]" type="button" onclick="alert('Apple ID Connected')">
+                      <svg class="w-4 h-4 flex-shrink-0 fill-on-surface" viewBox="0 0 24 24">
+                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.66-.8 1.11-1.92.99-3.04-.96.04-2.12.64-2.8 1.44-.61.7-.1.14 1.94-.99 3.04 1.08-.04 2.15-.64 2.8-1.44z"></path>
+                      </svg>
+                      <span class="truncate">Apple ID</span>
+                    </button>
+                    <button class="group flex items-center justify-center gap-space-xs py-space-sm px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high transition-all text-on-surface font-label-md text-label-md cursor-pointer shadow-sm active:scale-[0.98]" type="button" onclick="alert('Passkey WebAuthn Triggered')">
+                      <span class="material-symbols-outlined text-[18px] text-primary">fingerprint</span>
+                      <span class="truncate">Passkey</span>
+                    </button>
+                  </div>
+                  <div class="flex items-center my-space-xs">
+                    <div class="flex-grow h-[1px] bg-surface-container-highest"></div>
+                    <span class="px-space-md font-label-sm text-label-sm uppercase tracking-widest text-outline">or continue with email</span>
+                    <div class="flex-grow h-[1px] bg-surface-container-highest"></div>
+                  </div>
+                </div>
+
+                <!-- Form -->
+                <form class="flex flex-col gap-space-md" id="login-form" onsubmit="handleLoginSubmit(event)">
+                  <div class="flex flex-col gap-space-xs">
+                    <label class="font-label-md text-label-md text-on-surface-variant flex items-center justify-between" for="login-identifier" id="label-identifier">
+                      <span>Email or Skopia ID</span>
+                      <span class="text-primary text-[11px] hover:underline cursor-pointer">Find account</span>
+                    </label>
+                    <div class="relative flex items-center">
+                      <span class="material-symbols-outlined absolute left-space-md text-outline pointer-events-none text-[20px]">alternate_email</span>
+                      <input class="w-full pl-12 pr-space-md py-space-md bg-surface-container-lowest text-on-surface placeholder:text-outline font-body-md text-body-md rounded-lg focus:outline-none focus:ring-1 focus:ring-primary shadow-inner transition-colors" id="login-identifier" required type="text" placeholder="nethmi@skopia.media or username"/>
+                    </div>
+                  </div>
+
+                  <div class="flex flex-col gap-space-xs">
+                    <div class="flex items-center justify-between">
+                      <label class="font-label-md text-label-md text-on-surface-variant" for="login-password">Master Password</label>
+                      <a class="font-label-md text-label-md text-primary hover:text-primary-fixed transition-colors" href="#">Forgot password?</a>
+                    </div>
+                    <div class="relative flex items-center">
+                      <span class="material-symbols-outlined absolute left-space-md text-outline pointer-events-none text-[20px]">key</span>
+                      <input class="w-full pl-12 pr-12 py-space-md bg-surface-container-lowest text-on-surface placeholder:text-outline font-body-md text-body-md rounded-lg focus:outline-none focus:ring-1 focus:ring-primary shadow-inner transition-colors" id="login-password" required type="password" placeholder="Enter security phrase"/>
+                      <button class="absolute right-space-md text-outline hover:text-on-surface transition-colors cursor-pointer flex items-center justify-center p-1" onclick="toggleLoginPassword()" type="button">
+                        <span class="material-symbols-outlined text-[20px]" id="pwd-icon">visibility</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between pt-space-xs">
+                    <label class="flex items-center gap-space-xs cursor-pointer select-none group">
+                      <input checked="" class="sr-only peer" id="remember-me" type="checkbox"/>
+                      <div class="w-5 h-5 rounded bg-surface-container-highest peer-checked:bg-primary-container flex items-center justify-center transition-all group-hover:ring-1 group-hover:ring-outline">
+                        <span class="material-symbols-outlined text-[16px] text-on-primary-container opacity-0 peer-checked:opacity-100 transition-opacity font-bold">check</span>
+                      </div>
+                      <span class="font-body-sm text-body-sm text-on-surface-variant group-hover:text-on-surface transition-colors">Keep me signed in for 30 days</span>
+                    </label>
+                    <div class="group relative cursor-pointer">
+                      <span class="font-label-sm text-label-sm text-outline flex items-center gap-1 hover:text-on-surface">
+                        <span class="material-symbols-outlined text-[14px]">shield</span>
+                        <span>Hardware Key</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <button class="w-full mt-space-sm py-space-md px-space-lg rounded-lg bg-primary-container hover:bg-primary transition-all duration-300 text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-md cursor-pointer active:scale-[0.99]" id="submit-btn" type="submit">
+                    <span id="btn-text">Sign In to Skopia</span>
+                    <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+                  </button>
+                </form>
+
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-space-sm pt-space-xs border-t border-surface-container-highest">
+                  <span class="font-body-sm text-body-sm text-on-surface-variant">New to Skopia? <a class="text-on-surface font-semibold hover:text-primary transition-colors ml-1 cursor-pointer" onclick="navigateTo('home')">Create free pass</a></span>
+                  <a class="font-body-sm text-body-sm text-primary flex items-center gap-1 hover:underline cursor-pointer" onclick="navigateTo('home')">
+                    <span>Preview as guest</span>
+                    <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                  </a>
+                </div>
+
+                <div class="rounded-lg bg-surface-container/60 p-space-sm flex items-center gap-space-sm text-on-surface-variant">
+                  <span class="material-symbols-outlined text-secondary text-[20px] flex-shrink-0">workspace_premium</span>
+                  <p class="font-body-sm text-body-sm">
+                    Your credentials automatically unlock active <span class="text-on-surface font-medium">Free Public Feeds</span>, <span class="text-on-surface font-medium">Music Passes</span>, and <span class="text-on-surface font-medium">Platform VIP</span> entitlements.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="w-full bg-surface-container-lowest py-space-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)] mt-12">
+          <div class="max-w-7xl mx-auto px-margin flex flex-col md:flex-row items-center justify-between gap-space-md">
+            <div class="flex items-center gap-space-md">
+              <span class="font-body-sm text-body-sm text-on-surface-variant">© 2026 Skopia Entertainment Inc. All rights reserved.</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-space-lg">
+              <a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" onclick="alert('Terms of Service')">Terms of Service</a>
+              <a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" onclick="alert('Privacy Policy')">Privacy Policy</a>
+              <a class="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" onclick="alert('Cookie Preferences')">Cookie Preferences</a>
+            </div>
+            <div class="flex items-center gap-space-xs text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">language</span>
+              <span class="font-label-sm text-label-sm uppercase tracking-wider">English (US)</span>
+            </div>
+          </div>
+        </footer>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALS LAYER -->
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="report-modal">
+    <div class="w-full max-w-lg bg-surface-container rounded-2xl shadow-2xl p-space-lg flex flex-col gap-space-md animate-fadeIn">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-error text-[24px]">flag</span>
+          <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface" id="report-modal-title">Report Content or Issue</h3>
+        </div>
+        <button class="p-1 rounded-full hover:bg-surface-container-highest text-on-surface-variant cursor-pointer" onclick="closeReportModal()" type="button">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <p class="font-body-sm text-body-sm text-on-surface-variant" id="report-modal-subtitle">
+        Submit a ticket directly to the Skopia Moderation &amp; Support desk. Our compliance team reviews flagged items within 2 hours.
+      </p>
+      <form class="flex flex-col gap-space-sm" onsubmit="handleReportSubmit(event)">
+        <label class="flex flex-col gap-1 font-label-sm text-label-sm text-on-surface-variant">
+          <span>Reason for Report</span>
+          <select id="report-reason" class="bg-surface-container-high rounded-lg p-space-sm text-on-surface font-body-sm text-body-sm focus:outline-none">
+            <option value="Inappropriate or Offensive Material">Inappropriate or Offensive Material</option>
+            <option value="Harassment or Hate Speech in Comments">Harassment or Hate Speech in Comments</option>
+            <option value="Copyright or Licensing Infringement">Copyright or Licensing Infringement</option>
+            <option value="Audio / Video Playback Distortion or Sync Glitch">Audio / Video Playback Distortion or Sync Glitch</option>
+            <option value="Incorrect Tier Lock / Access Gating Problem">Incorrect Tier Lock / Access Gating Problem</option>
+            <option value="Spam or Misleading Chapter Metadata">Spam or Misleading Chapter Metadata</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 font-label-sm text-label-sm text-on-surface-variant">
+          <span>Target Item / Reference</span>
+          <input id="report-target-input" class="bg-surface-container-high rounded-lg p-space-sm text-on-surface font-body-sm text-body-sm focus:outline-none" type="text" value="" readonly>
+        </label>
+        <label class="flex flex-col gap-1 font-label-sm text-label-sm text-on-surface-variant">
+          <span>Additional Context</span>
+          <textarea id="report-context-input" class="bg-surface-container-high rounded-lg p-space-sm text-on-surface font-body-sm text-body-sm focus:outline-none resize-none" placeholder="Describe the issue you encountered..." rows="3"></textarea>
+        </label>
+        <div class="flex items-center justify-end gap-space-sm pt-space-xs">
+          <button class="px-space-md py-space-xs rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md cursor-pointer" onclick="closeReportModal()" type="button">
+            Cancel
+          </button>
+          <button class="px-space-md py-space-xs rounded-full bg-error text-on-error font-label-md text-label-md font-bold hover:opacity-90 shadow-md cursor-pointer" type="submit">
+            Submit Report
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="upload-modal"></div>
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="staff-modal"></div>
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden items-center justify-center p-space-md" id="status-modal"></div>
+
+  <!-- FLOATING NOTIFICATION TOAST -->
+  <div id="global-notification-toast" class="fixed bottom-8 right-8 z-50 transform translate-y-28 opacity-0 transition-all duration-300 rounded-2xl bg-surface-container-highest/95 backdrop-blur-xl px-5 py-4 shadow-2xl flex items-center gap-3.5 border border-surface-container-high/80 max-w-md pointer-events-none">
+    <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0" id="toast-icon-wrap">
+      <span class="material-symbols-outlined text-[22px]" id="toast-icon">notifications_active</span>
+    </div>
+    <div class="flex flex-col min-w-[220px]">
+      <span class="font-bold text-sm text-on-surface" id="toast-title">Notification</span>
+      <span class="text-xs text-on-surface-variant line-clamp-2" id="toast-desc">Message body</span>
+    </div>
+  </div>
+
+  <script src="/app.js?v=2" defer></script>
+</body>
+</html>
