@@ -2,7 +2,9 @@ package org.gp14.skopia.user;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gp14.skopia.model.user.Administrator;
+import org.gp14.skopia.model.user.ActivityLog;
 import org.gp14.skopia.model.user.RegisteredViewer;
+import org.gp14.skopia.repository.ActivityLogRepository;
 import org.gp14.skopia.repository.AdministratorRepository;
 import org.gp14.skopia.repository.RegisteredViewerRepository;
 import org.gp14.skopia.security.PasswordService;
@@ -34,6 +36,7 @@ class UserSecurityIntegrationTest {
     @Autowired RegisteredViewerRepository viewers;
     @Autowired PasswordService passwords;
     @Autowired TokenService tokens;
+    @Autowired ActivityLogRepository activityLogs;
     Administrator admin;
     RegisteredViewer viewer;
 
@@ -84,5 +87,29 @@ class UserSecurityIntegrationTest {
                         .header("Authorization", "Bearer " + tokens.issue(admin.getId()))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DEACTIVATED\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void adminMutationRecordsAuthenticatedActorAndTarget() throws Exception {
+        mvc.perform(patch("/api/admin/users/" + viewer.getId() + "/status")
+                        .header("Authorization", "Bearer " + tokens.issue(admin.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"SUSPENDED\",\"reason\":\"Policy review\"}"))
+                .andExpect(status().isOk());
+
+        ActivityLog log = activityLogs.findAllByOrderByActionTimeDesc().stream()
+                .filter(candidate -> "ACCOUNT_STATUS_CHANGED".equals(candidate.getActionType()))
+                .findFirst().orElseThrow();
+        assertThat(log.getActor().getId()).isEqualTo(admin.getId());
+        assertThat(log.getTargetUser().getId()).isEqualTo(viewer.getId());
+        assertThat(log.getDetail()).contains("Policy review");
+
+        mvc.perform(get("/api/admin/users/activity-logs")
+                        .param("userId", viewer.getId().toString())
+                        .header("Authorization", "Bearer " + tokens.issue(admin.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].actorUserId").value(admin.getId()))
+                .andExpect(jsonPath("$[0].targetUserId").value(viewer.getId()))
+                .andExpect(jsonPath("$[0].detail").value(org.hamcrest.Matchers.containsString("Policy review")));
     }
 }

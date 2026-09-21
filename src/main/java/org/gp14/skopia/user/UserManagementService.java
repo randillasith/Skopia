@@ -67,7 +67,7 @@ public class UserManagementService {
         return UserResponse.fromEntity(user);
     }
 
-    public UserResponse updateAccountStatus(Long targetUserId, UpdateAccountStatusRequest request, String ipAddress) {
+    public UserResponse updateAccountStatus(User actor, Long targetUserId, UpdateAccountStatusRequest request, String ipAddress) {
         User user = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with ID: " + targetUserId));
 
@@ -75,16 +75,16 @@ public class UserManagementService {
         user.setAccountStatus(request.getStatus().toUpperCase());
         User savedUser = userRepository.save(user);
 
-        String detail = String.format("ACCOUNT_STATUS_CHANGED from %s to %s", oldStatus, request.getStatus());
+        String detail = String.format("from %s to %s", oldStatus, request.getStatus().toUpperCase());
         if (request.getReason() != null && !request.getReason().trim().isEmpty()) {
-            detail += " (Reason: " + request.getReason().trim() + ")";
+            detail += "; reason: " + request.getReason().trim();
         }
-        logActivity(savedUser, detail, ipAddress);
+        logActivity(actor, savedUser, "ACCOUNT_STATUS_CHANGED", detail, ipAddress);
 
         return UserResponse.fromEntity(savedUser);
     }
 
-    public UserResponse createStaffMember(CreateStaffRequest request, String ipAddress) {
+    public UserResponse createStaffMember(User actor, CreateStaffRequest request, String ipAddress) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username already exists: " + request.getUsername());
         }
@@ -123,11 +123,11 @@ public class UserManagementService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid staff type: " + staffType);
         }
 
-        logActivity(createdStaff, "STAFF_CREATED: " + staffType, ipAddress);
+        logActivity(actor, createdStaff, "STAFF_CREATED", "staff type: " + staffType, ipAddress);
         return UserResponse.fromEntity(createdStaff);
     }
 
-    public UserResponse updateStaffProfile(Long staffId, UpdateStaffProfileRequest request, String ipAddress) {
+    public UserResponse updateStaffProfile(User actor, Long staffId, UpdateStaffProfileRequest request, String ipAddress) {
         Staff staff = staffRepository.findById(staffId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff member not found with ID: " + staffId));
 
@@ -146,27 +146,27 @@ public class UserManagementService {
         }
 
         Staff updatedStaff = staffRepository.save(staff);
-        logActivity(updatedStaff, "STAFF_PROFILE_UPDATED", ipAddress);
+        logActivity(actor, updatedStaff, "STAFF_PROFILE_UPDATED", null, ipAddress);
         return UserResponse.fromEntity(updatedStaff);
     }
 
-    public UserResponse updateCreatorVerification(Long creatorId, UpdateCreatorStatusRequest request, String ipAddress) {
+    public UserResponse updateCreatorVerification(User actor, Long creatorId, UpdateCreatorStatusRequest request, String ipAddress) {
         ContentCreator creator = contentCreatorRepository.findById(creatorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content Creator not found with ID: " + creatorId));
 
         creator.setIsVerified(request.getIsVerified());
         ContentCreator saved = contentCreatorRepository.save(creator);
-        logActivity(saved, "CREATOR_VERIFICATION_SET_" + request.getIsVerified(), ipAddress);
+        logActivity(actor, saved, "CREATOR_VERIFICATION_CHANGED", "verified: " + request.getIsVerified(), ipAddress);
         return UserResponse.fromEntity(saved);
     }
 
-    public UserResponse updateViewerPremiumStatus(Long viewerId, UpdatePremiumStatusRequest request, String ipAddress) {
+    public UserResponse updateViewerPremiumStatus(User actor, Long viewerId, UpdatePremiumStatusRequest request, String ipAddress) {
         RegisteredViewer viewer = registeredViewerRepository.findById(viewerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered Viewer not found with ID: " + viewerId));
 
         viewer.setIsPremium(request.getIsPremium());
         RegisteredViewer saved = registeredViewerRepository.save(viewer);
-        logActivity(saved, "VIEWER_PREMIUM_STATUS_SET_" + request.getIsPremium(), ipAddress);
+        logActivity(actor, saved, "VIEWER_PREMIUM_STATUS_CHANGED", "premium: " + request.getIsPremium(), ipAddress);
         return UserResponse.fromEntity(saved);
     }
 
@@ -174,7 +174,7 @@ public class UserManagementService {
     public List<ActivityLogResponse> getActivityLogs(Long userId, String actionType) {
         List<ActivityLog> logs;
         if (userId != null) {
-            logs = activityLogRepository.findByUserIdOrderByActionTimeDesc(userId);
+            logs = activityLogRepository.findByTargetUserIdOrActorIdOrUserIdOrderByActionTimeDesc(userId, userId, userId);
         } else if (actionType != null && !actionType.trim().isEmpty()) {
             logs = activityLogRepository.findByActionTypeContainingIgnoreCaseOrderByActionTimeDesc(actionType.trim());
         } else {
@@ -219,8 +219,19 @@ public class UserManagementService {
     }
 
     public void logActivity(User user, String actionType, String ipAddress) {
+        logActivity(user, user, actionType, null, ipAddress);
+    }
+
+    public void logActivity(User actor, User targetUser, String actionType, String detail, String ipAddress) {
+        User legacyUser = actor != null ? actor : targetUser;
+        if (legacyUser == null) {
+            throw new IllegalArgumentException("An activity log requires an actor or target user");
+        }
         ActivityLog log = new ActivityLog();
-        log.setUser(user);
+        log.setUser(legacyUser);
+        log.setActor(actor);
+        log.setTargetUser(targetUser);
+        log.setDetail(detail);
         log.setActionType(actionType);
         log.setActionTime(LocalDateTime.now());
         log.setIpAddress(ipAddress != null ? ipAddress : "127.0.0.1");

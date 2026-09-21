@@ -8,6 +8,8 @@ import org.gp14.skopia.user.dto.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.gp14.skopia.model.user.User;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,29 +41,33 @@ public class AdminUserController {
     @PatchMapping("/{id}/status")
     public UserResponse updateStatus(@PathVariable Long id,
                                      @Valid @RequestBody UpdateAccountStatusRequest request,
+                                     Authentication authentication,
                                      HttpServletRequest httpRequest) {
-        return userManagementService.updateAccountStatus(id, request, clientIp(httpRequest));
+        return userManagementService.updateAccountStatus(authenticatedActor(authentication), id, request, clientIp(httpRequest));
     }
 
     @PostMapping("/staff")
     public ResponseEntity<UserResponse> createStaff(@Valid @RequestBody CreateStaffRequest request,
+                                                     Authentication authentication,
                                                      HttpServletRequest httpRequest) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(userManagementService.createStaffMember(request, clientIp(httpRequest)));
+                .body(userManagementService.createStaffMember(authenticatedActor(authentication), request, clientIp(httpRequest)));
     }
 
     @RequestMapping(value = "/staff/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public UserResponse updateStaff(@PathVariable Long id,
                                     @Valid @RequestBody UpdateStaffProfileRequest request,
+                                    Authentication authentication,
                                     HttpServletRequest httpRequest) {
-        return userManagementService.updateStaffProfile(id, request, clientIp(httpRequest));
+        return userManagementService.updateStaffProfile(authenticatedActor(authentication), id, request, clientIp(httpRequest));
     }
 
     @PatchMapping("/{id}/creator-verification")
     public UserResponse updateCreatorVerification(@PathVariable Long id,
                                                    @Valid @RequestBody UpdateCreatorStatusRequest request,
+                                                   Authentication authentication,
                                                    HttpServletRequest httpRequest) {
-        return userManagementService.updateCreatorVerification(id, request, clientIp(httpRequest));
+        return userManagementService.updateCreatorVerification(authenticatedActor(authentication), id, request, clientIp(httpRequest));
     }
 
     @GetMapping("/activity-logs")
@@ -81,5 +87,12 @@ public class AdminUserController {
         return forwarded == null || forwarded.isBlank()
                 ? request.getRemoteAddr()
                 : forwarded.split(",", 2)[0].trim();
+    }
+
+    private User authenticatedActor(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User actor)) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user required");
+        }
+        return actor;
     }
 }

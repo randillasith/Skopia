@@ -2,6 +2,7 @@ package org.gp14.skopia.user;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.gp14.skopia.model.user.Administrator;
 import org.gp14.skopia.user.dto.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -17,6 +19,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -33,12 +36,16 @@ class AdminUserControllerTest {
     private AdminUserController adminUserController;
 
     private ObjectMapper objectMapper;
+    private Administrator actor;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(adminUserController).build();
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
+        actor = new Administrator();
+        actor.setId(99L);
+        actor.setUsername("authenticated_admin");
     }
 
 
@@ -72,14 +79,16 @@ class AdminUserControllerTest {
                 .accountStatus("SUSPENDED")
                 .build();
 
-        when(userManagementService.updateAccountStatus(eq(1L), any(UpdateAccountStatusRequest.class), anyString()))
+        when(userManagementService.updateAccountStatus(eq(actor), eq(1L), any(UpdateAccountStatusRequest.class), anyString()))
                 .thenReturn(response);
 
         mockMvc.perform(patch("/api/admin/users/1/status")
+                .principal(new UsernamePasswordAuthenticationToken(actor, null))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountStatus").value("SUSPENDED"));
+        verify(userManagementService).updateAccountStatus(eq(actor), eq(1L), any(UpdateAccountStatusRequest.class), anyString());
     }
 
     @Test
@@ -101,10 +110,11 @@ class AdminUserControllerTest {
                 .supportLevel("LEVEL_2")
                 .build();
 
-        when(userManagementService.createStaffMember(any(CreateStaffRequest.class), anyString()))
+        when(userManagementService.createStaffMember(eq(actor), any(CreateStaffRequest.class), anyString()))
                 .thenReturn(response);
 
         mockMvc.perform(post("/api/admin/users/staff")
+                .principal(new UsernamePasswordAuthenticationToken(actor, null))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())

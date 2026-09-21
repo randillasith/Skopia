@@ -90,10 +90,15 @@ CREATE TABLE IF NOT EXISTS registered_viewers (
 CREATE TABLE IF NOT EXISTS activity_logs (
     log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
+    actor_user_id BIGINT,
+    target_user_id BIGINT,
+    detail VARCHAR(500),
     action_type VARCHAR(100) NOT NULL,
     action_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ip_address VARCHAR(45),
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (actor_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (target_user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 -- Access Tiers

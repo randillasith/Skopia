@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -46,6 +47,7 @@ class UserManagementServiceTest {
     private UserManagementService userManagementService;
 
     private User sampleUser;
+    private Administrator actor;
 
     @BeforeEach
     void setUp() {
@@ -54,6 +56,9 @@ class UserManagementServiceTest {
         sampleUser.setUsername("testuser");
         sampleUser.setEmail("test@skopia.com");
         sampleUser.setAccountStatus("ACTIVE");
+        actor = new Administrator();
+        actor.setId(99L);
+        actor.setUsername("admin_actor");
     }
 
     @Test
@@ -93,11 +98,18 @@ class UserManagementServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
         when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
-        UserResponse response = userManagementService.updateAccountStatus(1L, request, "127.0.0.1");
+        UserResponse response = userManagementService.updateAccountStatus(actor, 1L, request, "127.0.0.1");
 
         assertNotNull(response);
         assertEquals("SUSPENDED", response.getAccountStatus());
-        verify(activityLogRepository, times(1)).save(any(ActivityLog.class));
+        ArgumentCaptor<ActivityLog> logCaptor = ArgumentCaptor.forClass(ActivityLog.class);
+        verify(activityLogRepository).save(logCaptor.capture());
+        ActivityLog log = logCaptor.getValue();
+        assertSame(actor, log.getActor());
+        assertSame(sampleUser, log.getTargetUser());
+        assertSame(actor, log.getUser());
+        assertEquals("ACCOUNT_STATUS_CHANGED", log.getActionType());
+        assertEquals("from ACTIVE to SUSPENDED; reason: Policy violation", log.getDetail());
     }
 
     @Test
@@ -127,7 +139,7 @@ class UserManagementServiceTest {
 
         when(administratorRepository.save(any(Administrator.class))).thenReturn(savedAdmin);
 
-        UserResponse response = userManagementService.createStaffMember(request, "127.0.0.1");
+        UserResponse response = userManagementService.createStaffMember(actor, request, "127.0.0.1");
 
         assertNotNull(response);
         assertEquals("ADMINISTRATOR", response.getRoleType());
@@ -148,7 +160,7 @@ class UserManagementServiceTest {
         when(contentCreatorRepository.findById(5L)).thenReturn(Optional.of(creator));
         when(contentCreatorRepository.save(any(ContentCreator.class))).thenAnswer(i -> i.getArgument(0));
 
-        UserResponse response = userManagementService.updateCreatorVerification(5L, request, "127.0.0.1");
+        UserResponse response = userManagementService.updateCreatorVerification(actor, 5L, request, "127.0.0.1");
 
         assertNotNull(response);
         assertTrue(response.getIsVerified());
@@ -176,5 +188,29 @@ class UserManagementServiceTest {
         assertEquals(8L, stats.getActiveUsers());
         assertEquals(3L, stats.getTotalStaff());
         assertEquals(2L, stats.getPremiumViewers());
+    }
+
+    @Test
+    void activityLogResponseSeparatesActorAndTargetAndSupportsLegacyRows() {
+        ActivityLog current = new ActivityLog();
+        current.setUser(actor);
+        current.setActor(actor);
+        current.setTargetUser(sampleUser);
+        current.setActionType("ACCOUNT_STATUS_CHANGED");
+        current.setDetail("reason: review");
+
+        ActivityLogResponse response = ActivityLogResponse.fromEntity(current);
+        assertEquals(99L, response.getActorUserId());
+        assertEquals("admin_actor", response.getActorUsername());
+        assertEquals(1L, response.getTargetUserId());
+        assertEquals("testuser", response.getTargetUsername());
+        assertEquals("reason: review", response.getDetail());
+
+        ActivityLog legacy = new ActivityLog();
+        legacy.setUser(sampleUser);
+        legacy.setActionType("LOGIN_SUCCESS");
+        ActivityLogResponse legacyResponse = ActivityLogResponse.fromEntity(legacy);
+        assertEquals(1L, legacyResponse.getActorUserId());
+        assertEquals(1L, legacyResponse.getTargetUserId());
     }
 }

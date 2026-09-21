@@ -23,6 +23,18 @@ public class ActivityLog {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /** Explicit actor; nullable so existing rows using user_id remain readable. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "actor_user_id")
+    private User actor;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_user_id")
+    private User targetUser;
+
+    @Column(name = "detail", length = 500)
+    private String detail;
+
     @Column(name = "action_type", nullable = false, length = 100)
     private String actionType;
 

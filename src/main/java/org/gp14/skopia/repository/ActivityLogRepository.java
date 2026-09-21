@@ -9,6 +9,8 @@ import java.util.List;
 @Repository
 public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> {
     List<ActivityLog> findByUserIdOrderByActionTimeDesc(Long userId);
+    List<ActivityLog> findByTargetUserIdOrActorIdOrUserIdOrderByActionTimeDesc(
+            Long targetUserId, Long actorId, Long legacyUserId);
     List<ActivityLog> findByActionTypeContainingIgnoreCaseOrderByActionTimeDesc(String actionType);
     List<ActivityLog> findAllByOrderByActionTimeDesc();
 }
