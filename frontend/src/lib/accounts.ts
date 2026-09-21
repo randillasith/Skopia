@@ -45,17 +45,29 @@ function staffFrom(roleType: string | null | undefined): StaffRole[] {
   return []
 }
 
-/** The server spells status in capitals; the UI spells it as a word. */
+/**
+ * The server spells status in capitals; the UI spells it as a word.
+ *
+ * DEACTIVATED is what the administration endpoints write when an account is
+ * suspended — the two modules chose different words for the same state — so it
+ * reads as Suspended here. Only ACTIVE reads as active: anything unrecognised
+ * is treated as not active, because letting an unknown state read as working is
+ * the more dangerous of the two mistakes.
+ */
 function statusFrom(accountStatus: string | null | undefined): AccountStatus {
   switch ((accountStatus ?? 'ACTIVE').toUpperCase()) {
+    case 'ACTIVE':
+      return 'Active'
     case 'SUSPENDED':
+    case 'DEACTIVATED':
+    case 'INACTIVE':
       return 'Suspended'
     case 'BLOCKED':
       return 'Blocked'
     case 'INVITED':
       return 'Invited'
     default:
-      return 'Active'
+      return 'Suspended'
   }
 }
 
@@ -130,3 +142,80 @@ export const accounts = {
 }
 
 export { ApiError }
+
+/* ------------------------------------------------------- administration */
+
+/**
+ * An account as `GET /api/users` returns it.
+ *
+ * That endpoint serialises the entity rather than a DTO, so which fields are
+ * present is what tells you what kind of account it is: there is no type
+ * discriminator. `designation` marks staff, and the three staff kinds are told
+ * apart by the field only they carry.
+ */
+export type ServerUserRow = {
+  id: number
+  username: string
+  email: string
+  firstName: string | null
+  lastName: string | null
+  displayName?: string | null
+  accountStatus: string | null
+  registeredDate: string | null
+  designation?: string | null
+  adminLevel?: string | null
+  officerCode?: string | null
+  supportLevel?: string | null
+  channelName?: string | null
+  isVerified?: boolean | null
+  isPremium?: boolean | null
+  totalUploads?: number | null
+}
+
+/** Read an account row as the session's `Account`, grants and all. */
+export function rowToAccount(row: ServerUserRow): Account {
+  const staff: StaffRole[] = []
+  if (row.adminLevel != null) staff.push('admin')
+  else if (row.officerCode != null) staff.push('marketing')
+  else if (row.supportLevel != null) staff.push('support')
+  else if (row.designation != null) {
+    // Staff whose kind cannot be told from the fields present. Naming the
+    // designation is more honest than guessing at a grant.
+    staff.push(...staffFrom(row.designation))
+  }
+
+  const creator = row.channelName != null
+  return {
+    id: String(row.id),
+    userId: row.id,
+    name:
+      row.displayName?.trim() ||
+      row.channelName?.trim() ||
+      [row.firstName, row.lastName].filter(Boolean).join(' ').trim() ||
+      row.username,
+    handle: row.username,
+    email: row.email,
+    joined: (row.registeredDate ?? '').slice(0, 10),
+    lastSeen: '—',
+    status: statusFrom(row.accountStatus),
+    staff,
+    channelId: creator ? channelByHandle(row.username)?.id ?? null : null,
+    isContentCreator: creator,
+    isPremium: row.isPremium === true,
+    isVerified: row.isVerified === true,
+  }
+}
+
+export const administration = {
+  users: (signal?: AbortSignal) => request<ServerUserRow[]>('/api/users', { signal }),
+
+  /** Suspending is 'deactivate'; the server has no separate suspended state. */
+  deactivate: (userId: number) =>
+    request<{ message: string }>(`/api/users/${userId}/deactivate`, { method: 'PUT' }),
+
+  activate: (userId: number) =>
+    request<{ message: string }>(`/api/users/${userId}/activate`, { method: 'PUT' }),
+
+  remove: (userId: number) =>
+    request<{ message: string }>(`/api/users/${userId}`, { method: 'DELETE' }),
+}

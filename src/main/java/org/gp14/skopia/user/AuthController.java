@@ -180,6 +180,16 @@ public class AuthController {
                     .body(LoginResponse.builder().message("Account is SUSPENDED. Access restricted.").build());
         }
 
+        // The administration endpoints write DEACTIVATED rather than SUSPENDED
+        // for the same state. Without this, suspending an account changed a word
+        // in a table and nothing else: the account could still sign in.
+        if ("DEACTIVATED".equalsIgnoreCase(user.getAccountStatus())
+                || "INACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(LoginResponse.builder()
+                            .message("Account is suspended. Please contact Skopia Support Desk.").build());
+        }
+
         // Verify password hash or plain text fallback for dev
         if (!verifyPassword(password, user.getPasswordHash()) && !password.equals(user.getPasswordHash())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

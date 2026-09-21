@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate} from 'react-router-dom'
 import {
   Users, AlertTriangle, Ban, ShieldCheck, Plus, Megaphone, Eye,
@@ -10,12 +10,19 @@ import {
 } from '@/components/primitives'
 import { Letterboard, BillingBoard } from '@/components/world'
 import { BackOfHouse } from '@/components/Shell'
+import { Resolve } from '@/components/Loading'
+import { ApiError } from '@/lib/api'
+import { administration, rowToAccount } from '@/lib/accounts'
+import { useCatalogue } from '@/lib/useCatalogue'
+import {
+  complaints, referenceOf, COMPLAINT_STATUS_LABEL, type ServerComplaint,
+} from '@/lib/reports'
 import {
   LOGS, VIDEOS, REPORTS, CAMPAIGNS, PLANS,
   PAYMENTS, ANNOUNCEMENTS, UNDECIDED,
 } from '@/lib/data'
 import {
-  ACCOUNTS, CHANNELS, GRANTS, STAFF_ROLES, channelById,
+  ACCOUNTS, CHANNELS, GRANTS, STAFF_ROLES,
   type Account, type StaffRole,
 } from '@/lib/session'
 import { cn } from '@/lib/cn'
@@ -27,17 +34,32 @@ const ACCOUNT_TONE: Record<Account['status'], 'ok' | 'review' | 'bad' | 'soon'> 
 /* ============================================================= dashboard */
 
 export function AdminDashboard() {
-  const openReports = REPORTS.filter((r) => r.status !== 'Resolved' && r.status !== 'Closed')
-  const inReview = VIDEOS.filter((v) => v.billing === 'IN REVIEW')
+  // The dashboard is a summary of three modules, so it reads the same endpoints
+  // those modules do. A count that cannot be read is shown as a dash rather than
+  // as a zero, because "none" and "could not tell" are different things.
+  const { videos, loading: catalogueLoading } = useCatalogue()
+  const [accounts, setAccounts] = useState<Account[] | null>(null)
+  const [queue, setQueue] = useState<ServerComplaint[] | null>(null)
+
+  useEffect(() => {
+    const abort = new AbortController()
+    administration.users(abort.signal).then((rows) => setAccounts(rows.map(rowToAccount))).catch(() => setAccounts(null))
+    complaints.queue(abort.signal).then(setQueue).catch(() => setQueue(null))
+    return () => abort.abort()
+  }, [])
+
+  const openComplaints = queue?.filter((c) => c.status !== 'RESOLVED' && c.status !== 'CLOSED') ?? []
+  const inReview = videos.filter((v) => v.billing === 'IN REVIEW')
+  const count = (n: number | undefined | null) => (n == null ? '—' : String(n))
 
   return (
     <BackOfHouse title="Dashboard">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          ['Accounts', String(ACCOUNTS.length), `${ACCOUNTS.filter((a) => a.status === 'Active').length} active`],
-          ['Titles', String(VIDEOS.length), `${inReview.length} awaiting review`],
-          ['Open complaints', String(openReports.length), `${REPORTS.filter((r) => r.priority === 'Urgent').length} urgent`],
-          ['Active campaigns', String(CAMPAIGNS.filter((c) => c.status === 'Active').length), `${CAMPAIGNS.filter((c) => c.status === 'Expired').length} expired`],
+          ['Accounts', count(accounts?.length), accounts ? `${accounts.filter((a) => a.status === 'Active').length} active` : 'could not be read'],
+          ['Titles', catalogueLoading ? '—' : String(videos.length), `${inReview.length} awaiting review`],
+          ['Open complaints', count(queue ? openComplaints.length : null), queue ? `${queue.filter((c) => c.priority === 'URGENT').length} urgent` : 'could not be read'],
+          ['Active campaigns', String(CAMPAIGNS.filter((c) => c.status === 'Active').length), 'from the prototype'],
         ].map(([l, v, sub]) => (
           <div key={l} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{l}</p>
@@ -54,8 +76,14 @@ export function AdminDashboard() {
         >
           <ul className="divide-y divide-ink-800 rounded-lg border border-ink-700 bg-ink-850">
             {[
-              ...inReview.map((v) => ({ k: v.id, board: 'IN REVIEW', title: v.title, sub: `${v.creator} · awaiting moderation`, to: '/admin/moderation' })),
-              ...openReports.slice(0, 3).map((r) => ({ k: r.id, board: r.priority.toUpperCase(), title: r.subject, sub: `${r.id} · ${r.type}`, to: `/queue/${r.id}` })),
+              ...inReview.map((v) => ({ k: `v-${v.id}`, board: 'IN REVIEW', title: v.title, sub: `${v.creator} · awaiting moderation`, to: '/admin/moderation' })),
+              ...openComplaints.slice(0, 3).map((c) => ({
+                k: `c-${c.id}`,
+                board: c.priority,
+                title: `Complaint ${referenceOf(c)}`,
+                sub: `${COMPLAINT_STATUS_LABEL[c.status]} · raised ${c.createdAt?.slice(0, 10)}`,
+                to: `/queue/${c.id}`,
+              })),
             ].map((row) => (
               <li key={row.k}>
                 <Link to={row.to} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-ink-800/60">
@@ -95,31 +123,87 @@ export function AdminDashboard() {
 
 /* ============================================================== accounts */
 
+/**
+ * Every account on the platform.
+ *
+ * Two of the three grants are shown as facts rather than as controls, because
+ * an administrator does not hold them: channel ownership is self-service and
+ * moderation is granted by channel owners. The third — the staff role — is an
+ * administrator's to give, but no endpoint grants one yet, so the control says
+ * so instead of pretending.
+ */
 export function AdminAccounts() {
   const [q, setQ] = useState('')
   const [role, setRole] = useState('All')
   const [acting, setActing] = useState<Account | null>(null)
+  const [busy, setBusy] = useState(false)
   const toast = useToast()
+
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [nonce, setNonce] = useState(0)
+  const refresh = useCallback(() => setNonce((n) => n + 1), [])
+
+  useEffect(() => {
+    const abort = new AbortController()
+    setLoading(true)
+    administration
+      .users(abort.signal)
+      .then((rows) => {
+        setAccounts(rows.map(rowToAccount))
+        setError(null)
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setError(cause instanceof ApiError ? cause.message : 'Could not load the accounts.')
+        setAccounts([])
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoading(false)
+      })
+    return () => abort.abort()
+  }, [nonce])
 
   const list = useMemo(
     () =>
-      ACCOUNTS.filter((a) => {
+      accounts.filter((a) => {
         if (role === 'staff' && a.staff.length === 0) return false
-        if (role === 'creator' && !a.channelId) return false
-        if (role === 'none' && (a.staff.length > 0 || a.channelId)) return false
+        if (role === 'creator' && !a.isContentCreator) return false
+        if (role === 'none' && (a.staff.length > 0 || a.isContentCreator)) return false
         if (role !== 'All' && ['marketing', 'support', 'admin'].includes(role)
             && !a.staff.includes(role as StaffRole)) return false
         if (q.trim() && !`${a.name} ${a.handle} ${a.id}`.toLowerCase().includes(q.toLowerCase())) return false
         return true
       }),
-    [q, role],
+    [accounts, q, role],
   )
 
+  const setStatus = async () => {
+    if (!acting || acting.userId == null) return
+    const suspending = acting.status === 'Active'
+    setBusy(true)
+    try {
+      if (suspending) await administration.deactivate(acting.userId)
+      else await administration.activate(acting.userId)
+      toast({
+        title: suspending ? `${acting.name} suspended` : `${acting.name} restored`,
+        tone: suspending ? 'bad' : 'ok',
+      })
+      setActing(null)
+      refresh()
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'That did not go through.',
+        tone: 'bad',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <BackOfHouse
-      title="Accounts"
-      actions={<Button size="sm" variant="primary" icon={<Plus className="size-4" />}>Invite account</Button>}
-    >
+    <BackOfHouse title="Accounts">
       <div className="flex flex-col gap-3 sm:flex-row">
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, handle or id" className="flex-1" />
         <Select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Filter accounts" className="sm:w-56">
@@ -133,9 +217,17 @@ export function AdminAccounts() {
         </Select>
       </div>
 
-      <p className="mt-4 font-mono text-[12px] tabular-nums text-ink-300">{list.length} accounts</p>
+      <p className="mt-4 font-mono text-[12px] tabular-nums text-ink-300">
+        {loading ? 'Reading' : `${list.length} accounts`}
+      </p>
 
-      {list.length === 0 ? (
+      {loading || error ? (
+        <div className="mt-6">
+          <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the accounts">
+            {null}
+          </Resolve>
+        </div>
+      ) : list.length === 0 ? (
         <div className="mt-6">
           <EmptyState icon={<Users className="size-7" />} title="No accounts matched"
             body="Nothing matched that search and role filter."
@@ -143,11 +235,11 @@ export function AdminAccounts() {
         </div>
       ) : (
         <div className="mt-4 rounded-lg border border-ink-700 bg-ink-850">
-          <Table labels={["Account", "Staff role", "Channel", "Status", "Joined", "Last seen", ""]}>
+          <Table labels={["Account", "Staff role", "Channel", "Status", "Joined", ""]}>
             <thead>
               <tr>
                 <Th>Account</Th><Th>Staff role</Th><Th>Channel</Th><Th>Status</Th>
-                <Th>Joined</Th><Th>Last seen</Th><Th />
+                <Th>Joined</Th><Th />
               </tr>
             </thead>
             <tbody>
@@ -159,45 +251,34 @@ export function AdminAccounts() {
                       <span className="min-w-0">
                         <span className="block truncate font-medium text-white">{a.name}</span>
                         <span className="block truncate font-mono text-[11px] text-ink-300">
-                          @{a.handle} · {a.id}
+                          @{a.handle} · #{a.id}
                         </span>
                       </span>
                     </span>
                   </Td>
-                  {/* The only grant an administrator controls. Channel ownership
-                      is self-service and moderation is granted by channel owners,
-                      so both are shown as facts rather than as editable fields. */}
+                  {/* None of the three grants can be changed from here. Channel
+                      ownership is self-service, moderation belongs to channel
+                      owners, and nothing in the API grants a staff role — so the
+                      role is stated rather than offered as a control that would
+                      do nothing. */}
                   <Td>
-                    <Select
-                      defaultValue={a.staff[0] ?? 'none'}
-                      aria-label={`Staff role for ${a.name}`}
-                      className="w-44"
-                      onChange={(e) =>
-                        toast({
-                          title:
-                            e.target.value === 'none'
-                              ? `${a.name} no longer holds a staff role`
-                              : `${a.name} is now ${STAFF_ROLES[e.target.value as StaffRole].label}`,
-                          tone: 'ok',
-                        })
-                      }
-                    >
-                      <option value="none">None</option>
-                      <option value="marketing">{STAFF_ROLES.marketing.label}</option>
-                      <option value="support">{STAFF_ROLES.support.label}</option>
-                      <option value="admin">{STAFF_ROLES.admin.label}</option>
-                    </Select>
+                    {a.staff.length > 0 ? (
+                      <span className="text-ink-150">
+                        {a.staff.map((r) => STAFF_ROLES[r].label).join(', ')}
+                      </span>
+                    ) : (
+                      <span className="text-ink-300">—</span>
+                    )}
                   </Td>
                   <Td>
-                    {a.channelId ? (
-                      <span className="text-ink-150">{channelById(a.channelId)?.name}</span>
+                    {a.isContentCreator ? (
+                      <span className="text-ink-150">{a.name}</span>
                     ) : (
                       <span className="text-ink-300">—</span>
                     )}
                   </Td>
                   <Td><Letterboard tone={ACCOUNT_TONE[a.status]}>{a.status.toUpperCase()}</Letterboard></Td>
-                  <Td><span className="font-mono tabular-nums text-ink-300">{a.joined}</span></Td>
-                  <Td className="text-ink-300">{a.lastSeen}</Td>
+                  <Td><span className="font-mono tabular-nums text-ink-300">{a.joined || '—'}</span></Td>
                   <Td>
                     <div className="flex justify-end">
                       <Button size="sm" variant="quiet" onClick={() => setActing(a)}>
@@ -212,6 +293,12 @@ export function AdminAccounts() {
         </div>
       )}
 
+      <p className="mt-4 text-[12.5px] leading-relaxed text-ink-300">
+        Granting and revoking staff roles has no endpoint yet, so roles are shown
+        here but cannot be changed. A staff account is created by the development
+        seed.
+      </p>
+
       <Modal
         open={!!acting}
         onClose={() => setActing(null)}
@@ -222,13 +309,8 @@ export function AdminAccounts() {
             <Button variant="quiet" onClick={() => setActing(null)}>Cancel</Button>
             <Button
               variant={acting?.status === 'Active' ? 'danger' : 'primary'}
-              onClick={() => {
-                toast({
-                  title: acting?.status === 'Active' ? `${acting?.name} suspended` : `${acting?.name} restored`,
-                  tone: acting?.status === 'Active' ? 'bad' : 'ok',
-                })
-                setActing(null)
-              }}
+              loading={busy}
+              onClick={setStatus}
             >
               {acting?.status === 'Active' ? 'Suspend account' : 'Restore account'}
             </Button>
