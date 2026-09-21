@@ -4,7 +4,9 @@ import { Flame, Compass, ListEnd, Trash2, X, Play, GripVertical } from 'lucide-r
 import { Button, EmptyState, Section, useToast, Avatar } from '@/components/primitives'
 import { PosterPlate, Lightbox } from '@/components/world'
 import { FrontOfHouse } from '@/components/Shell'
-import { VIDEOS, CATEGORIES, GENRES, LIVE, byId, fmt, seconds, clock, isVerified, type Video } from '@/lib/data'
+import { GENRES, LIVE, fmt, seconds, clock, isVerified, type Video } from '@/lib/data'
+import { useCatalogue } from '@/lib/useCatalogue'
+import { Resolve } from '@/components/Loading'
 import { CHANNELS, channelByName } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
 import { Tile } from './viewer'
@@ -56,20 +58,22 @@ function LiveCard({ l }: { l: (typeof LIVE)[number] }) {
 /* ================================================================ explore */
 
 export function Explore() {
+  const { videos, categories, loading, error, refresh } = useCatalogue()
   const [genre, setGenre] = useState<string>('All')
 
   const byCategory = useMemo(
     () =>
-      CATEGORIES.map((c) => ({
-        category: c,
-        items: VIDEOS.filter(
+      categories.map(({ id, name }) => ({
+        id,
+        category: name,
+        items: videos.filter(
           (v) =>
-            v.category === c &&
+            v.category === name &&
             (v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER') &&
             (genre === 'All' || v.genre === genre),
         ).slice(0, 6),
       })).filter((s) => s.items.length > 0),
-    [genre],
+    [videos, categories, genre],
   )
 
   return (
@@ -135,11 +139,19 @@ export function Explore() {
           </Section>
         ))}
 
-        {byCategory.length === 0 && (
+        {(loading || error) && (
+          <div className="mt-10">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the catalogue">
+              {null}
+            </Resolve>
+          </div>
+        )}
+
+        {!loading && !error && byCategory.length === 0 && (
           <div className="mt-10">
             <EmptyState
               icon={<Compass className="size-6" />}
-              title="Nothing in that genre yet"
+              title="Nothing to explore yet"
               body="No titles are currently billed under this genre."
               action={<Button onClick={() => setGenre('All')}>Show everything</Button>}
             />
@@ -174,6 +186,7 @@ export function VerifiedMark() {
 /* =============================================================== trending */
 
 export function Trending() {
+  const { videos, loading, error, refresh } = useCatalogue()
   const [window_, setWindow] = useState<'today' | 'week' | 'month'>('week')
 
   /**
@@ -184,8 +197,10 @@ export function Trending() {
    */
   const ranked = useMemo(() => {
     const days = window_ === 'today' ? 1 : window_ === 'week' ? 7 : 30
-    const now = Date.parse('2026-09-21')
-    return VIDEOS.filter((v) => v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER')
+    // The clock, not a fixed date: ranking against a date written into the source
+    // stops being a ranking the day after it is written.
+    const now = Date.now()
+    return videos.filter((v) => v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER')
       .map((v) => {
         const ageDays = Math.max(1, (now - Date.parse(v.published)) / 86_400_000)
         return { v, heat: v.views / Math.pow(ageDays, 0.85) }
@@ -194,7 +209,7 @@ export function Trending() {
       .sort((a, b) => b.heat - a.heat)
       .slice(0, 20)
       .map(({ v }) => v)
-  }, [window_])
+  }, [videos, window_])
 
   return (
     <FrontOfHouse>
@@ -221,7 +236,13 @@ export function Trending() {
           back catalogue does not permanently occupy the top of the list.
         </p>
 
-        {ranked.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-10">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Ranking the programme">
+              {null}
+            </Resolve>
+          </div>
+        ) : ranked.length === 0 ? (
           <div className="mt-10">
             <EmptyState icon={<Flame className="size-6" />} title="Nothing is moving yet"
               body="No titles have gathered enough views in this window." />
@@ -272,6 +293,7 @@ export function Queue() {
   const nav = useNavigate()
   const toast = useToast()
   const { queue, dequeue, clearQueue } = useLibrary()
+  const { byId } = useCatalogue()
   const items = queue.map((id) => byId(id)).filter(Boolean) as Video[]
   const total = clock(items.reduce((s, v) => s + seconds(v.runtime), 0))
 

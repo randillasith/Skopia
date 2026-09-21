@@ -219,3 +219,20 @@ export const administration = {
   remove: (userId: number) =>
     request<{ message: string }>(`/api/users/${userId}`, { method: 'DELETE' }),
 }
+
+/** What an account holder can change about themselves. */
+export type ProfileChanges = {
+  displayName?: string
+  email?: string
+  bio?: string
+  contactNo?: string
+}
+
+export const profile = {
+  update: (userId: number, changes: ProfileChanges) =>
+    request<ServerUserRow>(`/api/users/${userId}/profile`, { method: 'PUT', body: changes }),
+
+  /** Closing an account. The server deletes rather than deactivates. */
+  close: (userId: number) =>
+    request<{ message: string }>(`/api/users/${userId}`, { method: 'DELETE' }),
+}

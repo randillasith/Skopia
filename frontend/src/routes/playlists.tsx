@@ -8,7 +8,8 @@ import {
 } from '@/components/primitives'
 import { PosterPlate, Lightbox } from '@/components/world'
 import { FrontOfHouse } from '@/components/Shell'
-import { VIDEOS, byId, fmt, seconds, clock } from '@/lib/data'
+import { fmt, seconds, clock, type Video } from '@/lib/data'
+import { useCatalogue } from '@/lib/useCatalogue'
 import { useLibrary, type Playlist, type PlaylistVisibility } from '@/lib/library'
 
 const VISIBILITY: Record<PlaylistVisibility, { icon: typeof Lock; note: string }> = {
@@ -17,8 +18,13 @@ const VISIBILITY: Record<PlaylistVisibility, { icon: typeof Lock; note: string }
   Public: { icon: Globe, note: 'Listed on your profile.' },
 }
 
-/** Total runtime of a list, so "six hours" is a fact rather than a guess. */
-function totalRuntime(ids: string[]) {
+/**
+ * Total runtime of a list, so "six hours" is a fact rather than a guess.
+ *
+ * The lookup is passed in rather than imported: the catalogue is loaded state
+ * now, and a module-level function cannot read it.
+ */
+function totalRuntime(ids: string[], byId: (id: string) => Video | undefined) {
   const secs = ids.reduce((s, id) => s + seconds(byId(id)?.runtime ?? '0:00'), 0)
   return clock(secs)
 }
@@ -150,6 +156,7 @@ export function SaveToPlaylist({
 /* ---------------------------------------------------------------- the list */
 
 function PlaylistCard({ p }: { p: Playlist }) {
+  const { byId } = useCatalogue()
   const cover = byId(p.videoIds[0] ?? '')
   const Icon = VISIBILITY[p.visibility].icon
   return (
@@ -183,7 +190,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
           <Icon className="size-3" />
           {p.visibility}
           <span aria-hidden>·</span>
-          <span className="font-mono tabular-nums">{totalRuntime(p.videoIds)}</span>
+          <span className="font-mono tabular-nums">{totalRuntime(p.videoIds, byId)}</span>
         </p>
       </div>
     </article>
@@ -192,6 +199,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
 
 export function Playlists() {
   const { playlists, watchLater, createPlaylist } = useLibrary()
+  const { byId } = useCatalogue()
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -296,6 +304,7 @@ export function PlaylistDetail() {
   const nav = useNavigate()
   const toast = useToast()
   const { playlists, toggleInPlaylist, deletePlaylist, renamePlaylist } = useLibrary()
+  const { byId } = useCatalogue()
   const [confirm, setConfirm] = useState(false)
   const p = playlists.find((x) => x.id === id)
 
@@ -313,7 +322,7 @@ export function PlaylistDetail() {
     )
   }
 
-  const items = p.videoIds.map((vid) => byId(vid)).filter(Boolean) as typeof VIDEOS
+  const items = p.videoIds.map((vid) => byId(vid)).filter(Boolean) as Video[]
   const Icon = VISIBILITY[p.visibility].icon
 
   return (
@@ -340,7 +349,7 @@ export function PlaylistDetail() {
               <span aria-hidden>·</span>
               <span className="tabular-nums">{items.length} videos</span>
               <span aria-hidden>·</span>
-              <span className="font-mono tabular-nums">{totalRuntime(p.videoIds)}</span>
+              <span className="font-mono tabular-nums">{totalRuntime(p.videoIds, byId)}</span>
             </p>
             {items.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">

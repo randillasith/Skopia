@@ -4,7 +4,9 @@ import { Bell, BellOff, Check, Users, Play, MapPin, CalendarDays } from 'lucide-
 import { Button, Tabs, EmptyState, Select, useToast, Avatar } from '@/components/primitives'
 import { PosterPlate, Lightbox, Letterboard, MarqueeRule } from '@/components/world'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { VIDEOS, fmt, seconds, type Video } from '@/lib/data'
+import { fmt, seconds, type Video } from '@/lib/data'
+import { useCatalogue } from '@/lib/useCatalogue'
+import { Resolve } from '@/components/Loading'
 import { CHANNELS, channelByHandle } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
 import { Tile } from './viewer'
@@ -100,10 +102,13 @@ export function ChannelPage() {
   const [tab, setTab] = useState('videos')
   const [sort, setSort] = useState<Sort>('recent')
   const { isSubscribed } = useLibrary()
+  // Channels themselves have no backend, but their titles do — the shelf is the
+  // catalogue filtered to what this channel published.
+  const { videos, loading, error, refresh } = useCatalogue()
 
   const all = useMemo(
-    () => (channel ? VIDEOS.filter((v) => v.creator === channel.name) : []),
-    [channel],
+    () => (channel ? videos.filter((v) => v.creator === channel.name) : []),
+    [videos, channel],
   )
   // A channel page is public, so it shows what a visitor could actually play.
   const published = useMemo(
@@ -178,7 +183,13 @@ export function ChannelPage() {
 
       <div className="mx-auto max-w-[1500px] px-4 pb-16 sm:px-6 lg:px-8">
         {tab === 'videos' ? (
-          published.length === 0 ? (
+          loading || error ? (
+            <div className="mt-10">
+              <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the channel">
+                {null}
+              </Resolve>
+            </div>
+          ) : published.length === 0 ? (
             <div className="mt-10">
               <EmptyState
                 icon={<Play className="size-6" />}
@@ -299,13 +310,15 @@ export function Subscriptions() {
   const { subscriptions } = useLibrary()
   const nav = useNavigate()
 
+  const { videos, loading, error, refresh } = useCatalogue()
+
   const channels = CHANNELS.filter((c) => subscriptions.includes(c.handle))
   const feed = useMemo(() => {
     const names = channels.map((c) => c.name)
-    return VIDEOS.filter(
+    return videos.filter(
       (v) => names.includes(v.creator) && v.billing !== 'IN REVIEW' && v.billing !== 'PULLED',
     ).sort((a, b) => b.published.localeCompare(a.published))
-  }, [channels])
+  }, [videos, channels])
 
   return (
     <FrontOfHouse>
@@ -314,7 +327,13 @@ export function Subscriptions() {
           Following
         </h1>
 
-        {channels.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-10">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Reading your feed">
+              {null}
+            </Resolve>
+          </div>
+        ) : channels.length === 0 ? (
           <div className="mt-10">
             <EmptyState
               icon={<Users className="size-6" />}

@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/api'
 import {
   reports, REPORT_TYPES, REPORT_TYPE_LABEL, type ServerReportType,
 } from '@/lib/reports'
+import { profile } from '@/lib/accounts'
 import { Resolve } from '@/components/Loading'
 import { CHANNELS, channelByName } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
@@ -1573,8 +1574,64 @@ export function NotificationPrefs() {
 
 /* ================================================================ profile */
 
+/**
+ * The account, as its holder can change it.
+ *
+ * Only what the server will actually take is offered. Language is a stored
+ * preference with no endpoint that sets it, and there is no avatar upload, so
+ * both are shown as fixed rather than as controls that would be ignored.
+ */
 export function Profile() {
   const toast = useToast()
+  const nav = useNavigate()
+  const { viewer, signOut } = useSession()
+  const actor = actorIdOf(viewer)
+  const [form, setForm] = useState({ displayName: '', email: '', bio: '', contactNo: '' })
+  const [busy, setBusy] = useState(false)
+  const [closing, setClosing] = useState(false)
+
+  useEffect(() => {
+    if (viewer) {
+      setForm({ displayName: viewer.name, email: viewer.email, bio: '', contactNo: '' })
+    }
+  }, [viewer?.id])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (actor == null) return
+    setBusy(true)
+    try {
+      await profile.update(actor, form)
+      toast({ title: 'Profile updated', tone: 'ok' })
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'Could not save that.',
+        tone: 'bad',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const close = async () => {
+    if (actor == null) return
+    setBusy(true)
+    try {
+      await profile.close(actor)
+      signOut()
+      toast({ title: 'Your account has been closed', tone: 'bad' })
+      nav('/')
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'Could not close the account.',
+        tone: 'bad',
+      })
+      setClosing(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
@@ -1582,24 +1639,53 @@ export function Profile() {
           Account
         </h1>
         <div className="mt-7 flex items-center gap-4">
-          <Avatar name="You There" size={64} />
+          <Avatar name={viewer?.name ?? 'Guest'} size={64} />
           <div>
-            <Button size="sm">Change picture</Button>
-            <p className="mt-1.5 text-[12px] text-ink-300">PNG or JPG. Maximum size not yet decided.</p>
+            <p className="text-[15px] font-medium text-white">{viewer?.name}</p>
+            <p className="font-mono text-[12px] text-ink-300">@{viewer?.handle}</p>
           </div>
         </div>
-        <form
-          className="mt-8 space-y-4"
-          onSubmit={(e) => { e.preventDefault(); toast({ title: 'Profile updated', tone: 'ok' }) }}
-        >
-          <Field label="Display name"><Input defaultValue="You There" /></Field>
-          <Field label="Email"><Input type="email" defaultValue="you@example.com" /></Field>
+        <form className="mt-8 space-y-4" onSubmit={save}>
+          <Field label="Display name">
+            <Input
+              value={form.displayName}
+              onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </Field>
+          <Field label="Contact number" hint="Optional">
+            <Input
+              value={form.contactNo}
+              onChange={(e) => setForm((f) => ({ ...f, contactNo: e.target.value }))}
+            />
+          </Field>
+          <Field label="About you" hint="Shown beside your comments">
+            <Textarea
+              value={form.bio}
+              maxLength={300}
+              onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+            />
+          </Field>
           <Field label="Language" hint="English only in this version">
-            <Select defaultValue="en"><option value="en">English</option></Select>
+            <Select disabled defaultValue="en"><option value="en">English</option></Select>
           </Field>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="quiet" type="button">Discard</Button>
-            <Button variant="primary" type="submit">Save changes</Button>
+            <Button
+              variant="quiet"
+              type="button"
+              onClick={() =>
+                viewer && setForm({ displayName: viewer.name, email: viewer.email, bio: '', contactNo: '' })
+              }
+            >
+              Discard
+            </Button>
+            <Button variant="primary" type="submit" loading={busy}>Save changes</Button>
           </div>
         </form>
 
@@ -1609,9 +1695,29 @@ export function Profile() {
             Your comments and watch history are removed. Any active pass is cancelled at the end of
             its current period. This cannot be undone.
           </p>
-          <Button variant="danger" className="mt-4">Close account</Button>
+          <Button variant="danger" className="mt-4" onClick={() => setClosing(true)}>
+            Close account
+          </Button>
         </div>
       </div>
+
+      <Modal
+        open={closing}
+        onClose={() => setClosing(false)}
+        title="Close your account?"
+        width="sm"
+        footer={
+          <>
+            <Button variant="quiet" onClick={() => setClosing(false)}>Keep my account</Button>
+            <Button variant="danger" loading={busy} onClick={close}>Close it permanently</Button>
+          </>
+        }
+      >
+        <p className="text-[14px] leading-relaxed text-ink-200">
+          This removes the account and everything attached to it. It cannot be undone, and the
+          handle becomes available for somebody else.
+        </p>
+      </Modal>
     </FrontOfHouse>
   )
 }

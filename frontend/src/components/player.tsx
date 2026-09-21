@@ -101,12 +101,44 @@ export function Player({
   const [failed, setFailed] = useState(false)
   const [scrub, setScrub] = useState<number | null>(null)
 
+  /**
+   * The real media, when there is any.
+   *
+   * Most of the catalogue is records without files, and the controls below are
+   * written against a clock rather than against an element. So the element is
+   * driven from the same state the clock is: when a file exists it is the source
+   * of truth for time, and when there is none the clock simulates it. Both paths
+   * end up in `time`, so the transport, the chapters and the progress written
+   * back to the server do not have to know which one is running.
+   */
+  const media = useRef<HTMLVideoElement>(null)
+  const hasMedia = !!video.mediaUrl
+
   useEffect(() => {
     onTimeChange?.(time)
   }, [time, onTimeChange])
 
-  // The clock. Runs at the chosen rate so 2× genuinely reaches the end sooner.
+  // The element follows the controls: play, rate, volume and seeks are pushed
+  // onto it, and it pushes its own currentTime back through onTimeUpdate below.
   useEffect(() => {
+    const el = media.current
+    if (!el) return
+    if (playing && !ad) el.play().catch(() => setFailed(true))
+    else el.pause()
+  }, [playing, ad])
+
+  useEffect(() => {
+    const el = media.current
+    if (!el) return
+    el.playbackRate = speed
+    el.volume = muted ? 0 : volume
+    el.muted = muted
+  }, [speed, volume, muted])
+
+  // The clock. Runs at the chosen rate so 2× genuinely reaches the end sooner.
+  // Skipped entirely when a file is playing — there the file keeps the time.
+  useEffect(() => {
+    if (hasMedia) return
     if (!playing || ad || failed) return
     const id = window.setInterval(() => {
       setTime((t) => {
@@ -122,8 +154,15 @@ export function Player({
     return () => window.clearInterval(id)
   }, [playing, speed, total, ad, failed, onEnded])
 
+  // A seek moves the element when there is one, and the element's timeupdate
+  // brings the state back. Setting both keeps the bar responsive while the
+  // element is still seeking.
   const seek = useCallback(
-    (to: number) => setTime(Math.max(0, Math.min(total, Math.round(to)))),
+    (to: number) => {
+      const at = Math.max(0, Math.min(total, Math.round(to)))
+      if (media.current) media.current.currentTime = at
+      setTime(at)
+    },
     [total],
   )
 
@@ -195,14 +234,42 @@ export function Player({
       ref={shell}
       className={cn('lightbox relative w-full', full ? 'aspect-auto h-screen' : 'aspect-video')}
     >
-      <PosterPlate
-        title={video.title}
-        creator={video.creator}
-        runtime={video.runtime}
-        seed={video.seed}
-        category={video.category}
-      />
-      <div className="absolute inset-0 bg-ink-950/45" />
+      {hasMedia ? (
+        <video
+          ref={media}
+          src={video.mediaUrl ?? undefined}
+          poster={video.thumbnailUrl ?? undefined}
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 size-full bg-black object-contain"
+          onLoadedMetadata={(e) => {
+            // Picking the title back up where it was left. Done here rather than
+            // on mount because currentTime is ignored before metadata arrives.
+            const at = Math.round((video.progress ?? 0) * seconds(video.runtime))
+            if (at > 0 && at < e.currentTarget.duration - 5) e.currentTarget.currentTime = at
+          }}
+          onTimeUpdate={(e) => setTime(Math.floor(e.currentTarget.currentTime))}
+          onEnded={() => {
+            setPlaying(false)
+            onEnded?.()
+          }}
+          onError={() => setFailed(true)}
+          onClick={() => setPlaying((p) => !p)}
+        />
+      ) : (
+        <>
+          {/* No file behind this record, so the poster stands in for one and the
+              transport runs off the clock. */}
+          <PosterPlate
+            title={video.title}
+            creator={video.creator}
+            runtime={video.runtime}
+            seed={video.seed}
+            category={video.category}
+          />
+          <div className="absolute inset-0 bg-ink-950/45" />
+        </>
+      )}
 
       {failed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">

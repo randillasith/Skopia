@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { Search, Clock, X, CornerDownLeft, Tv } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { VIDEOS } from '@/lib/data'
+import { useCatalogue } from '@/lib/useCatalogue'
 import { CHANNELS } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
 import { Avatar } from './primitives'
@@ -43,6 +43,10 @@ export function SearchBox({
 }) {
   const nav = useNavigate()
   const { recentSearches, recordSearch, forgetSearch } = useLibrary()
+  // Suggestions come from the catalogue already loaded for the page rather than
+  // from a request per keystroke: the point of a suggestion is that it is
+  // instant, and the search itself asks the server anyway.
+  const { videos } = useCatalogue()
   const [q, setQ] = useState(initial)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
@@ -60,14 +64,14 @@ export function SearchBox({
       .slice(0, 2)
       .map((c) => ({ kind: 'channel', text: c.name, handle: c.handle }))
 
-    const titles: Suggestion[] = VIDEOS.filter(
+    const titles: Suggestion[] = videos.filter(
       (v) => v.billing !== 'PULLED' && `${v.title} ${v.creator}`.toLowerCase().includes(t),
     )
       .slice(0, 6 - channels.length)
       .map((v) => ({ kind: 'title', text: v.title, id: v.id }))
 
     return [...channels, ...titles]
-  }, [q, recentSearches])
+  }, [q, recentSearches, videos])
 
   useEffect(() => setActive(-1), [q])
 

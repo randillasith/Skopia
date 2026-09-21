@@ -5,7 +5,8 @@ import { Button, Field, Input, Checkbox } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, MarqueeRule, Letterboard } from '@/components/world'
 import { Wordmark, useSession } from '@/components/Shell'
 import { Tile } from './viewer'
-import { VIDEOS, CATEGORIES, GENRES, fmt } from '@/lib/data'
+import { GENRES, fmt } from '@/lib/data'
+import { useCatalogue } from '@/lib/useCatalogue'
 import { homeFor } from '@/lib/session'
 import { accounts, ApiError } from '@/lib/accounts'
 
@@ -13,23 +14,27 @@ import { accounts, ApiError } from '@/lib/accounts'
 
 export function Lobby() {
   const nav = useNavigate()
-  const headline = VIDEOS[0]
-  const support = [VIDEOS[3], VIDEOS[7]]
+  // The landing page is the real catalogue, read without an account, because
+  // browsing needs none. An empty or unreachable catalogue simply means no
+  // shelves — the page above them still stands on its own.
+  const { videos, categories } = useCatalogue()
+  const headline = videos[0]
+  const support = [videos[3], videos[7]].filter(Boolean)
   // The justified tail is a typographic device, not a listing. Past a dozen or so
   // it stops reading as a block of type and becomes a wall; the shelves below
   // carry the rest.
-  const tail = VIDEOS.slice(1)
+  const tail = videos
+    .slice(1)
     .filter((v) => !support.includes(v) && v.billing === 'NOW SHOWING')
     .slice(0, 12)
 
-  // Browsing needs no account, so the landing page is the catalogue rather than a
-  // description of it. Only what is actually playable appears: a title still in
-  // review or not yet released is not the guest's business, and a shelf with one
-  // item on it looks worse than no shelf at all.
-  const shelves = CATEGORIES.map((category) => ({
-    category,
-    items: VIDEOS.filter(
-      (v) => v.category === category && (v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER'),
+  // Only what is actually playable appears: a title still in review or not yet
+  // released is not the guest's business, and a shelf with one item on it looks
+  // worse than no shelf at all.
+  const shelves = categories.map(({ name }) => ({
+    category: name,
+    items: videos.filter(
+      (v) => v.category === name && (v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER'),
     ).slice(0, 5),
   })).filter((s) => s.items.length >= 3)
 
@@ -220,6 +225,10 @@ function AuthFrame({
   children: React.ReactNode
   foot: React.ReactNode
 }) {
+  // The panel beside the form bills a real title, so it is right rather than
+  // decorative. With nothing in the catalogue the panel simply has no billing.
+  const { videos } = useCatalogue()
+  const showing = videos.find((v) => v.billing === 'NOW SHOWING')
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1fr_1.05fr]">
       <div className="flex flex-col px-4 py-8 sm:px-8 lg:px-14">
@@ -238,15 +247,17 @@ function AuthFrame({
           <PosterPlate title="" seed={3} compact />
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-10">
-          <Letterboard tone="live">Now showing</Letterboard>
-          <p className="font-marquee mt-3 text-[clamp(1.8rem,3vw,2.6rem)] font-extrabold leading-[1] tracking-[-0.03em] text-white">
-            {VIDEOS[0].title}
-          </p>
-          <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-ink-300">
-            {VIDEOS[0].synopsis}
-          </p>
-        </div>
+        {showing && (
+          <div className="absolute inset-x-0 bottom-0 p-10">
+            <Letterboard tone="live">Now showing</Letterboard>
+            <p className="font-marquee mt-3 text-[clamp(1.8rem,3vw,2.6rem)] font-extrabold leading-[1] tracking-[-0.03em] text-white">
+              {showing.title}
+            </p>
+            <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-ink-300">
+              {showing.synopsis}
+            </p>
+          </div>
+        )}
       </aside>
     </div>
   )
@@ -515,6 +526,7 @@ export function ResetPassword() {
 
 export function Onboarding() {
   const nav = useNavigate()
+  const { categories } = useCatalogue()
   const [picked, setPicked] = useState<string[]>([])
   const toggle = (g: string) =>
     setPicked((p) => (p.includes(g) ? p.filter((x) => x !== g) : [...p, g]))
@@ -535,9 +547,9 @@ export function Onboarding() {
         <fieldset className="mt-8">
           <legend className="letterboard mb-3 text-ink-300">Categories</legend>
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
-              <Chip key={c} on={picked.includes(c)} onClick={() => toggle(c)}>
-                {c}
+            {categories.map((c) => (
+              <Chip key={c.id} on={picked.includes(c.name)} onClick={() => toggle(c.name)}>
+                {c.name}
               </Chip>
             ))}
           </div>

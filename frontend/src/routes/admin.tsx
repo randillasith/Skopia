@@ -9,16 +9,19 @@ import {
   EmptyState, Placeholder, Toggle, useToast, SearchInput, Avatar, Section, Checkbox,
 } from '@/components/primitives'
 import { Letterboard, BillingBoard } from '@/components/world'
-import { BackOfHouse } from '@/components/Shell'
+import { BackOfHouse, useSession } from '@/components/Shell'
 import { Resolve } from '@/components/Loading'
 import { ApiError } from '@/lib/api'
 import { administration, rowToAccount } from '@/lib/accounts'
 import { useCatalogue } from '@/lib/useCatalogue'
 import {
-  complaints, referenceOf, COMPLAINT_STATUS_LABEL, type ServerComplaint,
+  complaints, loadQueue, referenceOf, COMPLAINT_STATUS_LABEL,
+  type QueueItem, type ServerComplaint,
 } from '@/lib/reports'
+import { studio, videoIdOf } from '@/lib/catalogue'
+import { actorId as actorIdOf } from '@/lib/session'
 import {
-  LOGS, VIDEOS, REPORTS, CAMPAIGNS, PLANS,
+  LOGS, CAMPAIGNS, PLANS,
   PAYMENTS, ANNOUNCEMENTS, UNDECIDED,
 } from '@/lib/data'
 import {
@@ -443,11 +446,73 @@ export function AdminRoles() {
 
 /* ============================================================ moderation */
 
+/**
+ * Content complaints, and the whole catalogue.
+ *
+ * A moderation decision is an act on the title itself, which is why it lives
+ * here rather than in the support queue: an officer can resolve a complaint but
+ * cannot pull a title. Pulling one archives it, which is the strongest thing the
+ * catalogue API offers — there is no "blocked" state a title can be put into.
+ */
 export function AdminModeration() {
   const nav = useNavigate()
   const toast = useToast()
-  const reported = REPORTS.filter((r) => r.type === 'Inappropriate content')
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const { videos, loading, error, refresh } = useCatalogue()
   const [tab, setTab] = useState('queue')
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const [reported, setReported] = useState<QueueItem[]>([])
+  const [queueLoading, setQueueLoading] = useState(true)
+  const [queueError, setQueueError] = useState<string | null>(null)
+  const [nonce, setNonce] = useState(0)
+  const reloadQueue = useCallback(() => setNonce((n) => n + 1), [])
+
+  useEffect(() => {
+    const abort = new AbortController()
+    setQueueLoading(true)
+    complaints
+      .queue(abort.signal)
+      .then((rows) => loadQueue(rows, abort.signal))
+      .then((joined) => {
+        setReported(joined.filter((i) => i.report?.type === 'INAPPROPRIATE_CONTENT'))
+        setQueueError(null)
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setQueueError(cause instanceof ApiError ? cause.message : 'Could not read the queue.')
+        setReported([])
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setQueueLoading(false)
+      })
+    return () => abort.abort()
+  }, [nonce])
+
+  /** The title a report names, if it named one this page can resolve. */
+  const titleFor = (reference: string | null | undefined) => {
+    const match = /^video:(\d+)$/.exec(reference ?? '')
+    return match ? videos.find((v) => v.id === match[1]) : undefined
+  }
+
+  const pull = async (video: { id: string; title: string }) => {
+    const numeric = videoIdOf(video.id)
+    if (numeric == null) return
+    setBusy(video.id)
+    try {
+      await studio.update(numeric, { status: 'ARCHIVED' }, actor)
+      toast({ title: `${video.title} pulled from the programme`, tone: 'bad' })
+      refresh()
+    } catch (cause) {
+      toast({
+        title: cause instanceof ApiError ? cause.message : 'That did not go through.',
+        tone: 'bad',
+      })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <BackOfHouse title="Moderation">
@@ -456,34 +521,42 @@ export function AdminModeration() {
         onChange={setTab}
         tabs={[
           { id: 'queue', label: 'Reported content', count: reported.length },
-          { id: 'titles', label: 'All titles', count: VIDEOS.length },
+          { id: 'titles', label: 'All titles', count: videos.length },
         ]}
       />
 
       {tab === 'queue' ? (
-        reported.length === 0 ? (
+        queueLoading || queueError ? (
+          <div className="mt-8">
+            <Resolve loading={queueLoading} error={queueError} onRetry={reloadQueue} what="Reading reported content">
+              {null}
+            </Resolve>
+          </div>
+        ) : reported.length === 0 ? (
           <div className="mt-8">
             <EmptyState icon={<ShieldCheck className="size-7" />} title="Nothing reported"
               body="No content complaints are waiting for a moderation decision." />
           </div>
         ) : (
           <ul className="mt-6 space-y-4">
-            {reported.map((r) => {
-              const v = r.target ? VIDEOS.find((x) => x.id === r.target) : undefined
+            {reported.map(({ complaint, report }) => {
+              const v = titleFor(report?.contentReference)
               return (
-                <li key={r.id} className="rounded-lg border border-ink-700 bg-ink-850 p-5">
+                <li key={complaint.id} className="rounded-lg border border-ink-700 bg-ink-850 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[12px] text-ink-300">{r.id}</span>
-                        <Letterboard tone={r.priority === 'Urgent' ? 'bad' : 'review'}>
-                          {r.priority.toUpperCase()}
+                        <span className="font-mono text-[12px] text-ink-300">{referenceOf(complaint)}</span>
+                        <Letterboard tone={complaint.priority === 'URGENT' ? 'bad' : 'review'}>
+                          {complaint.priority}
                         </Letterboard>
                         {v && <BillingBoard billing={v.billing} />}
                       </div>
-                      <p className="mt-2 text-[15px] font-medium text-white">{r.subject}</p>
-                      <p className="mt-1 text-[13.5px] leading-relaxed text-ink-300">{r.detail}</p>
-                      {v && (
+                      <p className="mt-2 text-[15px] font-medium text-white">Inappropriate content</p>
+                      <p className="mt-1 text-[13.5px] leading-relaxed text-ink-300">
+                        {report?.details ?? 'The report behind this complaint could not be read.'}
+                      </p>
+                      {v ? (
                         <p className="mt-2 text-[12.5px] text-ink-300">
                           On{' '}
                           <Link to={`/watch/${v.id}`} className="text-cyan-300 hover:underline">
@@ -491,19 +564,30 @@ export function AdminModeration() {
                           </Link>{' '}
                           by {v.creator}
                         </p>
+                      ) : (
+                        report?.contentReference && (
+                          <p className="mt-2 font-mono text-[12.5px] text-ink-300">
+                            {report.contentReference} — no longer in the catalogue
+                          </p>
+                        )
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" icon={<Eye className="size-4" />}
+                      <Button size="sm" icon={<Eye className="size-4" />} disabled={!v}
                         onClick={() => v && nav(`/watch/${v.id}`)}>
                         Review
                       </Button>
-                      <Button size="sm" variant="secondary"
-                        onClick={() => toast({ title: 'No action taken — content left as it is' })}>
-                        Leave as is
+                      <Button size="sm" variant="quiet" onClick={() => nav(`/queue/${complaint.id}`)}>
+                        Open complaint
                       </Button>
-                      <Button size="sm" variant="danger" icon={<Ban className="size-4" />}
-                        onClick={() => toast({ title: 'Title pulled from the programme', tone: 'bad' })}>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        icon={<Ban className="size-4" />}
+                        disabled={!v}
+                        loading={busy === v?.id}
+                        onClick={() => v && pull(v)}
+                      >
                         Pull title
                       </Button>
                     </div>
@@ -513,6 +597,12 @@ export function AdminModeration() {
             })}
           </ul>
         )
+      ) : loading || error ? (
+        <div className="mt-8">
+          <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the catalogue">
+            {null}
+          </Resolve>
+        </div>
       ) : (
         <div className="mt-6 rounded-lg border border-ink-700 bg-ink-850">
           <Table labels={["Title", "Creator", "Billing", "Views", ""]}>
@@ -520,17 +610,25 @@ export function AdminModeration() {
               <tr><Th>Title</Th><Th>Creator</Th><Th>Billing</Th><Th numeric>Views</Th><Th /></tr>
             </thead>
             <tbody>
-              {VIDEOS.map((v) => (
+              {videos.map((v) => (
                 <Tr key={v.id}>
                   <Td><span className="font-medium text-white">{v.title}</span></Td>
                   <Td className="text-ink-300">{v.creator}</Td>
                   <Td><BillingBoard billing={v.billing} /></Td>
                   <Td numeric>{v.views.toLocaleString()}</Td>
                   <Td>
-                    <div className="flex justify-end">
-                      <Button size="sm" variant="quiet"
-                        onClick={() => toast({ title: `${v.title} — moderation action recorded` })}>
-                        Act
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="quiet" onClick={() => nav(`/watch/${v.id}`)}>
+                        View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="quiet"
+                        loading={busy === v.id}
+                        disabled={v.billing === 'HELD OVER'}
+                        onClick={() => pull(v)}
+                      >
+                        Pull
                       </Button>
                     </div>
                   </Td>
