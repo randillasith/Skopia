@@ -48,3 +48,9 @@ build/
 # in uploads/ads/. The two files already tracked here stay tracked — git keeps
 # what it is already following — so this only stops new ones being committed.
 uploads/
+src/main/resources/application.properties
+src/main/resources/application-local.properties
+src/main/resources/application.properties.backup
+.env
+*.env
+!.env.example
