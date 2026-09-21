@@ -1,8 +1,9 @@
 spring.application.name=Skopia
 
-# Credentials come from the environment so nothing real is committed. Override
-# them locally with SKOPIA_DB_URL / SKOPIA_DB_USER / SKOPIA_DB_PASSWORD, or with
-# a src/main/resources/application-local.properties that git ignores.
+# Copy this file to application.properties and edit it for your machine. The
+# real application.properties is gitignored so nobody's local database settings
+# land in the repo. Credentials can also come from the environment: override
+# with SKOPIA_DB_URL / SKOPIA_DB_USER / SKOPIA_DB_PASSWORD.
 spring.datasource.url=${SKOPIA_DB_URL:jdbc:mysql://localhost:3306/skopia?createDatabaseIfNotExist=true&serverTimezone=UTC}
 spring.datasource.username=${SKOPIA_DB_USER:root}
 spring.datasource.password=${SKOPIA_DB_PASSWORD:}
