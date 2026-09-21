@@ -98,7 +98,20 @@ export type Account = {
   staff: StaffRole[]
   /** Set when the holder creates a channel. Nobody approves it. */
   channelId: string | null
+  /**
+   * The account's id on the server, which is what every API call identifies the
+   * caller by. Null for the prototype identities below, which exist only in this
+   * page and so cannot act on the server's behalf.
+   */
+  userId?: number | null
+  /** The server calls this account a content creator, whatever it owns here. */
+  isContentCreator?: boolean
+  isPremium?: boolean
+  isVerified?: boolean
 }
+
+/** The id to send as X-User-Id, or null when this session cannot act server-side. */
+export const actorId = (v: Viewer): number | null => v?.userId ?? null
 
 export const ACCOUNTS: Account[] = [
   { id: 'u-1001', name: 'Punsara P. S.', handle: 'p.punsara', email: 'p.punsara@skopia.test', joined: '2026-02-11', lastSeen: '4 min ago', status: 'Active', staff: ['admin'], channelId: null },
@@ -125,7 +138,8 @@ export const hasStaff = (v: Viewer, role: StaffRole) => !!v?.staff.includes(role
 /** An administrator reaches every staff console; the other two do not overlap. */
 export const canStaff = (v: Viewer, role: StaffRole) => hasStaff(v, role) || hasStaff(v, 'admin')
 export const ownedChannel = (v: Viewer) => (v ? channelById(v.channelId) : null)
-export const isCreator = (v: Viewer) => ownedChannel(v) !== null
+/** Owning a channel here, or being a creator account on the server. */
+export const isCreator = (v: Viewer) => ownedChannel(v) !== null || v?.isContentCreator === true
 
 /** Channels this account moderates but does not own. */
 export const moderatedChannels = (v: Viewer) =>

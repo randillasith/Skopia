@@ -1,0 +1,128 @@
+/**
+ * Sign-in, sign-up, and turning a server account into the shape this UI uses.
+ *
+ * The API answers with a flat `LoginResponse` carrying one `roleType`. This UI
+ * models capability as three independent grants (lib/session.ts), so the mapping
+ * between them lives here and nowhere else — a screen never reads `roleType`.
+ */
+
+import { request, ApiError } from './api'
+import type { Account, AccountStatus, StaffRole } from './session'
+import { channelByHandle } from './session'
+
+/* ------------------------------------------------------------ server shape */
+
+/** What /api/auth/login, /register and /me all answer with. */
+export type ServerAccount = {
+  id: number | null
+  userId: number | null
+  username: string
+  email: string
+  firstName: string | null
+  lastName: string | null
+  displayName: string | null
+  roleType: string | null
+  userType: string | null
+  accountStatus: string | null
+  isPremium: boolean | null
+  isVerified: boolean | null
+  token: string | null
+  message: string | null
+}
+
+/**
+ * The server's single role word, read as the grants it actually implies.
+ *
+ * Only the three staff subclasses carry a platform grant. A content creator is
+ * not staff — owning a channel is its own grant, and collapsing the two is the
+ * mistake lib/session.ts exists to avoid.
+ */
+function staffFrom(roleType: string | null | undefined): StaffRole[] {
+  const role = (roleType ?? '').toUpperCase().replace(/[^A-Z]/g, '')
+  if (role.includes('ADMINISTRATOR') || role === 'ADMIN') return ['admin']
+  if (role.includes('MARKETING')) return ['marketing']
+  if (role.includes('SUPPORT')) return ['support']
+  return []
+}
+
+/** The server spells status in capitals; the UI spells it as a word. */
+function statusFrom(accountStatus: string | null | undefined): AccountStatus {
+  switch ((accountStatus ?? 'ACTIVE').toUpperCase()) {
+    case 'SUSPENDED':
+      return 'Suspended'
+    case 'BLOCKED':
+      return 'Blocked'
+    case 'INVITED':
+      return 'Invited'
+    default:
+      return 'Active'
+  }
+}
+
+/**
+ * Turn a server account into the session's `Account`.
+ *
+ * `channelId` is resolved by handle against the prototype's channel list, which
+ * is the only place channels exist — there is no channel backend yet. A creator
+ * whose handle names no known channel still reads as a creator through
+ * `isContentCreator`, so the studio is not closed to them.
+ */
+export function toAccount(server: ServerAccount): Account {
+  const userId = server.userId ?? server.id
+  const role = (server.roleType ?? server.userType ?? '').toUpperCase()
+  const creator = role.includes('CREATOR')
+  const channel = creator ? channelByHandle(server.username) : null
+
+  return {
+    id: userId == null ? server.username : String(userId),
+    userId: userId ?? null,
+    name: server.displayName?.trim() ||
+      [server.firstName, server.lastName].filter(Boolean).join(' ').trim() ||
+      server.username,
+    handle: server.username,
+    email: server.email,
+    joined: '',
+    lastSeen: 'now',
+    status: statusFrom(server.accountStatus),
+    staff: staffFrom(server.roleType ?? server.userType),
+    channelId: channel?.id ?? null,
+    isContentCreator: creator,
+    isPremium: server.isPremium === true,
+    isVerified: server.isVerified === true,
+  }
+}
+
+/* ----------------------------------------------------------------- client */
+
+export type SignUpInput = {
+  username: string
+  email: string
+  password: string
+  displayName?: string
+  firstName?: string
+  lastName?: string
+  /** 'CONTENT_CREATOR' asks the server for a creator account. */
+  role?: string
+  channelName?: string
+}
+
+export const accounts = {
+  signIn: (identifier: string, password: string) =>
+    request<ServerAccount>('/api/auth/login', {
+      method: 'POST',
+      body: { identifier, emailOrUsername: identifier, password },
+    }),
+
+  signUp: (input: SignUpInput) =>
+    request<ServerAccount>('/api/auth/register', { method: 'POST', body: input }),
+
+  /** Re-resolve an account by id, which is how a stored session is revived. */
+  me: (userId: number) => request<ServerAccount>(`/api/auth/me?userId=${userId}`),
+
+  handleAvailable: (handle: string) =>
+    request<{ handle: string; available: boolean }>(
+      `/api/auth/check-handle?handle=${encodeURIComponent(handle)}`,
+    ),
+}
+
+export { ApiError }

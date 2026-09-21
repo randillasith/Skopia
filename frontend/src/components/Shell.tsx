@@ -14,8 +14,9 @@ import { useLibrary } from '@/lib/library'
 import {
   CHANNELS, DEMO_IDENTITIES, STAFF_ROLES, accountById, canStaff, describe,
   homeFor, isCreator, moderatedChannels, ownedChannel,
-  type StaffRole, type Viewer,
+  type Account, type StaffRole, type Viewer,
 } from '@/lib/session'
+import { accounts, toAccount, type SignUpInput } from '@/lib/accounts'
 import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
 import { SearchBox } from './search'
@@ -24,77 +25,143 @@ import { SearchBox } from './search'
 
 /**
  * Login is session-based: signing in asks the server to open a session and the
- * browser carries nothing but the cookie for it. Signing out ends the session on
- * the server. Nothing about who you are or what you may do is kept in the page,
- * because a value the client can edit is not an authorisation.
- *
- * Here that server is absent, so `viewer` stands in for whatever the session
- * resolves to — an Account, or null for a guest.
+ * browser carries nothing but the account id needed to address it. Nothing about
+ * what an account may do is decided in the page — the grants below come from the
+ * server's answer and are re-fetched on every load, so editing what is stored
+ * changes which account is asked about, never what it is allowed to do.
  */
 type SessionValue = {
   viewer: Viewer
-  signIn: (accountId: string) => void
+  /** True while a stored session is being resolved, before the first answer. */
+  resolving: boolean
+  signIn: (identifier: string, password: string) => Promise<Account>
+  signUp: (input: SignUpInput) => Promise<Account>
   signOut: () => void
+  /**
+   * Switch to one of the prototype identities. They have no server account, so a
+   * screen backed by the API will find nothing for them. Kept because several
+   * screens have no backend yet and need somebody to be.
+   */
+  becomeDemo: (accountId: string | null) => void
 }
 
 const SessionCtx = createContext<SessionValue>({
   viewer: null,
-  signIn: () => {},
+  resolving: false,
+  signIn: async () => {
+    throw new Error('No session provider')
+  },
+  signUp: async () => {
+    throw new Error('No session provider')
+  },
   signOut: () => {},
+  becomeDemo: () => {},
 })
 
 export const useSession = () => useContext(SessionCtx)
 
 /**
- * Stands in for the session cookie so that a refresh does not sign you out.
+ * What survives a refresh: a server account id, or a prototype identity.
  *
- * It holds an account id and nothing else — no role, no permission, nothing the
- * page decides anything from. A real deployment stores no identity here at all:
- * the cookie goes to the server, the server resolves the session, and the reply
- * carries what this account may do. Editing this value would fool nothing but
- * this prototype.
+ * It holds an id and nothing else — no role, no permission, nothing the page
+ * decides anything from. On load the id is handed back to the server, which
+ * answers with what the account actually is.
  */
 const SESSION_KEY = 'skopia.session'
 /** Signing out has to be distinguishable from never having signed in, or a
  *  refresh after signing out would quietly sign you back in. */
 const SIGNED_OUT = 'guest'
-/** Who the prototype opens as on a first visit, before anyone signs in. */
-const DEFAULT_IDENTITY = 'u-1007'
 
-function readStoredSession(): Viewer {
+type Stored = { kind: 'api'; userId: number } | { kind: 'demo'; id: string } | null
+
+function readStored(): Stored {
   try {
-    const id = window.sessionStorage.getItem(SESSION_KEY)
-    if (id === SIGNED_OUT) return null
-    return accountById(id ?? DEFAULT_IDENTITY)
+    const raw = window.localStorage.getItem(SESSION_KEY)
+    if (!raw || raw === SIGNED_OUT) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.kind === 'api' && typeof parsed.userId === 'number') return parsed
+    if (parsed?.kind === 'demo' && typeof parsed.id === 'string') return parsed
+    return null
   } catch {
-    // Private windows and blocked site data both throw here.
-    return accountById(DEFAULT_IDENTITY)
+    // Private windows, blocked site data and stale formats all land here.
+    return null
   }
 }
 
-function writeStoredSession(id: string | null) {
+function writeStored(value: Stored) {
   try {
-    window.sessionStorage.setItem(SESSION_KEY, id ?? SIGNED_OUT)
+    window.localStorage.setItem(SESSION_KEY, value ? JSON.stringify(value) : SIGNED_OUT)
   } catch {
     // Nothing to do — the session simply will not outlive the page.
   }
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [viewer, setViewer] = useState<Viewer>(readStoredSession)
+  const [viewer, setViewer] = useState<Viewer>(null)
+  const [resolving, setResolving] = useState(true)
+
+  // A stored id is a question for the server, not an answer. Asking again on
+  // every load is what keeps a deactivated or re-graded account from carrying
+  // yesterday's capabilities around in this tab.
+  useEffect(() => {
+    const stored = readStored()
+    if (!stored) {
+      setResolving(false)
+      return
+    }
+    if (stored.kind === 'demo') {
+      setViewer(accountById(stored.id))
+      setResolving(false)
+      return
+    }
+    let live = true
+    accounts
+      .me(stored.userId)
+      .then((server) => {
+        if (live) setViewer(toAccount(server))
+      })
+      .catch(() => {
+        // The account is gone, or the API is down. Either way this tab is a
+        // guest until somebody signs in again, which is the safe reading.
+        if (live) {
+          writeStored(null)
+          setViewer(null)
+        }
+      })
+      .finally(() => {
+        if (live) setResolving(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [])
+
   const value = useMemo<SessionValue>(
     () => ({
       viewer,
-      signIn: (id: string) => {
-        writeStoredSession(id)
-        setViewer(accountById(id))
+      resolving,
+      signIn: async (identifier, password) => {
+        const account = toAccount(await accounts.signIn(identifier, password))
+        if (account.userId != null) writeStored({ kind: 'api', userId: account.userId })
+        setViewer(account)
+        return account
+      },
+      signUp: async (input) => {
+        const account = toAccount(await accounts.signUp(input))
+        if (account.userId != null) writeStored({ kind: 'api', userId: account.userId })
+        setViewer(account)
+        return account
       },
       signOut: () => {
-        writeStoredSession(null)
+        writeStored(null)
         setViewer(null)
       },
+      becomeDemo: (id) => {
+        writeStored(id ? { kind: 'demo', id } : null)
+        setViewer(id ? accountById(id) : null)
+      },
     }),
-    [viewer],
+    [viewer, resolving],
   )
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>
 }
@@ -125,7 +192,7 @@ function GrantChip({ children, tone }: { children: React.ReactNode; tone: 'staff
  * should look unremarkable.
  */
 export function AccountMenu({ compact = false }: { compact?: boolean }) {
-  const { viewer, signIn, signOut } = useSession()
+  const { viewer, signOut, becomeDemo } = useSession()
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
   const own = ownedChannel(viewer)
@@ -245,6 +312,9 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
                 <p className="letterboard px-3.5 pb-1 pt-2 text-ink-300">
                   Switch identity — prototype only
                 </p>
+                {/* These identities exist only in this page. Screens backed by
+                    the API will correctly find nothing for them; sign in for
+                    those. */}
                 {DEMO_IDENTITIES.map((d) => {
                   const a = d.id ? accountById(d.id) : null
                   const active = (viewer?.id ?? null) === d.id
@@ -253,8 +323,7 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
                       key={d.id ?? 'guest'}
                       role="menuitem"
                       onClick={() => {
-                        if (d.id) signIn(d.id)
-                        else signOut()
+                        becomeDemo(d.id)
                         setOpen(false)
                         nav(d.id ? homeFor(accountById(d.id)) : '/')
                       }}

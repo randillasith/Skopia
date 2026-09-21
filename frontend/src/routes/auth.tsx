@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Play, Check } from 'lucide-react'
 import { Button, Field, Input, Checkbox } from '@/components/primitives'
@@ -6,7 +6,8 @@ import { PosterPlate, Lightbox, BillingBoard, MarqueeRule, Letterboard } from '@
 import { Wordmark, useSession } from '@/components/Shell'
 import { Tile } from './viewer'
 import { VIDEOS, CATEGORIES, GENRES, fmt } from '@/lib/data'
-import { ACCOUNTS, homeFor } from '@/lib/session'
+import { homeFor } from '@/lib/session'
+import { accounts, ApiError } from '@/lib/accounts'
 
 /* =============================================================== the lobby */
 
@@ -256,27 +257,29 @@ function AuthFrame({
 export function Login() {
   const nav = useNavigate()
   const { signIn } = useSession()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [pw, setPw] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.includes('@')) return setErr('Enter the email address you registered with.')
-    if (pw.length < 4) return setErr('That password is too short to be one of ours.')
+    if (!identifier.trim()) return setErr('Enter your email address or handle.')
+    if (!pw) return setErr('Enter your password.')
     setErr('')
     setBusy(true)
-    // Without a backend there is nothing to authenticate against, so the
-    // address decides which demo account the session resolves to. A real sign-in
-    // posts the credentials, the server opens the session, and the reply carries
-    // no role the page could act on by itself.
-    window.setTimeout(() => {
-      const match = ACCOUNTS.find((a) => a.email.toLowerCase() === email.trim().toLowerCase())
-      const account = match ?? ACCOUNTS.find((a) => a.id === 'u-1007')!
-      signIn(account.id)
+    try {
+      // The server decides who this is and what the account holds. Nothing about
+      // the answer is chosen here, which is the whole point of asking.
+      const account = await signIn(identifier.trim(), pw)
       nav(homeFor(account))
-    }, 700)
+    } catch (cause) {
+      // A refusal and an unreachable API both arrive as ApiError, and both are
+      // worth saying plainly rather than leaving the form looking broken.
+      setErr(cause instanceof ApiError ? cause.message : 'Could not sign you in.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -293,31 +296,30 @@ export function Login() {
       }
     >
       <form onSubmit={submit} className="space-y-4" noValidate>
-        <Field label="Email" required error={err && !email.includes('@') ? err : undefined}>
+        <Field label="Email or handle" required>
           <Input
-            type="email"
-            value={email}
-            autoComplete="email"
-            placeholder="you@example.com"
-            onChange={(e) => setEmail(e.target.value)}
-            invalid={!!err && !email.includes('@')}
+            value={identifier}
+            autoComplete="username"
+            placeholder="you@example.com or @handle"
+            onChange={(e) => setIdentifier(e.target.value)}
+            invalid={!!err}
           />
         </Field>
-        <Field
-          label="Password"
-          required
-          error={err && email.includes('@') ? err : undefined}
-          hint=""
-        >
+        <Field label="Password" required>
           <Input
             type="password"
             value={pw}
             autoComplete="current-password"
             placeholder="••••••••"
             onChange={(e) => setPw(e.target.value)}
-            invalid={!!err && email.includes('@')}
+            invalid={!!err}
           />
         </Field>
+        {err && (
+          <p role="alert" className="text-[13px] text-danger-400">
+            {err}
+          </p>
+        )}
         <div className="flex items-center justify-between">
           <Checkbox checked label="Keep me signed in" onChange={() => {}} />
           <Link to="/reset" className="text-[13px] text-ink-300 hover:text-white">
@@ -336,6 +338,57 @@ export function Login() {
 
 export function Signup() {
   const nav = useNavigate()
+  const { signUp } = useSession()
+  const [name, setName] = useState('')
+  const [handle, setHandle] = useState('')
+  const [email, setEmail] = useState('')
+  const [pw, setPw] = useState('')
+  const [creator, setCreator] = useState(false)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // The handle is checked as it is typed because finding out it is taken after
+  // filling in everything else is the worst moment to be told.
+  const [taken, setTaken] = useState<boolean | null>(null)
+  useEffect(() => {
+    const clean = handle.trim().replace(/^@/, '')
+    if (clean.length < 3) {
+      setTaken(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      accounts
+        .handleAvailable(clean)
+        .then((r) => setTaken(!r.available))
+        .catch(() => setTaken(null))
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [handle])
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const clean = handle.trim().replace(/^@/, '')
+    if (clean.length < 3) return setErr('Pick a handle of at least three characters.')
+    if (!email.includes('@')) return setErr('Enter an email address we can reach you at.')
+    if (pw.length < 4) return setErr('Use a password of at least four characters.')
+    setErr('')
+    setBusy(true)
+    try {
+      await signUp({
+        username: clean,
+        email: email.trim(),
+        password: pw,
+        displayName: name.trim() || clean,
+        role: creator ? 'CONTENT_CREATOR' : 'REGISTERED_VIEWER',
+      })
+      nav('/onboarding')
+    } catch (cause) {
+      setErr(cause instanceof ApiError ? cause.message : 'Could not create the account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <AuthFrame
       title="Create your account"
@@ -349,24 +402,65 @@ export function Signup() {
         </>
       }
     >
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          nav('/onboarding')
-        }}
-      >
+      <form className="space-y-4" onSubmit={submit} noValidate>
         <Field label="Display name" required>
-          <Input placeholder="How you appear on comments" autoComplete="name" />
+          <Input
+            value={name}
+            placeholder="How you appear on comments"
+            autoComplete="name"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Handle"
+          required
+          hint="Letters and numbers, at least three."
+          error={taken ? `@${handle.trim().replace(/^@/, '')} is already taken.` : undefined}
+        >
+          <Input
+            value={handle}
+            placeholder="@yourhandle"
+            autoComplete="username"
+            invalid={taken === true}
+            onChange={(e) => setHandle(e.target.value)}
+          />
         </Field>
         <Field label="Email" required>
-          <Input type="email" placeholder="you@example.com" autoComplete="email" />
+          <Input
+            type="email"
+            value={email}
+            placeholder="you@example.com"
+            autoComplete="email"
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </Field>
-        <Field label="Password" required hint="At least 8 characters">
-          <Input type="password" placeholder="••••••••" autoComplete="new-password" />
+        <Field label="Password" required hint="At least four characters">
+          <Input
+            type="password"
+            value={pw}
+            placeholder="••••••••"
+            autoComplete="new-password"
+            onChange={(e) => setPw(e.target.value)}
+          />
         </Field>
-        <Checkbox checked={false} onChange={() => {}} label="Email me about new titles and platform news" />
-        <Button type="submit" variant="primary" size="lg" className="w-full">
+        <Checkbox
+          checked={creator}
+          onChange={setCreator}
+          label="I want to publish videos — open a channel for me"
+        />
+        {err && (
+          <p role="alert" className="text-[13px] text-danger-400">
+            {err}
+          </p>
+        )}
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          loading={busy}
+          disabled={taken === true}
+          className="w-full"
+        >
           Create account
         </Button>
       </form>
