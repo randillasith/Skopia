@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'rea
 import { useEffect } from 'react'
 import { ToastHost } from '@/components/primitives'
 import { LibraryProvider } from '@/lib/library'
+import { CatalogueProvider } from '@/lib/useCatalogue'
 import {
   SessionProvider, RequireAuth, RequireChannel, RequireModerator, RequireStaff,
 } from '@/components/Shell'
@@ -40,6 +41,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <SessionProvider>
+        <CatalogueProvider>
         <LibraryProvider>
         <ToastHost>
           <ScrollToTop />
@@ -135,6 +137,7 @@ export default function App() {
           </Routes>
         </ToastHost>
         </LibraryProvider>
+        </CatalogueProvider>
       </SessionProvider>
     </BrowserRouter>
   )

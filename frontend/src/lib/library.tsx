@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { VIDEOS } from './data'
+import { catalogue } from './catalogue'
+import { actorId as actorIdOf } from './session'
+import { useSession } from '@/components/Shell'
 
 /**
  * Everything the viewer accumulates: who they follow, what they saved, what they
@@ -10,6 +12,14 @@ import { VIDEOS } from './data'
  * the player, the channel page and four separate routes all read and write it.
  * Threading it through props would mean every one of them knowing about the
  * others.
+ *
+ * Two of these now belong to the server rather than to this browser. Watch later
+ * and watch history are rows the API holds against the account, so they are read
+ * from it on sign-in and written through it on every change — otherwise the same
+ * account would carry a different library on a different device.
+ *
+ * The rest — playlists, the queue, downloads, followed channels, recent searches
+ * — have no backend yet, so they stay local and are honest about being local.
  *
  * Persisted to localStorage so a reload does not throw the lot away. Every read
  * and write is wrapped: private windows and blocked site data both throw, and a
@@ -93,34 +103,36 @@ type Stored = {
   recentSearches: string[]
   queue: string[]
   downloads: string[]
+  /**
+   * Titles removed from history in this browser.
+   *
+   * There is no endpoint that forgets a watch, so removing one hides it here
+   * instead. It is a local decision the server does not know about, and it is
+   * kept as its own list rather than by editing the history so the two are
+   * never confused.
+   */
+  forgotten: string[]
 }
 
+/**
+ * A new library is empty.
+ *
+ * It used to open pre-filled with prototype ids, which against a real catalogue
+ * are links to titles that do not exist. Watch later and history are filled from
+ * the server as soon as somebody signs in; the rest fills as they use it.
+ */
 const seed = (): Stored => ({
-  subscriptions: ['meridian', 'basement'],
-  bells: ['meridian'],
-  playlists: [
-    {
-      id: 'pl-1',
-      name: 'Watch with the family',
-      visibility: 'Private',
-      videoIds: ['v-1056', 'v-1062', 'v-1081'],
-      created: '2026-08-04',
-    },
-    {
-      id: 'pl-2',
-      name: 'Long documentaries',
-      visibility: 'Unlisted',
-      videoIds: ['v-1053', 'v-1073', 'v-1076'],
-      created: '2026-06-21',
-    },
-  ],
-  watchLater: ['v-1059', 'v-1065'],
-  votes: { 'v-1041': 'up' },
-  history: VIDEOS.filter((v) => typeof v.progress === 'number').map((v) => v.id),
+  subscriptions: [],
+  bells: [],
+  playlists: [],
+  watchLater: [],
+  votes: {},
+  history: [],
   historyPaused: false,
-  recentSearches: ['winter', 'harbour studio', 'captions'],
-  queue: ['v-1071', 'v-1064'],
-  downloads: ['v-1062'],
+  recentSearches: [],
+  queue: [],
+  downloads: [],
+  forgotten: [],
 })
 
 function read(): Stored {
@@ -151,10 +163,41 @@ export function useLibrary(): LibraryValue {
 
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<Stored>(read)
+  const { viewer, resolving } = useSession()
+  const actor = actorIdOf(viewer)
 
   useEffect(() => {
     write(s)
   }, [s])
+
+  // Watch later and history belong to the account, so they are replaced by the
+  // server's answer whenever the acting account changes. Signing out empties
+  // them here rather than leaving the last account's rows on screen.
+  useEffect(() => {
+    if (resolving) return
+    if (actor == null) {
+      setS((p) => ({ ...p, watchLater: [], history: [] }))
+      return
+    }
+    const abort = new AbortController()
+    Promise.all([
+      catalogue.watchlist(actor, abort.signal),
+      catalogue.history(actor, abort.signal),
+    ])
+      .then(([saved, watched]) =>
+        setS((p) => ({
+          ...p,
+          watchLater: saved.map((row) => String(row.id)),
+          history: watched.map((row) => String(row.id)),
+        })),
+      )
+      .catch(() => {
+        // The API is down or the account is gone. An empty library reads better
+        // than one that is silently a different account's.
+        if (!abort.signal.aborted) setS((p) => ({ ...p, watchLater: [], history: [] }))
+      })
+    return () => abort.abort()
+  }, [actor, resolving])
 
   const toggleIn = useCallback(
     (key: 'subscriptions' | 'bells' | 'watchLater' | 'queue' | 'downloads', id: string) => {
@@ -222,13 +265,37 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
       watchLater: s.watchLater,
       isSaved: (id) => s.watchLater.includes(id),
-      toggleWatchLater: (id) => toggleIn('watchLater', id),
+      // The list is moved at once so the control answers immediately, and the
+      // server's reply corrects it if the two disagree. A signed-out viewer has
+      // nowhere to save to, so nothing is claimed to have been saved.
+      toggleWatchLater: (id) => {
+        if (actor == null) return false
+        const added = toggleIn('watchLater', id)
+        const numeric = Number(id)
+        if (Number.isFinite(numeric)) {
+          catalogue
+            .toggleSaved(numeric, actor)
+            .then(({ saved }) =>
+              setS((p) => ({
+                ...p,
+                watchLater: saved
+                  ? [...new Set([...p.watchLater, id])]
+                  : p.watchLater.filter((x) => x !== id),
+              })),
+            )
+            .catch(() => setS((p) => ({
+              ...p,
+              watchLater: added ? p.watchLater.filter((x) => x !== id) : [...new Set([...p.watchLater, id])],
+            })))
+        }
+        return added
+      },
 
       votes: s.votes,
       vote: (id, v) =>
         setS((p) => ({ ...p, votes: { ...p.votes, [id]: p.votes[id] === v ? null : v } })),
 
-      history: s.history,
+      history: s.history.filter((id) => !s.forgotten.includes(id)),
       historyPaused: s.historyPaused,
       setHistoryPaused: (v) => setS((p) => ({ ...p, historyPaused: v })),
       recordWatch: (id) =>
@@ -237,8 +304,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
             ? p
             : { ...p, history: [id, ...p.history.filter((x) => x !== id)].slice(0, 100) },
         ),
-      forgetWatch: (id) => setS((p) => ({ ...p, history: p.history.filter((x) => x !== id) })),
-      clearHistory: () => setS((p) => ({ ...p, history: [] })),
+      // Forgetting is local: no endpoint removes a watch, so it is hidden here
+      // and will come back if this browser's storage is cleared.
+      forgetWatch: (id) =>
+        setS((p) => ({ ...p, forgotten: [...new Set([...p.forgotten, id])] })),
+      clearHistory: () => setS((p) => ({ ...p, forgotten: [...new Set([...p.forgotten, ...p.history])] })),
 
       recentSearches: s.recentSearches,
       recordSearch: (q) => {
@@ -266,7 +336,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       isDownloaded: (id) => s.downloads.includes(id),
       toggleDownload: (id) => toggleIn('downloads', id),
     }),
-    [s, toggleIn],
+    [s, toggleIn, actor],
   )
 
   return <LibraryCtx.Provider value={value}>{children}</LibraryCtx.Provider>

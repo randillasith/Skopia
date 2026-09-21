@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Play, Bookmark, Share2, Flag, ThumbsUp, ThumbsDown, Trash2, SearchX, Clock,
-  Bell, LifeBuoy, ChevronRight, X, ListEnd, Download, Hash, Pin, Heart,
+  Bell, LifeBuoy, ChevronRight, X, ListEnd, Download, Hash, Pin,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, Toggle, EmptyState,
@@ -13,9 +13,13 @@ import { Player, ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import { AdSlot, useBackendVideoId } from '@/components/AdSlot'
 import {
-  VIDEOS, CATEGORIES, GENRES, COMMENTS, NOTIFICATIONS, byId, fmt, clock, seconds,
-  isVerified, tagsFor, type Video,
+  GENRES, NOTIFICATIONS, fmt, clock, seconds, isVerified, tagsFor, type Video,
 } from '@/lib/data'
+import { useCatalogue, useVideo, useVideoSearch, useComments } from '@/lib/useCatalogue'
+import { catalogue, videoIdOf } from '@/lib/catalogue'
+import { actorId as actorIdOf } from '@/lib/session'
+import { ApiError } from '@/lib/api'
+import { Resolve } from '@/components/Loading'
 import { CHANNELS, channelByName } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
 import { SearchBox } from '@/components/search'
@@ -149,17 +153,18 @@ export function Browse() {
   const nav = useNavigate()
   const toast = useToast()
   const { isSaved, toggleWatchLater } = useLibrary()
+  const { videos, categories, loading, error, refresh } = useCatalogue()
   const [cat, setCat] = useState<string>('All')
   const [sort, setSort] = useState('popular')
 
   const list = useMemo(() => {
-    let l = VIDEOS.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW')
+    let l = videos.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW')
     if (cat !== 'All') l = l.filter((v) => v.category === cat)
     if (sort === 'popular') l = [...l].sort((a, b) => b.views - a.views)
     if (sort === 'newest') l = [...l].sort((a, b) => b.published.localeCompare(a.published))
     if (sort === 'title') l = [...l].sort((a, b) => a.title.localeCompare(b.title))
     return l
-  }, [cat, sort])
+  }, [videos, cat, sort])
 
   const [lead, ...rest] = list
   const featured = rest.slice(0, 3)
@@ -190,7 +195,7 @@ export function Browse() {
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {['All', ...CATEGORIES].map((c) => (
+          {['All', ...categories.map((c) => c.name)].map((c) => (
             <button
               key={c}
               onClick={() => setCat(c)}
@@ -207,13 +212,23 @@ export function Browse() {
           ))}
         </div>
 
-        {list.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-10">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the programme">
+              {null}
+            </Resolve>
+          </div>
+        ) : list.length === 0 ? (
           <div className="mt-10">
             <EmptyState
               icon={<SearchX className="size-7" />}
-              title="Nothing in that category yet"
-              body="No titles are currently billed under this category. Try another, or see the whole programme."
-              action={<Button onClick={() => setCat('All')}>Show everything</Button>}
+              title={cat === 'All' ? 'Nothing is booked yet' : 'Nothing in that category yet'}
+              body={
+                cat === 'All'
+                  ? 'The catalogue is empty. Once a creator publishes something it appears here.'
+                  : 'No titles are currently billed under this category. Try another, or see the whole programme.'
+              }
+              action={cat !== 'All' && <Button onClick={() => setCat('All')}>Show everything</Button>}
             />
           </div>
         ) : (
@@ -350,6 +365,7 @@ export function SearchPage() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const { recordSearch } = useLibrary()
+  const { categories } = useCatalogue()
   const [cat, setCat] = useState('All')
   const [genre, setGenre] = useState('All')
   const [sort, setSort] = useState<SearchSort>('relevance')
@@ -358,6 +374,11 @@ export function SearchPage() {
   // Captured once. Reading the clock inside the memo would make the same query
   // return slightly different sets as the component re-rendered.
   const [now] = useState(() => Date.now())
+
+  // The query goes to the server rather than being matched against whatever the
+  // shelf happens to have loaded, so a title that is in the catalogue but not on
+  // the front page is still findable.
+  const { videos: hits, loading, error, reload } = useVideoSearch(q)
 
   useEffect(() => {
     if (q.trim()) recordSearch(q)
@@ -374,11 +395,9 @@ export function SearchPage() {
 
   const results = useMemo(() => {
     const t = q.trim().toLowerCase()
-    let l = VIDEOS.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW')
-    if (t)
-      l = l.filter((v) =>
-        `${v.title} ${v.creator} ${v.category} ${v.genre} ${v.synopsis}`.toLowerCase().includes(t),
-      )
+    // The server has already matched the words; what is left is refinement, and
+    // it runs over the hits rather than over the catalogue.
+    let l = hits.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW')
     if (cat !== 'All') l = l.filter((v) => v.category === cat)
     if (genre !== 'All') l = l.filter((v) => v.genre === genre)
     l = l.filter(DURATION[dur].test)
@@ -397,7 +416,7 @@ export function SearchPage() {
           Number(b.title.toLowerCase().includes(t)) - Number(a.title.toLowerCase().includes(t)),
       )
     return sorted
-  }, [q, cat, genre, sort, dur, age, now])
+  }, [hits, q, cat, genre, sort, dur, age, now])
 
   const filters: [string, boolean, () => void][] = [
     [cat, cat !== 'All', () => setCat('All')],
@@ -425,9 +444,19 @@ export function SearchPage() {
         <div className="mt-4 flex flex-wrap gap-2.5">
           <Select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category" className="w-auto min-w-36">
             <option>All</option>
-            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+            {categories.map((c) => <option key={c.id}>{c.name}</option>)}
           </Select>
-          <Select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Genre" className="w-auto min-w-32">
+          {/* The catalogue stores no genre, so this would empty every result it
+              was set to. It is shown disabled rather than removed, because the
+              filter is a product decision that is still open. */}
+          <Select
+            value={genre}
+            disabled
+            title="Genre is not recorded against a title yet."
+            onChange={(e) => setGenre(e.target.value)}
+            aria-label="Genre"
+            className="w-auto min-w-32"
+          >
             <option>All</option>
             {GENRES.map((g) => <option key={g}>{g}</option>)}
           </Select>
@@ -494,11 +523,17 @@ export function SearchPage() {
         )}
 
         <p className="mt-5 font-mono text-[12px] tabular-nums text-ink-300">
-          {results.length} {results.length === 1 ? 'result' : 'results'}
+          {loading ? 'Searching' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
           {q && ` for \u201c${q}\u201d`}
         </p>
 
-        {results.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-8">
+            <Resolve loading={loading} error={error} onRetry={reload} what="Searching">
+              {null}
+            </Resolve>
+          </div>
+        ) : results.length === 0 ? (
           <div className="mt-8">
             <EmptyState
               icon={<SearchX className="size-7" />}
@@ -519,7 +554,8 @@ export function SearchPage() {
 
 export function Category() {
   const { name } = useParams()
-  const list = VIDEOS.filter((v) => v.category === name && v.billing !== 'PULLED')
+  const { videos, loading, error, refresh } = useCatalogue()
+  const list = videos.filter((v) => v.category === name && v.billing !== 'PULLED')
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
@@ -527,7 +563,13 @@ export function Category() {
         <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-white">
           {name}
         </h1>
-        {list.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-8">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Reading the category">
+              {null}
+            </Resolve>
+          </div>
+        ) : list.length === 0 ? (
           <div className="mt-8">
             <EmptyState title="Nothing billed here yet" body="No titles currently sit in this category." />
           </div>
@@ -546,9 +588,16 @@ export function Category() {
 export function Watch() {
   const nav = useNavigate()
   const { id } = useParams()
-  const v = byId(id ?? '')
+  const { video: v, loading, error, reload, setVideo } = useVideo(id)
+  const { videos } = useCatalogue()
   const toast = useToast()
   const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const numericId = id ? videoIdOf(id) : null
+  const {
+    comments: thread, loading: commentsLoading, error: commentsError,
+    post: postComment, remove: removeComment,
+  } = useComments(numericId)
   const {
     votes, vote, isSaved, recordWatch,
     isQueued, toggleQueue, isDownloaded, toggleDownload, queue,
@@ -568,41 +617,74 @@ export function Watch() {
   const [order, setOrder] = useState<'top' | 'new'>('top')
 
   const related = useMemo(
-    () => (v ? VIDEOS.filter((x) => x.id !== v.id && x.category === v.category).slice(0, 6) : []),
-    [v],
+    () => (v ? videos.filter((x) => x.id !== v.id && x.category === v.category).slice(0, 6) : []),
+    [videos, v],
   )
 
   // A pinned comment stays first under either order: pinning is the channel's
   // instruction about what to read first, and a sort that overrides it silently
   // undoes a decision somebody deliberately made.
   const comments = useMemo(() => {
-    const rest = COMMENTS.filter((c) => !c.pinned)
+    // Replies are shown under their parent, not as separate entries in the list.
+    const top = thread.filter((c) => c.parentId == null)
+    const rest = top.filter((c) => !c.pinned)
     const sorted = order === 'top' ? [...rest].sort((a, b) => b.likes - a.likes) : rest
-    return [...COMMENTS.filter((c) => c.pinned), ...sorted]
-  }, [order])
+    return [...top.filter((c) => c.pinned), ...sorted]
+  }, [thread, order])
 
-  // Watching is what puts something in history, so it is recorded here rather
-  // than on any click that happened to lead here.
+  // Watching is what puts something in history and what counts as a view, so
+  // both are recorded here rather than on any click that happened to lead here.
+  // The count is deliberately not awaited: a failed count must not stop playback.
   useEffect(() => {
-    if (v) recordWatch(v.id)
-  }, [v?.id])
+    if (!v) return
+    recordWatch(v.id)
+    if (numericId != null) catalogue.countView(numericId).catch(() => {})
+  }, [v?.id, numericId])
 
-  if (!v) {
+  // Where you stopped is written back as you watch, so picking the title up on
+  // another device lands in the right place. Once a minute is often enough to be
+  // useful and rare enough not to be a write per second.
+  const lastSaved = useRef(0)
+  useEffect(() => {
+    if (numericId == null || !viewer || at <= 0) return
+    if (at - lastSaved.current < 60 && at > lastSaved.current) return
+    lastSaved.current = at
+    const total = v ? seconds(v.runtime) : 0
+    catalogue.saveProgress(numericId, at, total > 0 && at >= total - 5, actor).catch(() => {})
+  }, [at, numericId, actor, viewer])
+
+  if (loading || error || !v) {
     return (
       <FrontOfHouse>
         <div className="mx-auto max-w-3xl px-4 py-20">
-          <EmptyState
-            title="That title is not in the programme"
-            body="The link may be out of date, or the title may have been pulled."
-            action={<Button onClick={() => nav('/browse')}>Back to the lobby</Button>}
-          />
+          <Resolve loading={loading} error={error} onRetry={reload} what="Opening the title">
+            <EmptyState
+              title="That title is not in the programme"
+              body="The link may be out of date, or the title may have been pulled."
+              action={<Button onClick={() => nav('/browse')}>Back to the lobby</Button>}
+            />
+          </Resolve>
         </div>
       </FrontOfHouse>
     )
   }
 
   const channel = channelByName(v.creator)
-  const my = votes[v.id] ?? null
+  // A like is the server's record. A dislike is not stored anywhere yet, so it
+  // stays in the page and is not claimed to be more than that.
+  const my = v.liked ? 'up' : votes[v.id] ?? null
+
+  const like = async () => {
+    if (!viewer) return nav('/login')
+    if (numericId == null) return
+    try {
+      const { liked, likeCount } = await catalogue.toggleLike(numericId, actor)
+      setVideo((current) => (current ? { ...current, liked, likes: likeCount } : current))
+      toast({ title: liked ? 'Liked' : 'Like removed' })
+    } catch (cause) {
+      toast({ title: cause instanceof ApiError ? cause.message : 'Could not record that.', tone: 'bad' })
+    }
+  }
   const saved = isSaved(v.id)
   const queued = isQueued(v.id)
   const downloaded = isDownloaded(v.id)
@@ -658,7 +740,7 @@ export function Watch() {
                 <div className="flex flex-wrap items-center gap-2">
                   <BillingBoard billing={v.billing} />
                   <Letterboard>{v.category}</Letterboard>
-                  <Letterboard>{v.genre}</Letterboard>
+                  {v.genre && <Letterboard>{v.genre}</Letterboard>}
                   {v.captions.length > 0 && <Letterboard tone="ok">{`CC ${v.captions.join(' · ')}`}</Letterboard>}
                 </div>
                 <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
@@ -698,7 +780,7 @@ export function Watch() {
                     {/* like and dislike share one control, the way a vote works */}
                     <span className="flex items-center overflow-hidden rounded-sm border border-ink-600">
                       <button
-                        onClick={() => { vote(v.id, 'up'); toast({ title: my === 'up' ? 'Like removed' : 'Liked' }) }}
+                        onClick={like}
                         aria-pressed={my === 'up'}
                         className={cn(
                           'flex items-center gap-1.5 px-3 py-1.5 text-[13px] transition-colors hover:bg-ink-800',
@@ -706,7 +788,7 @@ export function Watch() {
                         )}
                       >
                         <ThumbsUp className={cn('size-4', my === 'up' && 'fill-current')} />
-                        <span className="tabular-nums">{fmt(v.likes + (my === 'up' ? 1 : 0))}</span>
+                        <span className="tabular-nums">{fmt(v.likes)}</span>
                       </button>
                       <span className="h-5 w-px bg-ink-700" />
                       <button
@@ -786,7 +868,7 @@ export function Watch() {
               <div className="mt-10 border-t border-ink-800 pt-7">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-marquee text-[17px] font-bold text-white">
-                    {fmt(v.comments)} comments
+                    {commentsLoading ? 'Comments' : `${fmt(thread.length)} comments`}
                   </h2>
                   <div className="flex items-center gap-1">
                     {(['top', 'new'] as const).map((o) => (
@@ -805,11 +887,22 @@ export function Watch() {
                 </div>
 
                 <form
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault()
-                    if (!comment.trim()) return
-                    setComment('')
-                    toast({ title: 'Comment posted', tone: 'ok' })
+                    const text = comment.trim()
+                    if (!text) return
+                    try {
+                      await postComment(text)
+                      setComment('')
+                      toast({ title: 'Comment posted', tone: 'ok' })
+                    } catch (cause) {
+                      // The box keeps what was typed, because losing it to a
+                      // failed request is the worst possible response to one.
+                      toast({
+                        title: cause instanceof ApiError ? cause.message : 'Could not post that.',
+                        tone: 'bad',
+                      })
+                    }
                   }}
                   className="mt-5 flex gap-3"
                 >
@@ -835,6 +928,15 @@ export function Watch() {
                   </div>
                 </form>
 
+                {commentsLoading || commentsError ? (
+                  <Resolve loading={commentsLoading} error={commentsError} what="Reading the comments">
+                    {null}
+                  </Resolve>
+                ) : comments.length === 0 ? (
+                  <p className="mt-6 text-[14px] text-ink-300">
+                    No comments yet. {viewer ? 'Be the first.' : 'Sign in to be the first.'}
+                  </p>
+                ) : (
                 <ul className="mt-6 space-y-5">
                   {comments.map((c) => (
                     <li
@@ -875,32 +977,43 @@ export function Watch() {
                           <button aria-label="Dislike this comment" className="transition-colors hover:text-white">
                             <ThumbsDown className="size-3.5" />
                           </button>
-                          <button className="transition-colors hover:text-white">Reply</button>
-                          {c.replies ? (
-                            <button className="flex items-center gap-1 text-cyan-300 transition-colors hover:text-cyan-200">
-                              <ChevronRight className="size-3.5" />
-                              {c.replies} {c.replies === 1 ? 'reply' : 'replies'}
+                          {(() => {
+                            const replies = thread.filter((r) => r.parentId === c.id)
+                            return replies.length > 0 ? (
+                              <span className="flex items-center gap-1 text-cyan-300">
+                                <ChevronRight className="size-3.5" />
+                                {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                              </span>
+                            ) : null
+                          })()}
+                          {/* Only your own comment can be taken down here; a
+                              channel removing somebody else's is moderation, and
+                              that lives in the moderation queue. */}
+                          {c.userId != null && c.userId === actor && (
+                            <button
+                              className="ml-auto flex items-center gap-1 transition-colors hover:text-danger-400"
+                              onClick={async () => {
+                                try {
+                                  await removeComment(c.id)
+                                  toast({ title: 'Comment removed' })
+                                } catch (cause) {
+                                  toast({
+                                    title: cause instanceof ApiError ? cause.message : 'Could not remove it.',
+                                    tone: 'bad',
+                                  })
+                                }
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                              Delete
                             </button>
-                          ) : null}
-                          {/* The heart is the creator's, so it is shown rather
-                              than offered — a viewer cannot award one. */}
-                          {c.hearted && (
-                            <span className="flex items-center gap-1 text-danger-400" title={`${v.creator} hearted this`}>
-                              <Heart className="size-3.5 fill-current" />
-                              <span className="letterboard">Creator</span>
-                            </span>
                           )}
-                          <button
-                            className="ml-auto transition-colors hover:text-danger-400"
-                            onClick={() => toast({ title: 'Comment reported to the channel' })}
-                          >
-                            Report
-                          </button>
                         </div>
                       </div>
                     </li>
                   ))}
                 </ul>
+                )}
               </div>
             </div>
           </div>
@@ -1051,6 +1164,7 @@ export function ReportModal({
 export function Watchlist() {
   const nav = useNavigate()
   const { watchLater, toggleWatchLater } = useLibrary()
+  const { byId, loading, error, refresh } = useCatalogue()
   const toast = useToast()
   const list = watchLater.map((id) => byId(id)).filter(Boolean) as Video[]
   const total = clock(list.reduce((s, v) => s + seconds(v.runtime), 0))
@@ -1071,7 +1185,13 @@ export function Watchlist() {
           )}
         </p>
 
-        {list.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-8">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Reading your list">
+              {null}
+            </Resolve>
+          </div>
+        ) : list.length === 0 ? (
           <div className="mt-8">
             <EmptyState
               icon={<Bookmark className="size-7" />}
@@ -1140,6 +1260,7 @@ export function History() {
   const nav = useNavigate()
   const toast = useToast()
   const { history, forgetWatch, clearHistory, historyPaused, setHistoryPaused } = useLibrary()
+  const { byId, loading, error, refresh } = useCatalogue()
   const [confirm, setConfirm] = useState(false)
   const list = history.map((id) => byId(id)).filter(Boolean) as Video[]
 
@@ -1175,7 +1296,13 @@ export function History() {
           />
         </div>
 
-        {list.length === 0 ? (
+        {loading || error ? (
+          <div className="mt-8">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Reading your history">
+              {null}
+            </Resolve>
+          </div>
+        ) : list.length === 0 ? (
           <div className="mt-8">
             <EmptyState
               icon={<Clock className="size-7" />}
@@ -1246,7 +1373,8 @@ export function History() {
 
 export function ForYou() {
   const nav = useNavigate()
-  const personalised = VIDEOS.filter((v) => v.billing === 'NOW SHOWING')
+  const { videos, loading, error, refresh } = useCatalogue()
+  const personalised = videos.filter((v) => v.billing === 'NOW SHOWING')
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
@@ -1263,20 +1391,39 @@ export function ForYou() {
           </Button>
         </div>
 
-        <div className="mt-8">
-          <Section title="Because you watched Documentary">
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {personalised.slice(0, 4).map((v) => <Tile key={v.id} v={v} />)}
+        {loading || error ? (
+          <div className="mt-8">
+            <Resolve loading={loading} error={error} onRetry={refresh} what="Building your shelf">
+              {null}
+            </Resolve>
+          </div>
+        ) : personalised.length === 0 ? (
+          <div className="mt-8">
+            <EmptyState
+              title="Nothing to recommend yet"
+              body="There is nothing currently showing to build a shelf from. Once titles are published they appear here."
+            />
+          </div>
+        ) : (
+          <>
+            <div className="mt-8">
+              <Section title="Because you watched Documentary">
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                  {personalised.slice(0, 4).map((v) => <Tile key={v.id} v={v} />)}
+                </div>
+              </Section>
             </div>
-          </Section>
-        </div>
-        <div className="mt-10">
-          <Section title="Popular with Season Pass holders">
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {personalised.slice(2, 6).map((v) => <Tile key={v.id} v={v} />)}
-            </div>
-          </Section>
-        </div>
+            {personalised.length > 2 && (
+              <div className="mt-10">
+                <Section title="Popular with Season Pass holders">
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                    {personalised.slice(2, 6).map((v) => <Tile key={v.id} v={v} />)}
+                  </div>
+                </Section>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </FrontOfHouse>
   )

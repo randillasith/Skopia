@@ -41,6 +41,19 @@ export type Video = {
   /** 0–1, where the viewer left off. 0 means never started. */
   progress?: number
   seed: number
+
+  /* ---- the parts only a row that came from the server carries ---- */
+
+  /** Where the media actually is. Null when the row has no file behind it. */
+  mediaUrl?: string | null
+  thumbnailUrl?: string | null
+  creatorId?: number | null
+  categoryId?: number | null
+  /** What the server says this viewer has already done with the title. */
+  liked?: boolean
+  saved?: boolean
+  /** Seconds in, as the server last recorded it. */
+  lastPosition?: number
 }
 
 export const CATEGORIES = [
