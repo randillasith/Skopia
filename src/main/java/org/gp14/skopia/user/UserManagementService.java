@@ -3,6 +3,7 @@ package org.gp14.skopia.user;
 import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.user.dto.*;
+import org.gp14.skopia.security.PasswordService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class UserManagementService {
     private final ContentCreatorRepository contentCreatorRepository;
     private final RegisteredViewerRepository registeredViewerRepository;
     private final ActivityLogRepository activityLogRepository;
+    private final PasswordService passwordService;
 
     public UserManagementService(UserRepository userRepository,
                                  StaffRepository staffRepository,
@@ -32,7 +34,8 @@ public class UserManagementService {
                                  MarketingOfficerRepository marketingOfficerRepository,
                                  ContentCreatorRepository contentCreatorRepository,
                                  RegisteredViewerRepository registeredViewerRepository,
-                                 ActivityLogRepository activityLogRepository) {
+                                 ActivityLogRepository activityLogRepository,
+                                 PasswordService passwordService) {
         this.userRepository = userRepository;
         this.staffRepository = staffRepository;
         this.administratorRepository = administratorRepository;
@@ -41,6 +44,7 @@ public class UserManagementService {
         this.contentCreatorRepository = contentCreatorRepository;
         this.registeredViewerRepository = registeredViewerRepository;
         this.activityLogRepository = activityLogRepository;
+        this.passwordService = passwordService;
     }
 
     @Transactional(readOnly = true)
@@ -226,7 +230,7 @@ public class UserManagementService {
     private void populateBaseUserAndStaff(Staff staff, CreateStaffRequest request) {
         staff.setUsername(request.getUsername());
         staff.setEmail(request.getEmail());
-        staff.setPasswordHash(request.getPassword()); // In production, password hash encoder is used
+        staff.setPasswordHash(passwordService.encode(request.getPassword()));
         staff.setFirstName(request.getFirstName());
         staff.setLastName(request.getLastName());
         staff.setAccountStatus("ACTIVE");

@@ -87,7 +87,7 @@ class AdminUserControllerTest {
         CreateStaffRequest request = new CreateStaffRequest();
         request.setUsername("support1");
         request.setEmail("support1@skopia.com");
-        request.setPassword("pass123");
+        request.setPassword("pass12345");
         request.setDesignation("Support Spec");
         request.setHireDate(LocalDate.now());
         request.setStaffType("SUPPORT_OFFICER");

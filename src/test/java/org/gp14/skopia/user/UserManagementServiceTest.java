@@ -39,6 +39,8 @@ class UserManagementServiceTest {
     private RegisteredViewerRepository registeredViewerRepository;
     @Mock
     private ActivityLogRepository activityLogRepository;
+    @Mock
+    private org.gp14.skopia.security.PasswordService passwordService;
 
     @InjectMocks
     private UserManagementService userManagementService;

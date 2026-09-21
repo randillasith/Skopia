@@ -7,306 +7,135 @@ import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.repository.ContentCreatorRepository;
 import org.gp14.skopia.repository.RegisteredViewerRepository;
 import org.gp14.skopia.repository.UserRepository;
+import org.gp14.skopia.security.PasswordService;
+import org.gp14.skopia.security.TokenService;
 import org.gp14.skopia.user.dto.LoginRequest;
 import org.gp14.skopia.user.dto.LoginResponse;
 import org.gp14.skopia.user.dto.RegisterUserRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AuthController {
+    private static final Pattern USERNAME = Pattern.compile("[A-Za-z0-9_]{3,50}");
+    private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private final UserRepository users;
+    private final RegisteredViewerRepository viewers;
+    private final ContentCreatorRepository creators;
+    private final UserManagementService userManagement;
+    private final PasswordService passwords;
+    private final TokenService tokens;
 
-    private final UserRepository userRepository;
-    private final RegisteredViewerRepository registeredViewerRepository;
-    private final ContentCreatorRepository contentCreatorRepository;
-    private final UserManagementService userManagementService;
-
-    public AuthController(UserRepository userRepository,
-                          RegisteredViewerRepository registeredViewerRepository,
-                          ContentCreatorRepository contentCreatorRepository,
-                          UserManagementService userManagementService) {
-        this.userRepository = userRepository;
-        this.registeredViewerRepository = registeredViewerRepository;
-        this.contentCreatorRepository = contentCreatorRepository;
-        this.userManagementService = userManagementService;
+    public AuthController(UserRepository users, RegisteredViewerRepository viewers,
+                          ContentCreatorRepository creators, UserManagementService userManagement,
+                          PasswordService passwords, TokenService tokens) {
+        this.users = users;
+        this.viewers = viewers;
+        this.creators = creators;
+        this.userManagement = userManagement;
+        this.passwords = passwords;
+        this.tokens = tokens;
     }
 
     @PostMapping("/register")
-    public ResponseEntity<LoginResponse> register(@RequestBody RegisterUserRequest request, HttpServletRequest httpRequest) {
+    public ResponseEntity<LoginResponse> register(@RequestBody RegisterUserRequest request, HttpServletRequest servletRequest) {
         String username = request.getEffectiveUsername();
-        String email = request.getEmail() != null ? request.getEmail().trim() : "";
+        String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
+        String rawPassword = request.getPassword() == null ? "" : request.getPassword();
+        if (!USERNAME.matcher(username).matches()) return bad("Username must be 3-50 letters, numbers, or underscores");
+        if (!EMAIL.matcher(email).matches()) return bad("A valid email address is required");
+        if (rawPassword.length() < 8) return bad("Password must be at least 8 characters");
+        if (users.existsByUsername(username)) return conflict("Username is already taken");
+        if (users.existsByEmail(email)) return conflict("Email is already registered");
 
-        if (username.isEmpty()) {
-            return ResponseEntity.badRequest().body(LoginResponse.builder().message("Handle / Username is required").build());
-        }
-        if (email.isEmpty()) {
-            return ResponseEntity.badRequest().body(LoginResponse.builder().message("Email address is required").build());
-        }
-        if (request.getPassword() == null || request.getPassword().trim().length() < 4) {
-            return ResponseEntity.badRequest().body(LoginResponse.builder().message("Password must be at least 4 characters").build());
-        }
-
-        if (userRepository.existsByUsername(username)) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(LoginResponse.builder().message("Username @" + username + " is already taken").build());
-        }
-        if (userRepository.existsByEmail(email)) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(LoginResponse.builder().message("Email " + email + " is already registered").build());
-        }
-
-        String rawPassword = request.getPassword().trim();
-        String hashedPassword = hashPassword(rawPassword);
-        String role = request.getEffectiveRole();
-        String ipAddress = getClientIp(httpRequest);
-
-        String displayName = request.getDisplayName();
-        if (displayName == null || displayName.trim().isEmpty()) {
-            if (request.getFirstName() != null && !request.getFirstName().trim().isEmpty()) {
-                displayName = request.getFirstName().trim() + (request.getLastName() != null ? " " + request.getLastName().trim() : "");
-            } else {
-                displayName = username;
-            }
-        }
-
-        User createdUser;
-        if (role.contains("CREATOR")) {
+        boolean creatorRole = "CONTENT_CREATOR".equals(request.getEffectiveRole());
+        User created;
+        if (creatorRole) {
             ContentCreator creator = new ContentCreator();
-            creator.setUsername(username);
-            creator.setEmail(email);
-            creator.setPasswordHash(hashedPassword);
-            creator.setFirstName(request.getFirstName() != null ? request.getFirstName().trim() : displayName);
-            creator.setLastName(request.getLastName() != null ? request.getLastName().trim() : "");
-            creator.setAccountStatus("ACTIVE");
-            creator.setRegisteredDate(LocalDateTime.now());
+            populate(creator, request, username, email, rawPassword);
             creator.setPreferredLanguage("en");
-            creator.setChannelName(request.getChannelName() != null && !request.getChannelName().trim().isEmpty() 
-                    ? request.getChannelName().trim() 
-                    : displayName + " Studio");
-            
-            String bio = "";
-            if (request.getGenre() != null && !request.getGenre().trim().isEmpty()) {
-                bio += "Genre: " + request.getGenre().trim();
-            }
-            if (request.getShowreelUrl() != null && !request.getShowreelUrl().trim().isEmpty()) {
-                bio += " | Reel: " + request.getShowreelUrl().trim();
-            }
-            creator.setChannelBio(bio.isEmpty() ? "Skopia Creator Pro" : bio);
+            creator.setChannelName(nonBlank(request.getChannelName(), username + " Studio"));
+            creator.setChannelBio("Skopia Creator");
             creator.setIsVerified(false);
             creator.setTotalUploads(0);
-
-            createdUser = contentCreatorRepository.save(creator);
-            userManagementService.logActivity(createdUser, "CREATOR_REGISTERED", ipAddress);
+            created = creators.save(creator);
         } else {
             RegisteredViewer viewer = new RegisteredViewer();
-            viewer.setUsername(username);
-            viewer.setEmail(email);
-            viewer.setPasswordHash(hashedPassword);
-            viewer.setFirstName(request.getFirstName() != null ? request.getFirstName().trim() : displayName);
-            viewer.setLastName(request.getLastName() != null ? request.getLastName().trim() : "");
-            viewer.setDisplayName(displayName);
-            viewer.setAccountStatus("ACTIVE");
-            viewer.setRegisteredDate(LocalDateTime.now());
-            viewer.setJoinDate(LocalDateTime.now());
+            populate(viewer, request, username, email, rawPassword);
             viewer.setPreferredLanguage("en");
+            viewer.setJoinDate(LocalDateTime.now());
+            viewer.setDisplayName(nonBlank(request.getDisplayName(), username));
             viewer.setIsPremium(false);
             viewer.setNotifyChannel("EMAIL");
-
-            createdUser = registeredViewerRepository.save(viewer);
-            userManagementService.logActivity(createdUser, "VIEWER_REGISTERED", ipAddress);
+            created = viewers.save(viewer);
         }
-
-        LoginResponse response = LoginResponse.builder()
-                .id(createdUser.getId())
-                .userId(createdUser.getId())
-                .username(createdUser.getUsername())
-                .email(createdUser.getEmail())
-                .firstName(createdUser.getFirstName())
-                .lastName(createdUser.getLastName())
-                .displayName(displayName)
-                .roleType(role.contains("CREATOR") ? "CONTENT_CREATOR" : "REGISTERED_VIEWER")
-                .userType(role.contains("CREATOR") ? "CONTENT_CREATOR" : "REGISTERED_VIEWER")
-                .accountStatus(createdUser.getAccountStatus())
-                .isPremium(false)
-                .isVerified(false)
-                .token(generateToken(createdUser))
-                .message("Account pass provisioned successfully")
-                .build();
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        userManagement.logActivity(created, creatorRole ? "CREATOR_REGISTERED" : "VIEWER_REGISTERED", clientIp(servletRequest));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response(created, "Account created"));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request, HttpServletRequest servletRequest) {
         String identifier = request.getEffectiveIdentifier();
-        String password = request.getPassword() != null ? request.getPassword().trim() : "";
-
-        if (identifier.isEmpty() || password.isEmpty()) {
-            return ResponseEntity.badRequest().body(LoginResponse.builder().message("Identifier and password are required").build());
+        if (identifier.startsWith("@")) identifier = identifier.substring(1);
+        String raw = request.getPassword() == null ? "" : request.getPassword();
+        if (identifier.isBlank() || raw.isBlank()) return bad("Identifier and password are required");
+        Optional<User> found = users.findByEmail(identifier.toLowerCase());
+        if (found.isEmpty()) found = users.findByUsername(identifier);
+        if (found.isEmpty() || !passwords.matches(raw, found.get().getPasswordHash())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(LoginResponse.builder().message("Invalid credentials").build());
         }
-
-        if (identifier.startsWith("@")) {
-            identifier = identifier.substring(1);
+        User user = found.get();
+        if (!"ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(LoginResponse.builder().message("Account is " + user.getAccountStatus()).build());
         }
-
-        Optional<User> userOpt = userRepository.findByEmail(identifier);
-        if (userOpt.isEmpty()) {
-            userOpt = userRepository.findByUsername(identifier);
+        if (passwords.needsUpgrade(user.getPasswordHash())) {
+            user.setPasswordHash(passwords.encode(raw));
+            users.save(user);
         }
-
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(LoginResponse.builder().message("User account not found").build());
-        }
-
-        User user = userOpt.get();
-
-        if ("BLOCKED".equalsIgnoreCase(user.getAccountStatus())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(LoginResponse.builder().message("Account is BLOCKED. Please contact Skopia Support Desk.").build());
-        }
-
-        if ("SUSPENDED".equalsIgnoreCase(user.getAccountStatus())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(LoginResponse.builder().message("Account is SUSPENDED. Access restricted.").build());
-        }
-
-        // Verify password hash or plain text fallback for dev
-        if (!verifyPassword(password, user.getPasswordHash()) && !password.equals(user.getPasswordHash())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(LoginResponse.builder().message("Invalid password credentials").build());
-        }
-
-        userManagementService.logActivity(user, "LOGIN_SUCCESS", getClientIp(httpRequest));
-
-        boolean isPremium = false;
-        boolean isVerified = false;
-        String roleType = user.getClass().getSimpleName().toUpperCase();
-        String displayName = user.getUsername();
-
-        if (user instanceof RegisteredViewer reg) {
-            roleType = "REGISTERED_VIEWER";
-            isPremium = Boolean.TRUE.equals(reg.getIsPremium());
-            if (reg.getDisplayName() != null) displayName = reg.getDisplayName();
-        } else if (user instanceof ContentCreator cr) {
-            roleType = "CONTENT_CREATOR";
-            isVerified = Boolean.TRUE.equals(cr.getIsVerified());
-            if (cr.getChannelName() != null) displayName = cr.getChannelName();
-        }
-
-        LoginResponse response = LoginResponse.builder()
-                .id(user.getId())
-                .userId(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .displayName(displayName)
-                .roleType(roleType)
-                .userType(roleType)
-                .accountStatus(user.getAccountStatus())
-                .isPremium(isPremium)
-                .isVerified(isVerified)
-                .token(generateToken(user))
-                .message("Login successful")
-                .build();
-
-        return ResponseEntity.ok(response);
+        userManagement.logActivity(user, "LOGIN_SUCCESS", clientIp(servletRequest));
+        return ResponseEntity.ok(response(user, "Login successful"));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<LoginResponse> me(@RequestParam(required = false) Long userId) {
-        Optional<User> userOpt;
-        if (userId != null) {
-            userOpt = userRepository.findById(userId);
-        } else {
-            userOpt = userRepository.findAll().stream().findFirst();
-        }
-
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
-
-        User user = userOpt.get();
-        String roleType = user.getClass().getSimpleName().toUpperCase();
-        boolean isPremium = false;
-        boolean isVerified = false;
-        String displayName = user.getUsername();
-
-        if (user instanceof RegisteredViewer reg) {
-            roleType = "REGISTERED_VIEWER";
-            isPremium = Boolean.TRUE.equals(reg.getIsPremium());
-            if (reg.getDisplayName() != null) displayName = reg.getDisplayName();
-        } else if (user instanceof ContentCreator cr) {
-            roleType = "CONTENT_CREATOR";
-            isVerified = Boolean.TRUE.equals(cr.getIsVerified());
-            if (cr.getChannelName() != null) displayName = cr.getChannelName();
-        }
-
-        return ResponseEntity.ok(LoginResponse.builder()
-                .id(user.getId())
-                .userId(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .displayName(displayName)
-                .roleType(roleType)
-                .userType(roleType)
-                .accountStatus(user.getAccountStatus())
-                .isPremium(isPremium)
-                .isVerified(isVerified)
-                .token(generateToken(user))
-                .message("Authenticated")
-                .build());
+    public LoginResponse me(@AuthenticationPrincipal User user) {
+        return response(user, "Authenticated");
     }
 
     @GetMapping("/check-handle")
-    public ResponseEntity<Map<String, Object>> checkHandle(@RequestParam String handle) {
+    public Map<String, Object> checkHandle(@RequestParam String handle) {
         String clean = handle.startsWith("@") ? handle.substring(1).trim() : handle.trim();
-        boolean exists = userRepository.existsByUsername(clean);
-        return ResponseEntity.ok(Map.of(
-                "handle", "@" + clean,
-                "available", !exists && clean.length() >= 3
-        ));
+        return Map.of("handle", "@" + clean, "available", USERNAME.matcher(clean).matches() && !users.existsByUsername(clean));
     }
 
-    private String hashPassword(String password) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(password.getBytes());
-            return Base64.getEncoder().encodeToString(hash);
-        } catch (Exception e) {
-            return password;
-        }
+    private void populate(User user, RegisterUserRequest request, String username, String email, String rawPassword) {
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPasswordHash(passwords.encode(rawPassword));
+        user.setFirstName(nonBlank(request.getFirstName(), username));
+        user.setLastName(nonBlank(request.getLastName(), ""));
+        user.setAccountStatus("ACTIVE");
+        user.setRegisteredDate(LocalDateTime.now());
     }
 
-    private boolean verifyPassword(String rawPassword, String hashedPassword) {
-        if (hashedPassword == null) return false;
-        String hashed = hashPassword(rawPassword);
-        return hashed.equals(hashedPassword);
+    private LoginResponse response(User user, String message) {
+        var dto = org.gp14.skopia.user.dto.UserResponse.fromEntity(user);
+        return LoginResponse.builder().id(user.getId()).userId(user.getId()).username(user.getUsername())
+                .email(user.getEmail()).firstName(user.getFirstName()).lastName(user.getLastName())
+                .displayName(dto.getDisplayName()).roleType(dto.getRoleType()).userType(dto.getRoleType())
+                .accountStatus(user.getAccountStatus()).isPremium(dto.getIsPremium()).isVerified(dto.getIsVerified())
+                .token(tokens.issue(user.getId())).message(message).build();
     }
 
-    private String generateToken(User user) {
-        String payload = user.getId() + ":" + user.getUsername() + ":" + System.currentTimeMillis();
-        return Base64.getEncoder().encodeToString(payload.getBytes());
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        if (request == null) return "127.0.0.1";
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return ip != null ? ip : "127.0.0.1";
-    }
+    private ResponseEntity<LoginResponse> bad(String message) { return ResponseEntity.badRequest().body(LoginResponse.builder().message(message).build()); }
+    private ResponseEntity<LoginResponse> conflict(String message) { return ResponseEntity.status(HttpStatus.CONFLICT).body(LoginResponse.builder().message(message).build()); }
+    private String nonBlank(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
+    private String clientIp(HttpServletRequest request) { return request.getRemoteAddr() == null ? "unknown" : request.getRemoteAddr(); }
 }
