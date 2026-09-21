@@ -11,6 +11,8 @@ class SkopiaApplicationTests {
 
     @Test
     void contextLoads() {
+        System.out.println("Test");
+        //
     }
 
 }
