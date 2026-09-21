@@ -118,19 +118,40 @@ endpoint does what the screen says. Six things did not:
 
 ## Running it
 
+Skopia runs on MySQL. You need a MySQL server and a `skopia` database — the
+connection string below creates it on first run if it is not there.
+
+**Once**, copy the example config and edit it for your machine:
+
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=h2
+cp src/main/resources/application.properties.example src/main/resources/application.properties
 ```
 
-in one terminal (in-memory database, seeded; nothing to install), and
+The real `application.properties` is gitignored, so your credentials stay on your
+machine. It defaults to `root` on `localhost:3306` with no password; if that is
+not you, edit the file or set `SKOPIA_DB_URL`, `SKOPIA_DB_USER` and
+`SKOPIA_DB_PASSWORD` in the environment instead.
+
+Hibernate derives the schema on startup (`ddl-auto=update`). If you would rather
+own it yourself, run `src/main/resources/schema.sql` against the empty database
+first — that is the EER diagram written out as DDL.
+
+Then, in one terminal:
+
+```bash
+./mvnw spring-boot:run
+```
+
+and in another:
 
 ```bash
 npm --prefix frontend run dev
 ```
 
-in another. The UI is on 5175 and proxies `/api` and `/uploads` to 8081.
+The UI is on 5175 and proxies `/api` and `/uploads` to the API on 8081.
 
-Development sign-ins, all with the password `skopia`:
+On a fresh database, the seeds create these accounts. All of them use the
+password `skopia`, and they exist only outside the `prod` profile:
 
 | Handle | Reaches |
 | --- | --- |
@@ -139,5 +160,22 @@ Development sign-ins, all with the password `skopia`:
 | `p.punsara` | the administration console |
 | `meridian` | the creator studio |
 
-For MySQL instead, copy `application.properties.example` to
-`src/main/resources/application.properties` and fill in the credentials.
+Everyone else signs up through the UI.
+
+### One jar
+
+`./mvnw clean package` builds the React app and puts it inside the jar, so
+`java -jar target/skopia-0.0.1-SNAPSHOT.jar` serves the API and the UI together
+on 8081 with no dev server. `-DskipFrontend=true` skips the frontend build when
+you only want the API.
+
+### Tests
+
+```bash
+./mvnw test
+```
+
+Tests run against in-memory H2 in MySQL compatibility mode, so the same mappings
+and the same JPQL are exercised without a test run needing — or being able to
+touch — your real database. That is the only place H2 appears; the application
+itself only ever runs on MySQL.

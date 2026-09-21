@@ -17,19 +17,21 @@ campaigns, creative, targeting, delivery, expiry and performance.
 The API and the UI are one application; `mvnw package` builds the Vite bundle into
 the jar.
 
-```bash
-# Against MySQL. Set the credentials first — nothing real is committed.
-export SKOPIA_DB_PASSWORD=…
-./mvnw spring-boot:run
+Skopia runs on MySQL. Copy the example config once and edit it for your machine —
+the real `application.properties` is gitignored, so nothing of yours is committed:
 
-# Or without setting MySQL up at all. In-memory, gone when you stop it.
-./mvnw spring-boot:run -Dspring-boot.run.profiles=h2
+```bash
+cp src/main/resources/application.properties.example src/main/resources/application.properties
+./mvnw spring-boot:run
 ```
+
+Credentials can come from the environment instead: `SKOPIA_DB_URL`,
+`SKOPIA_DB_USER`, `SKOPIA_DB_PASSWORD`.
 
 Then open <http://localhost:8081/campaigns>, signed in as a marketing officer.
 
 For frontend work, `npm run dev` in `frontend/` serves the UI on 5175 and proxies
-`/api` and `/uploads` to 8080.
+`/api` and `/uploads` to 8081.
 
 > **Build the frontend.** `-DskipFrontend=true` skips copying the Vite bundle, and
 > `src/main/resources/static/` (FR-Admin's separate plain-HTML UI) then wins at

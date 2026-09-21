@@ -80,12 +80,14 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- Runtime, not test: the `h2` profile runs the whole application on
-             an in-memory database so the UI can be tried without MySQL. -->
+        <!-- Tests only. They run against in-memory H2 in MySQL mode so the
+             entity mappings are exercised as written without a test run being
+             able to touch, or need, a developer's real database. The
+             application itself runs on MySQL. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>runtime</scope>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
