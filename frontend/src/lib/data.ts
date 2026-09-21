@@ -272,7 +272,7 @@ export const VIDEOS: Video[] = [
     seed: 10,
   },
   /* ---- the rest of the catalogue ------------------------------------- */
-  { id: 'v-1053', title: 'Salt and Iron', creator: 'Harbour Studio', category: 'Documentary', genre: 'History', runtime: '1:12:40', published: '2026-07-19', views: 96340, likes: 7120, comments: 431, premium: true, billing: 'NOW SHOWING', captions: ['English', 'Sinhala'], synopsis: 'Three generations of a shipbreaking family on the Gujarat coast, and the week the yard finally closed.', seed: 11 },
+  { id: 'v-1053', title: 'The Breaking Yard', creator: 'Harbour Studio', category: 'Documentary', genre: 'History', runtime: '1:12:40', published: '2026-07-19', views: 96340, likes: 7120, comments: 431, premium: true, billing: 'NOW SHOWING', captions: ['English', 'Sinhala'], synopsis: 'Three generations of a shipbreaking family on the Gujarat coast, and the week the yard finally closed.', seed: 11 },
   { id: 'v-1054', title: 'The Quiet Bench', creator: 'Aster Lane', category: 'Short Film', genre: 'Drama', runtime: '14:08', published: '2026-08-30', views: 22180, likes: 3040, comments: 188, premium: false, billing: 'NOW SHOWING', captions: ['English'], synopsis: 'Two strangers share a park bench every Thursday for a year without exchanging a word.', progress: 0.77, seed: 12 },
   { id: 'v-1055', title: 'Night Shift — Episode 4', creator: 'Northbound', category: 'Series', genre: 'Drama', runtime: '42:55', published: '2026-09-04', views: 141020, likes: 10860, comments: 1204, premium: true, billing: 'NOW SHOWING', captions: ['English', 'Tamil'], synopsis: 'The ward loses power for eleven minutes. Nobody agrees afterwards on what happened in the dark.', seed: 13 },
   { id: 'v-1056', title: 'How a Lens Actually Works', creator: 'Fern & Field', category: 'Learning', genre: 'Science', runtime: '18:22', published: '2026-06-11', views: 310540, likes: 28400, comments: 2210, premium: false, billing: 'HELD OVER', captions: ['English', 'Sinhala', 'Tamil'], synopsis: 'Glass, curvature and light, explained with a bathtub and a laser pointer.', progress: 0.15, seed: 14 },
@@ -541,10 +541,29 @@ export const LOGS: LogEntry[] = [
   { at: '2026-08-22 11:02:55', actor: 'system', action: 'report.route', target: 'RPT-2291', outcome: 'ok' },
 ]
 
-export const COMMENTS = [
-  { id: 'c-1', who: 'R. Perera', at: '2 days ago', body: 'The winter footage in the third act is extraordinary. Who shot it?', likes: 42 },
-  { id: 'c-2', who: 'T. Nadeeka', at: '4 days ago', body: 'Captions drift after about four minutes — reported it.', likes: 18 },
-  { id: 'c-3', who: 'Meridian Films', at: '4 days ago', body: 'Thanks for flagging — a fix is with the support team.', likes: 61 },
+/**
+ * `pinned` and `hearted` are the channel owner's two signals: one says read this
+ * first, the other says the creator saw you. Both belong to the channel, not the
+ * platform, which is why moderators can neither pin nor heart.
+ */
+export type Comment = {
+  id: string
+  who: string
+  at: string
+  body: string
+  likes: number
+  pinned?: boolean
+  hearted?: boolean
+  byCreator?: boolean
+  replies?: number
+}
+
+export const COMMENTS: Comment[] = [
+  { id: 'c-0', who: 'Meridian Films', at: '5 days ago', body: 'A note on the third act: the winter footage was shot over two separate seasons, four years apart, from the same position. The dome is the only thing in frame that did not change.', likes: 892, pinned: true, byCreator: true, replies: 34 },
+  { id: 'c-1', who: 'R. Perera', at: '2 days ago', body: 'The winter footage in the third act is extraordinary. Who shot it?', likes: 42, hearted: true, replies: 3 },
+  { id: 'c-2', who: 'T. Nadeeka', at: '4 days ago', body: 'Captions drift after about four minutes — reported it.', likes: 18, replies: 1 },
+  { id: 'c-3', who: 'Meridian Films', at: '4 days ago', body: 'Thanks for flagging — a fix is with the support team.', likes: 61, byCreator: true },
+  { id: 'c-4', who: 'Kasun Alwis', at: '6 days ago', body: 'Watched this twice. The second time with the commentary on the observatory logs open beside it, which I recommend.', likes: 128, replies: 7 },
 ]
 
 /* ------------------------------------------------------------------ helpers */
@@ -574,7 +593,7 @@ export type PendingComment = {
 export const MODERATION_QUEUE: PendingComment[] = [
   { id: 'm-1', channelId: 'ch-01', video: 'The Longest Winter', who: 'T. Nadeeka', at: '18 min ago', body: 'Captions drift after about four minutes — reported it.', flag: 'Reported by a viewer' },
   { id: 'm-2', channelId: 'ch-01', video: 'The Longest Winter', who: 'anon_4417', at: '1 h ago', body: 'Visit my page for free streams of everything on here', flag: 'Held by a filter' },
-  { id: 'm-3', channelId: 'ch-01', video: 'Salt and Iron', who: 'M. Silva', at: '3 h ago', body: 'Completely wasted my evening. Whoever cut this should not be allowed near an edit suite again.', flag: 'Reported by a viewer' },
+  { id: 'm-3', channelId: 'ch-01', video: 'The Breaking Yard', who: 'M. Silva', at: '3 h ago', body: 'Completely wasted my evening. Whoever cut this should not be allowed near an edit suite again.', flag: 'Reported by a viewer' },
   { id: 'm-4', channelId: 'ch-03', video: 'Night Shift', who: 'K. Fernando', at: '5 h ago', body: 'Is there a longer cut anywhere? The ending felt abrupt.', flag: 'First comment from this account' },
   { id: 'm-5', channelId: 'ch-01', video: 'Harbour Lights', who: 'anon_9902', at: 'yesterday', body: 'FIRST!!!! 🎉🎉🎉', flag: 'Held by a filter' },
 ]
@@ -592,7 +611,127 @@ export type ModerationDecision = {
 
 export const MODERATION_LOG: ModerationDecision[] = [
   { id: 'd-1', channelId: 'ch-01', video: 'The Longest Winter', who: 'R. Perera', at: '2026-09-18 14:02', by: 'd.fernando', outcome: 'Published', note: 'Reported in error — ordinary criticism.' },
-  { id: 'd-2', channelId: 'ch-01', video: 'Salt and Iron', who: 'anon_3310', at: '2026-09-18 09:44', by: 'd.fernando', outcome: 'Removed', note: 'Advertising an unrelated service.' },
+  { id: 'd-2', channelId: 'ch-01', video: 'The Breaking Yard', who: 'anon_3310', at: '2026-09-18 09:44', by: 'd.fernando', outcome: 'Removed', note: 'Advertising an unrelated service.' },
   { id: 'd-3', channelId: 'ch-03', video: 'Night Shift', who: 'anon_7781', at: '2026-09-17 21:15', by: 'r.perera', outcome: 'Author blocked', note: 'Third removal on this channel this week.' },
   { id: 'd-4', channelId: 'ch-01', video: 'Harbour Lights', who: 'M. Silva', at: '2026-09-17 11:30', by: 'd.fernando', outcome: 'Published', note: 'Held by the filter, read fine.' },
 ]
+
+/* ------------------------------------------------------------------ chapters */
+
+/** Seconds → "M:SS" or "H:MM:SS". */
+export const clock = (sec: number) => {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = Math.floor(sec % 60)
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+/** "48:12" or "1:12:40" → seconds. */
+export const seconds = (runtime: string) =>
+  runtime.split(':').reduce((acc, part) => acc * 60 + Number(part), 0)
+
+export type Chapter = { at: number; title: string }
+
+/**
+ * Authored chapters, for the few titles that have them. A video without
+ * chapters shows a plain scrubber — chapters are something a creator writes,
+ * not something the platform invents, so an empty list is the honest default.
+ */
+export const CHAPTERS: Record<string, Chapter[]> = {
+  'v-1041': [
+    { at: 0, title: 'Cold open — the dome at 4 a.m.' },
+    { at: 236, title: 'Who still works here' },
+    { at: 902, title: 'The winter the roof failed' },
+    { at: 1744, title: 'Rebuilding the drive' },
+    { at: 2410, title: 'First light' },
+  ],
+  'v-1053': [
+    { at: 0, title: 'The yard' },
+    { at: 415, title: 'Three generations' },
+    { at: 1690, title: 'The last cut' },
+    { at: 3320, title: 'After the closure' },
+  ],
+  'v-1056': [
+    { at: 0, title: 'What a lens is for' },
+    { at: 185, title: 'Curvature and focal length' },
+    { at: 604, title: 'The bathtub demonstration' },
+    { at: 940, title: 'Why your phone has five of them' },
+  ],
+  'v-1062': [
+    { at: 0, title: 'Why prove twice' },
+    { at: 302, title: 'Gluten, plainly' },
+    { at: 880, title: 'Eighteen loaves' },
+    { at: 1310, title: 'The one that failed' },
+  ],
+  'v-1076': [
+    { at: 0, title: 'Threading up' },
+    { at: 512, title: 'Forty years of Fridays' },
+    { at: 1830, title: 'What happens to the prints' },
+    { at: 2905, title: 'Four months left' },
+  ],
+}
+
+export const chaptersFor = (id: string): Chapter[] => CHAPTERS[id] ?? []
+
+/** Speeds a viewer can choose. 1 is not labelled "1×" but "Normal". */
+export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
+
+/**
+ * UC-FR1-01: the playback quality levels are an open decision in the project
+ * documentation, so the control exists and says so rather than inventing a
+ * ladder of resolutions the backend may never serve.
+ */
+export const QUALITY_UNDECIDED = true
+
+/* --------------------------------------------------- access, live, identity */
+
+/**
+ * How a title is gated.
+ *
+ * `free` and `pass` are the only two states the documentation actually supports:
+ * something is open to everyone, or it needs an active pass. The Stitch drafts
+ * went further and invented per-category passes at named prices — a Music Pass
+ * at $8.99, an All-Access Master at $19.99 — but plan names, prices and
+ * entitlements are recorded as undecided in PRODUCT.md, so the badge says which
+ * of the two states applies and stops there.
+ */
+export type Access = 'free' | 'pass'
+export const accessOf = (v: Video): Access => (v.premium ? 'pass' : 'free')
+
+/** Channels whose identity the platform has checked. */
+export const VERIFIED = ['Meridian Films', 'Fern & Field', 'Northbound', 'Cadence Hall']
+export const isVerified = (creator: string) => VERIFIED.includes(creator)
+
+/**
+ * Live broadcasts. A live title has no fixed runtime and no resume position, so
+ * it is kept as a separate list rather than as another flag on Video — a "live"
+ * boolean would quietly make runtime and progress meaningless on those records.
+ */
+export type Live = {
+  id: string
+  title: string
+  creator: string
+  category: string
+  watching: number
+  startedAt: string
+  seed: number
+  premium: boolean
+}
+
+export const LIVE: Live[] = [
+  { id: 'lv-1', title: 'Night Shift — Episode 7 Premiere & Q&A', creator: 'Northbound', category: 'Series', watching: 4820, startedAt: '38 min ago', seed: 51, premium: true },
+  { id: 'lv-2', title: 'Cadence Hall: Friday Session, Live', creator: 'Cadence Hall', category: 'Music', watching: 1240, startedAt: '12 min ago', seed: 52, premium: false },
+  { id: 'lv-3', title: 'Open Workshop — Reading a Repair Manual', creator: 'Fern & Field', category: 'Learning', watching: 610, startedAt: '2 h ago', seed: 53, premium: false },
+]
+
+/** Hashtags, authored per title rather than derived from the category. */
+export const TAGS: Record<string, string[]> = {
+  'v-1041': ['observatory', 'winter', 'longform'],
+  'v-1053': ['shipbreaking', 'labour', 'gujarat'],
+  'v-1056': ['optics', 'explainer', 'physics'],
+  'v-1062': ['baking', 'chemistry', 'slowtv'],
+  'v-1076': ['35mm', 'projection', 'lastofitskind'],
+}
+export const tagsFor = (id: string) => TAGS[id] ?? []

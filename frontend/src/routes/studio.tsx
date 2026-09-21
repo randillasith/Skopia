@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import {
@@ -15,13 +15,26 @@ import { VIDEOS, CATEGORIES, GENRES, byId, fmt, UNDECIDED } from '@/lib/data'
 import { ACCOUNTS, CHANNELS, accountById, ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
-/** The library is scoped to the channel the signed-in account owns. */
-const MINE = VIDEOS.filter((v) => ['Meridian Films', 'Harbour Studio'].includes(v.creator))
+
+/**
+ * The studio only ever shows the signed-in account's own channel. Scoping it to
+ * a hard-coded list of creator names was left over from the flat role model, and
+ * it meant every creator saw the same two studios' videos as though they were
+ * their own.
+ */
+function useMyVideos() {
+  const { viewer } = useSession()
+  return useMemo(() => {
+    const channel = ownedChannel(viewer)
+    return channel ? VIDEOS.filter((v) => v.creator === channel.name) : []
+  }, [viewer])
+}
 
 /* ========================================================= video library */
 
 export function StudioLibrary() {
   const nav = useNavigate()
+  const MINE = useMyVideos()
   const [confirm, setConfirm] = useState<string | null>(null)
   const toast = useToast()
   const target = confirm ? byId(confirm) : undefined
@@ -505,6 +518,7 @@ export function StudioEdit() {
 /* ============================================================== analytics */
 
 export function StudioAnalytics() {
+  const MINE = useMyVideos()
   const total = MINE.reduce((s, v) => s + v.views, 0)
   const max = Math.max(...MINE.map((v) => v.views))
 

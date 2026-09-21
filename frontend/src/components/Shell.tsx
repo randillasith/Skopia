@@ -1,21 +1,24 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Bell, Search, Menu, X, LayoutGrid, Clapperboard, Bookmark,
   History, Sparkles, CreditCard, Flag, LifeBuoy, User, Upload, BarChart3,
   Megaphone, Inbox, Users, ShieldCheck, ScrollText, Settings, Gauge, Receipt,
-  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, Check,
+  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, Check, ListVideo,
+  Compass, Flame, ListEnd,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { NOTIFICATIONS } from '@/lib/data'
+import { useLibrary } from '@/lib/library'
 import {
-  DEMO_IDENTITIES, STAFF_ROLES, accountById, canStaff, describe,
+  CHANNELS, DEMO_IDENTITIES, STAFF_ROLES, accountById, canStaff, describe,
   homeFor, isCreator, moderatedChannels, ownedChannel,
   type StaffRole, type Viewer,
 } from '@/lib/session'
 import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
+import { SearchBox } from './search'
 
 /* ---------------------------------------------------------------- session */
 
@@ -321,61 +324,201 @@ export function Wordmark({ to = '/' }: { to?: string }) {
 
 /* -------------------------------------------------- front of house (viewer) */
 
-const VIEWER_NAV = [
-  { to: '/browse', label: 'Lobby', icon: LayoutGrid },
-  { to: '/for-you', label: 'For you', icon: Sparkles },
-  { to: '/watchlist', label: 'Watchlist', icon: Bookmark },
-  { to: '/history', label: 'History', icon: History },
+/**
+ * Front of house.
+ *
+ * A persistent left rail rather than a top nav. A catalogue this shape needs
+ * three things reachable at all times — the feeds, your own library, and the
+ * channels you follow — and a row of tabs cannot hold them without either
+ * truncating or turning into a menu. It collapses to icons on narrow desktops
+ * and becomes a drawer below `lg`, so the same structure survives to a phone.
+ */
+const FEEDS = [
+  { to: '/browse', label: 'Home', icon: LayoutGrid },
+  { to: '/explore', label: 'Explore', icon: Compass },
+  { to: '/trending', label: 'Trending', icon: Flame },
+  { to: '/subscriptions', label: 'Following', icon: Users },
 ]
 
+const LIBRARY = [
+  { to: '/history', label: 'History', icon: History },
+  { to: '/watchlist', label: 'Watch later', icon: Bookmark },
+  { to: '/playlists', label: 'Playlists', icon: ListVideo },
+  { to: '/for-you', label: 'For you', icon: Sparkles },
+]
+
+function RailLink({
+  to,
+  label,
+  icon: Icon,
+  collapsed,
+  onNavigate,
+  badge,
+}: {
+  to: string
+  label: string
+  icon: typeof LayoutGrid
+  collapsed: boolean
+  onNavigate?: () => void
+  badge?: number
+}) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
+      className={({ isActive }) =>
+        cn(
+          'group/link relative flex items-center gap-3 rounded-sm px-2.5 py-2 text-[13.5px] transition-colors',
+          collapsed && 'justify-center px-0',
+          isActive ? 'bg-ink-800 text-white' : 'text-ink-200 hover:bg-ink-850 hover:text-white',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.span
+              layoutId="rail-marker"
+              transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
+              className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-cyan-400"
+            />
+          )}
+          <Icon className="size-[18px] shrink-0" />
+          {!collapsed && <span className="truncate">{label}</span>}
+          {!collapsed && badge !== undefined && badge > 0 && (
+            <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-300">{badge}</span>
+          )}
+        </>
+      )}
+    </NavLink>
+  )
+}
+
 export function FrontOfHouse({ children }: { children: React.ReactNode }) {
-  const [menu, setMenu] = useState(false)
+  const [drawer, setDrawer] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const { viewer } = useSession()
+  const { subscriptions, queue } = useLibrary()
+  const nav = useNavigate()
   const unread = NOTIFICATIONS.filter((n) => !n.read).length
+  const followed = CHANNELS.filter((c) => subscriptions.includes(c.handle))
+  const canUpload = isCreator(viewer)
+
+  // "/" and Cmd-K reach the search box, the way every catalogue of this size
+  // does. Ignored while the caret is already in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null
+      const typing = el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+      if ((e.key === '/' && !typing) || (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault()
+        document.querySelector<HTMLInputElement>('input[role="combobox"]')?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const railBody = (inDrawer: boolean) => {
+    const c = inDrawer ? false : collapsed
+    const close = inDrawer ? () => setDrawer(false) : undefined
+    return (
+      <nav className="flex h-full flex-col gap-1 overflow-y-auto px-2.5 py-3">
+        <ul className="space-y-0.5">
+          {FEEDS.map((n) => (
+            <li key={n.to}><RailLink {...n} collapsed={c} onNavigate={close} /></li>
+          ))}
+        </ul>
+
+        <hr className="my-3 border-ink-800" />
+        {!c && <p className="letterboard px-2.5 pb-1.5 text-ink-300">Library</p>}
+        <ul className="space-y-0.5">
+          {LIBRARY.map((n) => (
+            <li key={n.to}><RailLink {...n} collapsed={c} onNavigate={close} /></li>
+          ))}
+          <li>
+            <RailLink to="/queue-up" label="Queue" icon={ListEnd} collapsed={c} onNavigate={close} badge={queue.length} />
+          </li>
+        </ul>
+
+        {followed.length > 0 && (
+          <>
+            <hr className="my-3 border-ink-800" />
+            {!c && <p className="letterboard px-2.5 pb-1.5 text-ink-300">Channels</p>}
+            <ul className="space-y-0.5">
+              {followed.map((ch) => (
+                <li key={ch.id}>
+                  <NavLink
+                    to={`/channel/${ch.handle}`}
+                    onClick={close}
+                    title={c ? ch.name : undefined}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-3 rounded-sm px-2.5 py-1.5 text-[13.5px] transition-colors',
+                        c && 'justify-center px-0',
+                        isActive ? 'bg-ink-800 text-white' : 'text-ink-200 hover:bg-ink-850 hover:text-white',
+                      )
+                    }
+                  >
+                    <Avatar name={ch.name} size={22} />
+                    {!c && <span className="truncate">{ch.name}</span>}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <hr className="my-3 border-ink-800" />
+        <ul className="space-y-0.5">
+          {canUpload && <li><RailLink to="/studio" label="Creator Studio" icon={Tv} collapsed={c} onNavigate={close} /></li>}
+          <li><RailLink to="/plans" label="Passes" icon={CreditCard} collapsed={c} onNavigate={close} /></li>
+          <li><RailLink to="/reports" label="My reports" icon={Flag} collapsed={c} onNavigate={close} /></li>
+          <li><RailLink to="/help" label="Help" icon={LifeBuoy} collapsed={c} onNavigate={close} /></li>
+        </ul>
+
+        <div className="mt-auto pt-3">
+          {inDrawer && <AccountMenu compact />}
+        </div>
+      </nav>
+    )
+  }
 
   return (
     <div className="min-h-dvh bg-canvas">
       <header className="sticky top-0 z-40 bg-canvas/88 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-4">
+          <button
+            onClick={() => (window.innerWidth >= 1024 ? setCollapsed((v) => !v) : setDrawer(true))}
+            aria-label="Toggle navigation"
+            className="rounded-sm p-2 text-ink-200 transition-colors hover:bg-ink-850 hover:text-white"
+          >
+            <Menu className="size-5" />
+          </button>
           <Wordmark to="/browse" />
 
-          {/* The marker travels between items rather than cutting: shared
-              layoutId hands the same element from one link to the next, so the
-              eye follows where it went instead of re-finding it. */}
-          <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
-            {VIEWER_NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) =>
-                  cn(
-                    'relative rounded-sm px-3 py-2 text-[14px] font-medium transition-colors duration-200',
-                    isActive ? 'text-white' : 'text-ink-300 hover:text-white',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {n.label}
-                    {isActive && (
-                      <motion.span
-                        layoutId="viewer-nav-marker"
-                        transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
-                        className="absolute inset-x-2.5 -bottom-0.5 h-px bg-cyan-400"
-                      />
-                    )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </nav>
+          <div className="ml-auto hidden min-w-0 flex-1 justify-center px-4 sm:flex lg:ml-0">
+            <SearchBox />
+          </div>
 
           <Link
             to="/search"
-            className="ml-auto flex h-10 items-center gap-2 rounded-sm border border-ink-700 bg-ink-850 px-3 text-[13px] text-ink-300 transition-colors hover:border-ink-600 hover:text-ink-200 sm:w-64"
+            aria-label="Search"
+            className="ml-auto rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-white sm:hidden"
           >
-            <Search className="size-4" />
-            <span className="hidden sm:inline">Search the programme</span>
+            <Search className="size-5" />
           </Link>
+
+          {canUpload && (
+            <button
+              onClick={() => nav('/studio/upload')}
+              className="hidden h-9 items-center gap-2 rounded-sm border border-ink-600 px-3 text-[13px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-white sm:flex"
+            >
+              <Upload className="size-4" />
+              Upload
+            </button>
+          )}
 
           <Link
             to="/notifications"
@@ -388,78 +531,50 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
             )}
           </Link>
 
-          <div className="hidden sm:block">
-            <AccountMenu />
-          </div>
-
-          <button
-            onClick={() => setMenu(true)}
-            aria-label="Open menu"
-            className="rounded-sm p-2 text-ink-200 lg:hidden"
-          >
-            <Menu className="size-5" />
-          </button>
+          <div className="hidden sm:block"><AccountMenu /></div>
         </div>
         <MarqueeRule />
       </header>
 
-      <AnimatePresence>
-        {menu && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-ink-950/95 backdrop-blur lg:hidden"
-          >
-            <div className="flex h-16 items-center justify-between px-4">
-              <Wordmark to="/browse" />
-              <button onClick={() => setMenu(false)} aria-label="Close menu" className="p-2">
-                <X className="size-5 text-ink-200" />
-              </button>
-            </div>
-            <nav className="flex flex-col gap-1 px-4 py-4">
-              {[...VIEWER_NAV,
-                { to: '/plans', label: 'Passes', icon: CreditCard },
-                { to: '/reports', label: 'My reports', icon: Flag },
-                { to: '/profile', label: 'Account', icon: User },
-                { to: '/help', label: 'Help', icon: LifeBuoy },
-              ].map((n) => (
-                <NavLink
-                  key={n.to}
-                  to={n.to}
-                  onClick={() => setMenu(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-3 rounded-sm px-3 py-3 text-[15px]',
-                      isActive ? 'bg-ink-800 text-white' : 'text-ink-200',
-                    )
-                  }
-                >
-                  <n.icon className="size-4.5" />
-                  {n.label}
-                </NavLink>
-              ))}
-              <div className="mt-4">
-                <AccountMenu compact />
-              </div>
-            </nav>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="flex">
+        {/* the rail, desktop */}
+        <aside
+          className={cn(
+            'sticky top-[4.0625rem] hidden h-[calc(100dvh-4.0625rem)] shrink-0 border-r border-ink-800 transition-[width] duration-200 lg:block',
+            collapsed ? 'w-[68px]' : 'w-[232px]',
+          )}
+        >
+          {railBody(false)}
+        </aside>
 
-      <main>{children}</main>
+        {/* the rail, as a drawer */}
+        <AnimatePresence>
+          {drawer && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setDrawer(false)}
+                className="fixed inset-0 z-50 bg-ink-950/70 backdrop-blur-sm lg:hidden"
+              />
+              <motion.aside
+                initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                className="fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r border-ink-800 bg-ink-900 lg:hidden"
+              >
+                <div className="flex h-16 shrink-0 items-center justify-between px-3">
+                  <Wordmark to="/browse" />
+                  <button onClick={() => setDrawer(false)} aria-label="Close navigation" className="p-2">
+                    <X className="size-5 text-ink-200" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1">{railBody(true)}</div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
-      <footer className="mt-20 border-t border-ink-800">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 py-8 text-[13px] text-ink-300 sm:flex-row sm:items-center sm:px-6 lg:px-8">
-          <Wordmark to="/browse" />
-          <p className="sm:ml-6">Watch beyond limits.</p>
-          <nav className="flex flex-wrap gap-x-5 gap-y-2 sm:ml-auto">
-            <Link to="/help" className="hover:text-ink-100">Help</Link>
-            <Link to="/reports" className="hover:text-ink-100">Report a problem</Link>
-            <Link to="/plans" className="hover:text-ink-100">Passes</Link>
-          </nav>
-        </div>
-      </footer>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   )
 }
