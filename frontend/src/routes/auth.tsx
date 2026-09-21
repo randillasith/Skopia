@@ -56,7 +56,11 @@ export function Lobby() {
       </header>
       <MarqueeRule />
 
-      {/* ---- first viewport: billing block + one live lightbox ---- */}
+      {/* ---- first viewport: billing block + one live lightbox ----
+           The billing block bills a real title, so with nothing in the catalogue
+           there is nothing to bill and the section stands down rather than
+           rendering a headline that is not there. ---- */}
+      {headline && (
       <section className="mx-auto max-w-[1500px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-16">
         <div className="grid gap-10 lg:grid-cols-[1.9fr_1fr] lg:gap-14">
           {/* billing block — hierarchy by size and span, never a uniform grid */}
@@ -155,6 +159,7 @@ export function Lobby() {
           </aside>
         </div>
       </section>
+      )}
 
       {/* ---- the programme itself: a guest browses before signing up ---- */}
       {shelves.map(({ category, items }) => (

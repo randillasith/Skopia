@@ -118,14 +118,36 @@ export function Player({
     onTimeChange?.(time)
   }, [time, onTimeChange])
 
-  // The element follows the controls: play, rate, volume and seeks are pushed
-  // onto it, and it pushes its own currentTime back through onTimeUpdate below.
-  useEffect(() => {
+  /**
+   * Start or stop, whichever of the two is running.
+   *
+   * With a file, the element is asked and its own play/pause events set the
+   * state — asking the element and separately setting the state races, because
+   * a blocked or failed play leaves the two disagreeing. Without a file the
+   * state is all there is.
+   *
+   * A browser that refuses to start an unmuted video without a gesture it
+   * recognises is not a failure: it is muted and tried once more, which is what
+   * the viewer wanted either way. Only a second refusal is a real one.
+   */
+  const toggle = useCallback(() => {
     const el = media.current
-    if (!el) return
-    if (playing && !ad) el.play().catch(() => setFailed(true))
-    else el.pause()
-  }, [playing, ad])
+    if (!el) return setPlaying((p) => !p)
+    if (el.paused) {
+      el.play().catch(() => {
+        el.muted = true
+        setMuted(true)
+        el.play().catch(() => setFailed(true))
+      })
+    } else {
+      el.pause()
+    }
+  }, [])
+
+  // An advertisement stops the feature; nothing else here drives the element.
+  useEffect(() => {
+    if (ad) media.current?.pause()
+  }, [ad])
 
   useEffect(() => {
     const el = media.current
@@ -193,7 +215,7 @@ export function Player({
       const k = e.key
       const hit = () => e.preventDefault()
 
-      if (k === ' ' || k === 'k') { hit(); setPlaying((p) => !p) }
+      if (k === ' ' || k === 'k') { hit(); toggle() }
       else if (k === 'ArrowRight') { hit(); seek(time + 5) }
       else if (k === 'ArrowLeft') { hit(); seek(time - 5) }
       else if (k === 'l') { hit(); seek(time + 10) }
@@ -216,7 +238,7 @@ export function Player({
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [time, seek, toggleFull, theater, onTheater, total])
+  }, [time, seek, toggle, toggleFull, theater, onTheater, total])
 
   const pct = (t: number) => (total === 0 ? 0 : (t / total) * 100)
   const current = chapters.filter((c) => c.at <= time).pop()
@@ -254,7 +276,11 @@ export function Player({
             onEnded?.()
           }}
           onError={() => setFailed(true)}
-          onClick={() => setPlaying((p) => !p)}
+          // Deliberately no click handler: the transport and the centre button
+          // already sit over this element, and a second toggle underneath them
+          // means one click starts playback and stops it again.
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
         />
       ) : (
         <>
@@ -298,7 +324,7 @@ export function Player({
         </div>
       ) : (
         <button
-          onClick={() => setPlaying((p) => !p)}
+          onClick={toggle}
           aria-label={playing ? 'Pause' : 'Play'}
           className="absolute inset-0 flex items-center justify-center"
         >
@@ -519,7 +545,7 @@ export function Player({
 
           <div className="mt-1 flex items-center gap-0.5 text-ink-100">
             <IconBtn label="Back 10 seconds" onClick={() => seek(time - 10)}><SkipBack className="size-4" /></IconBtn>
-            <IconBtn label={playing ? 'Pause' : 'Play'} onClick={() => setPlaying((p) => !p)}>
+            <IconBtn label={playing ? 'Pause' : 'Play'} onClick={toggle}>
               {playing ? <Pause className="size-5" /> : <Play className="size-5 fill-current" />}
             </IconBtn>
             <IconBtn label="Forward 10 seconds" onClick={() => seek(time + 10)}><SkipForward className="size-4" /></IconBtn>
