@@ -23,14 +23,14 @@ export default defineConfig({
     // and no CORS configuration is needed on either side.
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8081',
         changeOrigin: true,
       },
       // Advertisement creative is written to disk by the API and served from
       // there, so it has to come through the proxy too or every uploaded
       // poster is a broken image in development.
       '/uploads': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8081',
         changeOrigin: true,
       },
     },

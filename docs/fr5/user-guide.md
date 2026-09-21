@@ -1,7 +1,7 @@
 # Running advertising on Skopia
 
 A guide for Advertising and Marketing Officers. Everything here happens in **The
-Box Office** — the console at <http://localhost:8080/campaigns>, reachable from the
+Box Office** — the console at <http://localhost:8081/campaigns>, reachable from the
 account menu once an administrator has granted you the marketing role.
 
 ---

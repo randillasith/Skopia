@@ -26,7 +26,7 @@ export SKOPIA_DB_PASSWORD=…
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=h2
 ```
 
-Then open <http://localhost:8080/campaigns>, signed in as a marketing officer.
+Then open <http://localhost:8081/campaigns>, signed in as a marketing officer.
 
 For frontend work, `npm run dev` in `frontend/` serves the UI on 5175 and proxies
 `/api` and `/uploads` to 8080.
