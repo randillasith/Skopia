@@ -15,6 +15,21 @@ import java.util.Map;
 @CrossOrigin(origins = "*", maxAge = 3600)
 public class VideoController {
 
+    /**
+     * The header the caller is identified by, which is the convention the rest of
+     * the platform already uses. It is not proof of identity and is not treated as
+     * such; it says which account the UI believes it is acting for.
+     */
+    private static final String ACTOR_HEADER = "X-User-Id";
+
+    /**
+     * Who a request belongs to when the caller does not say.
+     *
+     * These used to be the only answer, so every viewer shared one watchlist and
+     * every upload landed on one channel. They are kept as a fallback so the
+     * endpoints still answer for a caller that has not signed in — a signed-in UI
+     * sends the header and gets its own rows.
+     */
     private static final Long VIEWER_ID = 1L;
     private static final Long CREATOR_ID = 2L;
 
@@ -22,6 +37,11 @@ public class VideoController {
 
     public VideoController(VideoService videoService) {
         this.videoService = videoService;
+    }
+
+    /** The acting account, or the fallback when the caller is anonymous. */
+    private static Long actor(Long header, Long fallback) {
+        return (header != null && header > 0) ? header : fallback;
     }
 
     @GetMapping("/health")
@@ -42,14 +62,21 @@ public class VideoController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Long category,
             @RequestParam(required = false) String access,
-            @RequestParam(required = false) String scope) {
-        List<VideoResponse> videos = videoService.getVideos(search, category, access, scope, CREATOR_ID, VIEWER_ID);
+            @RequestParam(required = false) String scope,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        // `scope=mine` is the studio asking for its own shelf, so the caller is the
+        // creator being filtered on as well as the viewer the flags are read for.
+        List<VideoResponse> videos = videoService.getVideos(
+                search, category, access, scope,
+                actor(actorId, CREATOR_ID), actor(actorId, VIEWER_ID));
         return ResponseEntity.ok(videos);
     }
 
     @GetMapping("/videos/{id}")
-    public ResponseEntity<VideoResponse> getVideoById(@PathVariable Long id) {
-        return ResponseEntity.ok(videoService.getVideoById(id, VIEWER_ID));
+    public ResponseEntity<VideoResponse> getVideoById(
+            @PathVariable Long id,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        return ResponseEntity.ok(videoService.getVideoById(id, actor(actorId, VIEWER_ID)));
     }
 
     @PostMapping(value = "/videos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -64,7 +91,8 @@ public class VideoController {
             @RequestParam(value = "thumbnailUrl", required = false) String thumbnailUrl,
             @RequestParam(value = "creatorId", required = false) Long creatorId,
             @RequestParam(value = "videoFile", required = false) MultipartFile videoFile,
-            @RequestParam(value = "thumbnailFile", required = false) MultipartFile thumbnailFile) {
+            @RequestParam(value = "thumbnailFile", required = false) MultipartFile thumbnailFile,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
 
         CreateVideoRequest request = new CreateVideoRequest();
         request.setTitle(title);
@@ -76,7 +104,7 @@ public class VideoController {
         request.setVideoUrl(videoUrl);
         request.setThumbnailUrl(thumbnailUrl);
 
-        Long effectiveCreatorId = (creatorId != null && creatorId > 0) ? creatorId : CREATOR_ID;
+        Long effectiveCreatorId = (creatorId != null && creatorId > 0) ? creatorId : actor(actorId, CREATOR_ID);
         VideoResponse created = videoService.createVideo(request, videoFile, thumbnailFile, effectiveCreatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", created.getId(),
@@ -87,8 +115,9 @@ public class VideoController {
     @PostMapping(value = "/videos", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> createVideoJson(
             @RequestBody CreateVideoRequest request,
-            @RequestParam(value = "creatorId", required = false) Long creatorId) {
-        Long effectiveCreatorId = (creatorId != null && creatorId > 0) ? creatorId : CREATOR_ID;
+            @RequestParam(value = "creatorId", required = false) Long creatorId,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        Long effectiveCreatorId = (creatorId != null && creatorId > 0) ? creatorId : actor(actorId, CREATOR_ID);
         VideoResponse created = videoService.createVideo(request, null, null, effectiveCreatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", created.getId(),
@@ -97,14 +126,19 @@ public class VideoController {
     }
 
     @PutMapping("/videos/{id}")
-    public ResponseEntity<Map<String, String>> updateVideo(@PathVariable Long id, @RequestBody UpdateVideoRequest request) {
-        videoService.updateVideo(id, request, CREATOR_ID);
+    public ResponseEntity<Map<String, String>> updateVideo(
+            @PathVariable Long id,
+            @RequestBody UpdateVideoRequest request,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        videoService.updateVideo(id, request, actor(actorId, CREATOR_ID));
         return ResponseEntity.ok(Map.of("message", "Video updated"));
     }
 
     @DeleteMapping("/videos/{id}")
-    public ResponseEntity<Map<String, String>> deleteVideo(@PathVariable Long id) {
-        boolean deleted = videoService.deleteVideo(id, CREATOR_ID);
+    public ResponseEntity<Map<String, String>> deleteVideo(
+            @PathVariable Long id,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        boolean deleted = videoService.deleteVideo(id, actor(actorId, CREATOR_ID));
         if (deleted) {
             return ResponseEntity.ok(Map.of("message", "Video deleted"));
         } else {
@@ -113,13 +147,17 @@ public class VideoController {
     }
 
     @PostMapping("/videos/{id}/like")
-    public ResponseEntity<Map<String, Object>> toggleLike(@PathVariable Long id) {
-        return ResponseEntity.ok(videoService.toggleLike(id, VIEWER_ID));
+    public ResponseEntity<Map<String, Object>> toggleLike(
+            @PathVariable Long id,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        return ResponseEntity.ok(videoService.toggleLike(id, actor(actorId, VIEWER_ID)));
     }
 
     @PostMapping("/videos/{id}/save")
-    public ResponseEntity<Map<String, Object>> toggleSaved(@PathVariable Long id) {
-        return ResponseEntity.ok(videoService.toggleSaved(id, VIEWER_ID));
+    public ResponseEntity<Map<String, Object>> toggleSaved(
+            @PathVariable Long id,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        return ResponseEntity.ok(videoService.toggleSaved(id, actor(actorId, VIEWER_ID)));
     }
 
     @PostMapping("/videos/{id}/view")
@@ -129,8 +167,11 @@ public class VideoController {
     }
 
     @PostMapping("/videos/{id}/progress")
-    public ResponseEntity<Map<String, String>> saveProgress(@PathVariable Long id, @RequestBody WatchProgressRequest request) {
-        videoService.saveProgress(id, VIEWER_ID, request.getPosition(), request.getCompleted());
+    public ResponseEntity<Map<String, String>> saveProgress(
+            @PathVariable Long id,
+            @RequestBody WatchProgressRequest request,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        videoService.saveProgress(id, actor(actorId, VIEWER_ID), request.getPosition(), request.getCompleted());
         return ResponseEntity.ok(Map.of("message", "Progress saved"));
     }
 
@@ -143,15 +184,18 @@ public class VideoController {
     public ResponseEntity<CommentResponse> addComment(
             @PathVariable Long id,
             @RequestParam(value = "viewerId", required = false) Long viewerId,
-            @RequestBody CreateCommentRequest request) {
-        Long effectiveViewerId = (viewerId != null && viewerId > 0) ? viewerId : VIEWER_ID;
+            @RequestBody CreateCommentRequest request,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        Long effectiveViewerId = (viewerId != null && viewerId > 0) ? viewerId : actor(actorId, VIEWER_ID);
         CommentResponse response = videoService.addComment(id, effectiveViewerId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @DeleteMapping("/comments/{id}")
-    public ResponseEntity<Map<String, String>> deleteComment(@PathVariable Long id) {
-        boolean deleted = videoService.deleteComment(id, VIEWER_ID);
+    public ResponseEntity<Map<String, String>> deleteComment(
+            @PathVariable Long id,
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        boolean deleted = videoService.deleteComment(id, actor(actorId, VIEWER_ID));
         if (deleted) {
             return ResponseEntity.ok(Map.of("message", "Comment deleted"));
         } else {
@@ -160,12 +204,14 @@ public class VideoController {
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<WatchHistoryResponse>> getHistory() {
-        return ResponseEntity.ok(videoService.getHistory(VIEWER_ID));
+    public ResponseEntity<List<WatchHistoryResponse>> getHistory(
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        return ResponseEntity.ok(videoService.getHistory(actor(actorId, VIEWER_ID)));
     }
 
     @GetMapping("/watchlist")
-    public ResponseEntity<List<WatchlistResponse>> getWatchlist() {
-        return ResponseEntity.ok(videoService.getWatchlist(VIEWER_ID));
+    public ResponseEntity<List<WatchlistResponse>> getWatchlist(
+            @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
+        return ResponseEntity.ok(videoService.getWatchlist(actor(actorId, VIEWER_ID)));
     }
 }
