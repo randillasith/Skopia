@@ -19,6 +19,9 @@ import { useCatalogue, useVideo, useVideoSearch, useComments } from '@/lib/useCa
 import { catalogue, videoIdOf } from '@/lib/catalogue'
 import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
+import {
+  reports, REPORT_TYPES, REPORT_TYPE_LABEL, type ServerReportType,
+} from '@/lib/reports'
 import { Resolve } from '@/components/Loading'
 import { CHANNELS, channelByName } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
@@ -1061,7 +1064,7 @@ export function Watch() {
         </div>
       </div>
 
-      <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} title={v.title} />
+      <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} title={v.title} videoId={v.id} />
       <SaveToPlaylist videoId={v.id} open={saveOpen} onClose={() => setSaveOpen(false)} />
 
       {/* ---- share, with the option to start where the viewer is ---- */}
@@ -1093,25 +1096,54 @@ export function ReportModal({
   open,
   onClose,
   title,
+  videoId,
+  onFiled,
 }: {
   open: boolean
   onClose: () => void
   title?: string
+  /** The title being reported, so support knows what it is about. */
+  videoId?: string
+  onFiled?: () => void
 }) {
   const toast = useToast()
-  const [type, setType] = useState('')
+  const nav = useNavigate()
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const [type, setType] = useState<ServerReportType | ''>('')
   const [detail, setDetail] = useState('')
   const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const submit = () => {
+  const submit = async () => {
     if (!type) return setErr('Choose what kind of problem this is.')
     if (detail.trim().length < 10)
       return setErr('Describe the problem in a sentence or two so it can be investigated.')
+    // Reports are filed against an account, because the whole point is that the
+    // person who filed one can follow it. There is nobody to file one for a guest.
+    if (actor == null) {
+      setErr('Sign in to file a report, so you can follow what happens to it.')
+      return
+    }
     setErr('')
-    toast({ title: 'Report submitted — you can track it under My reports', tone: 'ok' })
-    setType('')
-    setDetail('')
-    onClose()
+    setBusy(true)
+    try {
+      await reports.submit({
+        viewerId: actor,
+        type,
+        details: detail.trim(),
+        contentReference: videoId ? `video:${videoId}` : null,
+      })
+      toast({ title: 'Report submitted — you can track it under My reports', tone: 'ok' })
+      setType('')
+      setDetail('')
+      onFiled?.()
+      onClose()
+    } catch (cause) {
+      setErr(cause instanceof ApiError ? cause.message : 'The report did not go through.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -1119,22 +1151,27 @@ export function ReportModal({
       open={open}
       onClose={onClose}
       title="Report a problem"
-      description={title ? `About “${title}”` : undefined}
+      description={title ? `About \u201c${title}\u201d` : undefined}
       footer={
         <>
           <Button variant="quiet" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit}>Submit report</Button>
+          {actor == null ? (
+            <Button variant="primary" onClick={() => nav('/login')}>Sign in</Button>
+          ) : (
+            <Button variant="primary" loading={busy} onClick={submit}>Submit report</Button>
+          )}
         </>
       }
     >
       <div className="space-y-4">
         <Field label="What kind of problem?" required error={err && !type ? err : undefined}>
-          <Select value={type} onChange={(e) => setType(e.target.value)}>
+          <Select value={type} onChange={(e) => setType(e.target.value as ServerReportType)}>
             <option value="">Choose one</option>
-            <option>Inappropriate content</option>
-            <option>Playback problem</option>
-            <option>Accessibility</option>
-            <option>Other</option>
+            {REPORT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {REPORT_TYPE_LABEL[t]}
+              </option>
+            ))}
           </Select>
         </Field>
         <Field
@@ -1151,8 +1188,7 @@ export function ReportModal({
           />
         </Field>
         <p className="text-[12.5px] leading-relaxed text-ink-300">
-          Support sees your report with a status you can follow. You will be notified when the
-          status changes.
+          Support sees your report with a status you can follow under My reports.
         </p>
       </div>
     </Modal>
