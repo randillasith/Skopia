@@ -1,7 +1,7 @@
 // API Service for Skopia Backend Integration
 const API_BASE_URL = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http'))
     ? `${window.location.origin}/api`
-    : 'http://localhost:8082/api';
+    : 'http://localhost:8081/api';
 
 class SkopiaAPIService {
 

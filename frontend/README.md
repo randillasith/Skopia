@@ -27,7 +27,7 @@ side needs CORS configuration. Start the backend alongside it if you need the AP
 ./mvnw spring-boot:run
 ```
 
-Open http://localhost:8080. No hot reload, but this is what the built artifact does.
+Open http://localhost:8081. No hot reload, but this is what the built artifact does.
 
 ## How it is built
 
