@@ -22,6 +22,26 @@ import java.util.List;
 @Repository
 public interface AdImpressionRepository extends JpaRepository<AdImpression, Long> {
 
+    /**
+     * The most recent impression of one placement to one identified viewer.
+     *
+     * <p>Used to collapse repeats. A player that remounts, a viewer who refreshes,
+     * or a client that retries all ask for the same advertisement again within
+     * seconds, and every one of those used to be a separate row an advertiser was
+     * billed for.
+     */
+    @Query("""
+            SELECT i FROM AdImpression i
+            WHERE i.placement.id = :placementId
+              AND i.viewer.id = :viewerId
+              AND i.shownAt >= :since
+            ORDER BY i.shownAt DESC
+            LIMIT 1
+            """)
+    java.util.Optional<AdImpression> findRecent(@Param("placementId") Long placementId,
+                                                @Param("viewerId") Long viewerId,
+                                                @Param("since") LocalDateTime since);
+
     @Query("""
             SELECT new org.gp14.skopia.advertising.dto.MetricTotalsRow(
                        COUNT(i), SUM(CASE WHEN i.wasClicked = TRUE THEN 1 ELSE 0 END))

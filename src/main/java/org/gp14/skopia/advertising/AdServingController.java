@@ -78,8 +78,10 @@ public class AdServingController {
      * which is a real way people open advertisements.
      */
     @GetMapping("/click/{impressionId}")
-    public ResponseEntity<Void> click(@PathVariable Long impressionId) {
-        String destination = serving.recordClick(impressionId);
+    public ResponseEntity<Void> click(
+            @AuthenticationPrincipal User principal,
+            @PathVariable Long impressionId) {
+        String destination = serving.recordClick(impressionId, AdvertisingAccess.idOf(principal));
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(destination)).build();
     }
 }
