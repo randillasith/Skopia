@@ -26,7 +26,6 @@ const SKIP_AFTER = 5
 export function AdSlot({
   videoId,
   slot = 'PREROLL',
-  viewerId = null,
   onFinished,
 }: {
   /**
@@ -37,7 +36,8 @@ export function AdSlot({
    */
   videoId: number | null | undefined
   slot?: SlotPosition
-  viewerId?: number | null
+  // No viewer prop: who saw this is the server's business, taken from the
+  // bearer token. A guest has none and is recorded as one.
   /** Called when the break is over — skipped, ended, or never filled. */
   onFinished: () => void
 }) {
@@ -62,7 +62,7 @@ export function AdSlot({
     let live = true
 
     ads.serving
-      .active(videoId, slot, { viewerId, device: deviceKind() })
+      .active(videoId, slot, { device: deviceKind() })
       .then((served) => {
         if (!live) return
         if (served.length === 0) {
@@ -79,7 +79,7 @@ export function AdSlot({
       })
 
     return () => { live = false }
-  }, [videoId, slot, viewerId])
+  }, [videoId, slot])
 
   // The countdown, and the automatic end of a video advertisement.
   useEffect(() => {

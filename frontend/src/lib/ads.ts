@@ -192,8 +192,15 @@ type Actor = number | null
 
 export const ads = {
   /** Resolve a signed-in handle to the id the management calls identify by. */
-  session: (handle: string) =>
-    request<AdvertisingSession>(`/api/advertising/session?handle=${encodeURIComponent(handle)}`),
+  /**
+   * Who the signed-in account is, as far as advertising is concerned.
+   *
+   * It used to take a handle. The server answered for whatever handle it was
+   * given, which let anyone resolve any account and find out who holds
+   * advertising — so it now answers for the bearer token and nothing else, and
+   * there is nothing left to pass.
+   */
+  session: () => request<AdvertisingSession>('/api/advertising/session'),
 
   campaigns: {
     list: (actorId: Actor, opts: { search?: string; status?: CampaignStatus } = {}) => {
@@ -264,9 +271,11 @@ export const ads = {
 
   /** What the player calls. No actor: viewers, including guests, hit these. */
   serving: {
-    active: (videoId: number, slot: SlotPosition, opts: { viewerId?: number | null; device?: string } = {}) => {
+    // No viewer is passed: the server takes it from the bearer token, because a
+    // delivery record naming a viewer the caller chose is not a record of
+    // anything. A guest simply has no token and counts as a guest.
+    active: (videoId: number, slot: SlotPosition, opts: { device?: string } = {}) => {
       const query = new URLSearchParams({ videoId: String(videoId), slot })
-      if (opts.viewerId != null) query.set('viewerId', String(opts.viewerId))
       if (opts.device) query.set('device', opts.device)
       return request<ServedAd[]>(`/api/ads/active?${query}`)
     },

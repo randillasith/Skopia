@@ -20,19 +20,22 @@ type ActorState = {
 
 export function useAdvertisingActor(): ActorState {
   const { viewer } = useSession()
-  const handle = viewer?.handle ?? null
+  // The server answers for the bearer token, so this only needs to know whether
+  // there is a session at all. It used to send the handle and take back whatever
+  // account that named, which is not the same question.
+  const signedIn = viewer?.userId ?? null
 
   const [state, setState] = useState<ActorState>({ actor: null, loading: true, error: null })
 
   useEffect(() => {
-    if (!handle) {
+    if (signedIn == null) {
       setState({ actor: null, loading: false, error: new ApiError(401, 'Sign in to continue.') })
       return
     }
     let live = true
     setState({ actor: null, loading: true, error: null })
 
-    ads.session(handle)
+    ads.session()
       .then((actor) => { if (live) setState({ actor, loading: false, error: null }) })
       .catch((error: unknown) => {
         if (!live) return
@@ -44,7 +47,7 @@ export function useAdvertisingActor(): ActorState {
       })
 
     return () => { live = false }
-  }, [handle])
+  }, [signedIn])
 
   return state
 }
