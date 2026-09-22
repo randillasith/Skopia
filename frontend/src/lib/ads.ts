@@ -265,6 +265,15 @@ export const ads = {
       request<Placement[]>(`/api/advertisements/${adId}/targets`, { actorId }),
     attach: (actorId: Actor, adId: number, body: PlacementInput) =>
       request<Placement>(`/api/advertisements/${adId}/targets`, { method: 'POST', body, actorId }),
+    /**
+     * Change a placement's slot, priority or window in place.
+     *
+     * Detaching and re-attaching was the only way to do this, and it discards the
+     * placement id that impressions point at — so the delivery already recorded
+     * stops being attributable to the targeting that earned it.
+     */
+    retarget: (actorId: Actor, placementId: number, body: PlacementInput) =>
+      request<Placement>(`/api/advertisements/targets/${placementId}`, { method: 'PUT', body, actorId }),
     detach: (actorId: Actor, placementId: number) =>
       request<void>(`/api/advertisements/targets/${placementId}`, { method: 'DELETE', actorId }),
   },

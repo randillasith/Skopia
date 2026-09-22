@@ -7,13 +7,13 @@
  * dashboard and a report end up disagreeing about the same campaign.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'motion/react'
 import {
   Plus, Megaphone, AlertTriangle, ArrowLeft, ArrowRight, Check, Upload, Link2,
   Play, Pause, MousePointerClick, Eye, Target, CalendarRange, Archive,
-  Download, Loader2, RefreshCw, X,
+  Download, Loader2, RefreshCw, X, Pencil, Trash2,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Table, Th, Td, Tr, Tabs, Modal,
@@ -24,8 +24,8 @@ import { BackOfHouse } from '@/components/Shell'
 import { ApiError } from '@/lib/api'
 import {
   ads, dateOnly, endOfDay, startOfDay, SLOT_LABEL, STATUS_TONE,
-  type Advertisement, type Campaign, type CampaignStatus, type Metrics,
-  type SlotPosition, type TargetOption,
+  type AdType, type Advertisement, type Campaign, type CampaignStatus, type Metrics,
+  type Placement, type SlotPosition, type TargetOption,
 } from '@/lib/ads'
 import { useAdvertisingActor, useApiData } from '@/lib/useAdvertising'
 import { cn } from '@/lib/cn'
@@ -807,6 +807,8 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
   const nav = useNavigate()
   const toast = useToast()
   const [archiving, setArchiving] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [addingAd, setAddingAd] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const campaign = useApiData(() => ads.campaigns.get(actorId, campaignId), [actorId, campaignId])
@@ -846,7 +848,12 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
 
   const c = campaign.data!
   const expired = c.status === 'EXPIRED'
-  const firstAd = adverts.data?.[0]
+  const archived = c.status === 'ARCHIVED'
+  const list = adverts.data ?? []
+  const lead = list[0]
+  // Nothing about an archived campaign may change: it is kept as the record of
+  // what ran. Everything else is still a working booking, draft or not.
+  const editable = !archived
 
   return (
     <>
@@ -855,6 +862,12 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
           <ArrowLeft className="size-4" /> All campaigns
         </Link>
         <div className="flex flex-wrap gap-2">
+          {editable && (
+            <Button size="sm" variant="quiet" icon={<Pencil className="size-4" />}
+              onClick={() => setEditing(true)}>
+              Edit details
+            </Button>
+          )}
           {c.status === 'ACTIVE' || c.status === 'SCHEDULED' ? (
             <Button size="sm" icon={<Pause className="size-4" />} disabled={busy}
               onClick={() => act('Campaign paused', () => ads.campaigns.pause(actorId, c.id))}>
@@ -872,7 +885,7 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
               Confirm
             </Button>
           )}
-          {c.status !== 'ARCHIVED' && (
+          {!archived && (
             <Button size="sm" variant="danger" icon={<Archive className="size-4" />}
               onClick={() => setArchiving(true)}>
               Archive
@@ -899,8 +912,9 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBoard campaign={c} />
-            {firstAd && <Letterboard>{SLOT_LABEL[firstAd.placements[0]?.slotPosition ?? 'PREROLL']}</Letterboard>}
-            {firstAd && <Letterboard>{firstAd.adType === 'VIDEO' ? 'Video' : 'Image'}</Letterboard>}
+            <Letterboard>
+              {c.adCount === 1 ? '1 advertisement' : `${c.adCount} advertisements`}
+            </Letterboard>
           </div>
 
           <dl className="mt-6 grid gap-5 border-y border-ink-800 py-5 sm:grid-cols-3">
@@ -919,30 +933,6 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
             ))}
           </dl>
 
-          <div className="mt-6">
-            <p className="letterboard mb-2.5 text-ink-300">Targets</p>
-            {adverts.loading && !adverts.data ? (
-              <p className="text-[12.5px] text-ink-400">Loading…</p>
-            ) : (
-              <TargetList
-                actorId={actorId}
-                adverts={adverts.data ?? []}
-                editable={c.status !== 'ARCHIVED'}
-                onChanged={reloadAll}
-              />
-            )}
-          </div>
-
-          {firstAd?.clickUrl && (
-            <div className="mt-6">
-              <p className="letterboard mb-2 text-ink-300">Promotional link</p>
-              <a href={firstAd.clickUrl} target="_blank" rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 text-[13.5px] text-cyan-300 underline hover:text-cyan-200">
-                <Link2 className="size-3.5" /> {firstAd.clickUrl}
-              </a>
-            </div>
-          )}
-
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {[
               [<Eye key="e" className="size-4" />, 'Impressions', c.impressions.toLocaleString()],
@@ -954,6 +944,52 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
                 <p className="font-marquee mt-1.5 text-[24px] font-bold tabular-nums text-white">{value}</p>
               </div>
             ))}
+          </div>
+
+          {/*
+            The advertisements are the campaign, so they are the page rather than a
+            footnote to it. Each one carries its own creative, its own delivery
+            figures and its own targeting, because that is the unit an officer
+            actually switches on and off.
+          */}
+          <div className="mt-8">
+            <Section
+              title="Advertisements"
+              action={editable ? (
+                <Button size="sm" variant="primary" icon={<Plus className="size-4" />}
+                  onClick={() => setAddingAd(true)}>
+                  Add advertisement
+                </Button>
+              ) : undefined}
+            >
+              {adverts.loading && !adverts.data ? (
+                <p className="text-[12.5px] text-ink-400">Loading…</p>
+              ) : adverts.error ? (
+                <Failed error={adverts.error} onRetry={adverts.reload} />
+              ) : list.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-ink-600 bg-ink-900/40 px-5 py-8 text-center">
+                  <p className="text-[13.5px] text-ink-200">
+                    This campaign has no advertisements yet.
+                  </p>
+                  <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-400">
+                    A campaign with none cannot be confirmed — there would be nothing to deliver.
+                  </p>
+                  {editable && (
+                    <Button className="mt-4" size="sm" variant="primary"
+                      icon={<Plus className="size-4" />} onClick={() => setAddingAd(true)}>
+                      Add the first advertisement
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <ul className="space-y-4">
+                  {list.map((ad) => (
+                    <AdvertisementCard key={ad.id} actorId={actorId} ad={ad}
+                      campaign={c} editable={editable} onChanged={reloadAll} />
+                  ))}
+                </ul>
+              )}
+            </Section>
           </div>
 
           {metrics.data && metrics.data.impressions > 0 && (
@@ -971,32 +1007,44 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
               </Section>
             </div>
           )}
-
-          {adverts.data && adverts.data.length > 0 && (
-            <div className="mt-8">
-              <Section title="Advertisements">
-                <ul className="space-y-2.5">
-                  {adverts.data.map((ad) => (
-                    <AdvertisementRow key={ad.id} actorId={actorId} ad={ad} onChanged={reloadAll} />
-                  ))}
-                </ul>
-              </Section>
-            </div>
-          )}
         </div>
 
         <aside>
-          <p className="letterboard mb-2 text-ink-300">Creative</p>
+          <p className="letterboard mb-2 text-ink-300">
+            {list.length > 1 ? 'Lead creative' : 'Creative'}
+          </p>
           <Lightbox>
             <div className="relative aspect-video">
-              <CreativePreview url={firstAd?.mediaUrl} type={firstAd?.adType} title={c.campaignName} />
+              <CreativePreview url={lead?.mediaUrl} type={lead?.adType} title={c.campaignName} />
               <div className="absolute inset-x-0 top-0 flex justify-start p-3">
                 <Letterboard tone="held">Advertisement</Letterboard>
               </div>
             </div>
           </Lightbox>
+          {list.length > 1 && (
+            <p className="mt-2 text-[12px] text-ink-400">
+              {list.length - 1} more {list.length === 2 ? 'advertisement runs' : 'advertisements run'}{' '}
+              under this campaign.
+            </p>
+          )}
         </aside>
       </div>
+
+      <CampaignEditModal
+        open={editing}
+        actorId={actorId}
+        campaign={c}
+        onClose={() => setEditing(false)}
+        onSaved={() => { setEditing(false); reloadAll() }}
+      />
+
+      <AdvertisementFormModal
+        open={addingAd}
+        actorId={actorId}
+        campaignId={c.id}
+        onClose={() => setAddingAd(false)}
+        onSaved={() => { setAddingAd(false); reloadAll() }}
+      />
 
       <Modal
         open={archiving}
@@ -1016,84 +1064,153 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
         }
       >
         <p className="text-[14px] leading-relaxed text-ink-200">
-          The advertisement stops being delivered immediately. Recorded impressions and clicks are
-          kept so past reporting stays accurate — which is why this archives rather than deletes.
+          Every advertisement under it stops being delivered immediately. Recorded impressions and
+          clicks are kept so past reporting stays accurate — which is why this archives rather than
+          deletes.
         </p>
       </Modal>
     </>
   )
 }
 
-function TargetList({
-  actorId, adverts, editable, onChanged,
+/* ------------------------------------------------------ campaign details */
+
+function CampaignEditModal({
+  open, actorId, campaign, onClose, onSaved,
 }: {
+  open: boolean
   actorId: number
-  adverts: Advertisement[]
-  editable: boolean
-  onChanged: () => void
+  campaign: Campaign
+  onClose: () => void
+  onSaved: () => void
 }) {
   const toast = useToast()
-  const placements = adverts.flatMap((ad) => ad.placements)
+  const [name, setName] = useState(campaign.campaignName)
+  const [advertiser, setAdvertiser] = useState(campaign.advertiser ?? '')
+  const [budget, setBudget] = useState(campaign.budget == null ? '' : String(campaign.budget))
+  const [start, setStart] = useState(dateOnly(campaign.startDate))
+  const [end, setEnd] = useState(dateOnly(campaign.endDate))
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
 
-  if (placements.length === 0) {
-    return (
-      <p className="text-[12.5px] text-ink-400">
-        No targets yet — with none, this campaign is never delivered anywhere.
-      </p>
-    )
-  }
+  // Reopening after a cancelled edit should show the campaign as it stands, not
+  // the half-typed version that was abandoned.
+  useEffect(() => {
+    if (!open) return
+    setName(campaign.campaignName)
+    setAdvertiser(campaign.advertiser ?? '')
+    setBudget(campaign.budget == null ? '' : String(campaign.budget))
+    setStart(dateOnly(campaign.startDate))
+    setEnd(dateOnly(campaign.endDate))
+    setErrors({})
+  }, [open, campaign])
 
-  const detach = async (placementId: number, label: string) => {
+  const save = async () => {
+    const e: Record<string, string> = {}
+    if (!name.trim()) e.name = 'Give the campaign a name you will recognise in the list.'
+    if (budget.trim() && Number(budget) < 0) e.budget = 'A budget cannot be negative.'
+    if (!start) e.start = 'Set the date the campaign starts running.'
+    if (!end) e.end = 'Set the date it stops.'
+    else if (start && new Date(end) <= new Date(start)) {
+      e.end = 'The end date must fall after the start date.'
+    }
+    setErrors(e)
+    if (Object.keys(e).length) return
+
+    setSaving(true)
     try {
-      await ads.targets.detach(actorId, placementId)
-      toast({ title: `Stopped targeting ${label}` })
-      onChanged()
-    } catch (e) {
-      toast({ title: e instanceof ApiError ? e.message : 'Could not remove that target', tone: 'bad' })
+      await ads.campaigns.update(actorId, campaign.id, {
+        campaignName: name.trim(),
+        advertiser: advertiser.trim() || null,
+        startDate: startOfDay(start),
+        endDate: endOfDay(end),
+        budget: budget.trim() ? Number(budget) : 0,
+      })
+      toast({ title: 'Campaign updated', tone: 'ok' })
+      onSaved()
+    } catch (cause) {
+      const error = cause instanceof ApiError ? cause : new ApiError(0, 'Something went wrong.')
+      setErrors(error.fields ?? {})
+      toast({ title: error.message, tone: 'bad' })
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {placements.map((p) => (
-        <span key={p.id}
-          className="inline-flex items-center gap-1.5 rounded-sm border border-ink-600 bg-ink-850 px-2.5 py-1 text-[12.5px] text-ink-200">
-          <span className="letterboard text-ink-400">{p.targetKind === 'video' ? 'TITLE' : 'CAT'}</span>
-          {p.targetLabel}
-          <span className="text-ink-400">·</span>
-          <span className="text-ink-400">{SLOT_LABEL[p.slotPosition]}</span>
-          {editable && (
-            <button
-              type="button"
-              onClick={() => detach(p.id, p.targetLabel)}
-              aria-label={`Stop targeting ${p.targetLabel}`}
-              className="ml-0.5 rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-danger-500/15 hover:text-danger-300"
-            >
-              <X className="size-3" />
-            </button>
-          )}
-        </span>
-      ))}
-    </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Campaign details"
+      description="Changing the dates moves every advertisement under this campaign with it."
+      footer={
+        <>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving}
+            icon={saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}>
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Campaign name" required error={errors.campaignName ?? errors.name}>
+          <Input value={name} onChange={(e) => setName(e.target.value)}
+            invalid={!!(errors.campaignName ?? errors.name)} />
+        </Field>
+        <Field label="Advertiser" error={errors.advertiser}>
+          <Input value={advertiser} onChange={(e) => setAdvertiser(e.target.value)}
+            placeholder="Who is this running for?" invalid={!!errors.advertiser} />
+        </Field>
+        <Field label="Budget" hint="Recorded against the booking. Delivery is not capped by it."
+          error={errors.budget}>
+          <Input type="number" min="0" step="0.01" value={budget}
+            onChange={(e) => setBudget(e.target.value)} invalid={!!errors.budget} />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Starts" required error={errors.startDate ?? errors.start}>
+            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)}
+              invalid={!!(errors.startDate ?? errors.start)} />
+          </Field>
+          <Field label="Ends" required error={errors.endDate ?? errors.end}>
+            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)}
+              invalid={!!(errors.endDate ?? errors.end)} />
+          </Field>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
-function AdvertisementRow({
-  actorId, ad, onChanged,
-}: { actorId: number; ad: Advertisement; onChanged: () => void }) {
+/* ------------------------------------------------------- advertisements */
+
+/**
+ * One advertisement inside a campaign, with everything that belongs to it.
+ *
+ * <p>Targeting lives here rather than at campaign level because it is attached to
+ * the advertisement: a campaign-wide list of targets cannot say which creative
+ * each one carries, which is the first question asked when two are running.
+ */
+function AdvertisementCard({
+  actorId, ad, campaign, editable, onChanged,
+}: {
+  actorId: number
+  ad: Advertisement
+  campaign: Campaign
+  editable: boolean
+  onChanged: () => void
+}) {
   const toast = useToast()
   const [busy, setBusy] = useState(false)
+  const [editingAd, setEditingAd] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [addingTarget, setAddingTarget] = useState(false)
 
-  const toggle = async () => {
+  const run = async (what: string, work: () => Promise<unknown>) => {
     setBusy(true)
     try {
-      if (ad.status === 'ACTIVE') {
-        await ads.advertisements.deactivate(actorId, ad.id)
-        toast({ title: `${ad.adTitle} switched off` })
-      } else {
-        await ads.advertisements.activate(actorId, ad.id)
-        toast({ title: `${ad.adTitle} switched on`, tone: 'ok' })
-      }
+      await work()
+      toast({ title: what, tone: 'ok' })
       onChanged()
     } catch (e) {
       toast({ title: e instanceof ApiError ? e.message : 'That did not work', tone: 'bad' })
@@ -1102,28 +1219,677 @@ function AdvertisementRow({
     }
   }
 
+  const toggle = () =>
+    ad.status === 'ACTIVE'
+      ? run(`${ad.adTitle} switched off`, () => ads.advertisements.deactivate(actorId, ad.id))
+      : run(`${ad.adTitle} switched on`, () => ads.advertisements.activate(actorId, ad.id))
+
   return (
-    <li className="flex flex-wrap items-center gap-3 rounded-sm border border-ink-700 bg-ink-850 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13.5px] font-medium text-white">{ad.adTitle}</p>
-        <p className="font-mono text-[11.5px] text-ink-400">
-          {ad.adType === 'VIDEO' ? `${ad.adDuration}s video` : 'Image'} ·{' '}
-          {ad.impressions.toLocaleString()} impr · {ad.clicks.toLocaleString()} clicks ·{' '}
-          {ad.ctr.toFixed(2)}%
+    <li className="rounded-lg border border-ink-700 bg-ink-850">
+      <div className="flex flex-wrap items-start gap-4 p-4">
+        <div className="w-28 shrink-0 overflow-hidden rounded-sm border border-ink-700">
+          <div className="relative aspect-video">
+            <CreativePreview url={ad.mediaUrl} type={ad.adType} title={ad.adTitle} />
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-[14px] font-medium text-white">{ad.adTitle}</p>
+            <Letterboard tone={ad.status === 'ACTIVE' ? (ad.servable ? 'live' : 'review') : 'neutral'}>
+              {ad.status}
+            </Letterboard>
+            {ad.status === 'ACTIVE' && !ad.servable && (
+              <span className="text-[12px] text-ink-400"
+                title="Switched on, but its campaign is not running">
+                not running
+              </span>
+            )}
+          </div>
+          <p className="mt-1 font-mono text-[11.5px] text-ink-400">
+            {ad.adType === 'VIDEO' ? `${ad.adDuration}s video` : 'Image'} ·{' '}
+            {ad.impressions.toLocaleString()} impr · {ad.clicks.toLocaleString()} clicks ·{' '}
+            {ad.ctr.toFixed(2)}%
+          </p>
+          {ad.clickUrl && (
+            <a href={ad.clickUrl} target="_blank" rel="noreferrer noopener"
+              className="mt-1.5 inline-flex max-w-full items-center gap-1.5 truncate text-[12.5px] text-cyan-300 underline hover:text-cyan-200">
+              <Link2 className="size-3 shrink-0" />
+              <span className="truncate">{ad.clickUrl}</span>
+            </a>
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {editable && (
+            <>
+              <Button size="sm" variant="quiet" disabled={busy} onClick={toggle}>
+                {ad.status === 'ACTIVE' ? 'Switch off' : 'Switch on'}
+              </Button>
+              <Button size="sm" variant="quiet" icon={<Pencil className="size-4" />}
+                onClick={() => setEditingAd(true)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="quiet" icon={<Trash2 className="size-4" />}
+                onClick={() => setDeleting(true)} aria-label={`Delete ${ad.adTitle}`}>
+                Delete
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-ink-800 px-4 py-3.5">
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+          <p className="letterboard text-ink-300">
+            Targets {ad.placements.length > 0 && (
+              <span className="font-mono text-ink-400">{ad.placements.length}</span>
+            )}
+          </p>
+          {editable && (
+            <Button size="sm" variant="quiet" icon={<Plus className="size-4" />}
+              onClick={() => setAddingTarget(true)}>
+              Add target
+            </Button>
+          )}
+        </div>
+        <PlacementChips
+          actorId={actorId}
+          ad={ad}
+          campaign={campaign}
+          editable={editable}
+          onChanged={onChanged}
+        />
+      </div>
+
+      <AdvertisementFormModal
+        open={editingAd}
+        actorId={actorId}
+        campaignId={campaign.id}
+        ad={ad}
+        onClose={() => setEditingAd(false)}
+        onSaved={() => { setEditingAd(false); onChanged() }}
+      />
+
+      <TargetPickerModal
+        open={addingTarget}
+        actorId={actorId}
+        ad={ad}
+        onClose={() => setAddingTarget(false)}
+        onSaved={() => { setAddingTarget(false); onChanged() }}
+      />
+
+      <Modal
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        title={`Delete “${ad.adTitle}”?`}
+        width="sm"
+        footer={
+          <>
+            <Button variant="quiet" onClick={() => setDeleting(false)}>Keep it</Button>
+            <Button variant="danger" disabled={busy} onClick={async () => {
+              setDeleting(false)
+              await run(`${ad.adTitle} deleted`, () => ads.advertisements.remove(actorId, ad.id))
+            }}>
+              Delete advertisement
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[14px] leading-relaxed text-ink-200">
+          {ad.impressions > 0 ? (
+            <>
+              This advertisement has already been shown {ad.impressions.toLocaleString()} times, so
+              it cannot be deleted — switching it off keeps its delivery record intact. The rest of
+              the campaign is unaffected either way.
+            </>
+          ) : (
+            <>
+              Its targeting goes with it. Nothing else in this campaign changes — the other
+              advertisements keep running.
+            </>
+          )}
+        </p>
+      </Modal>
+    </li>
+  )
+}
+
+/**
+ * The advertisement form, for a new one and for an existing one alike.
+ *
+ * <p>The two differ only in whether the creative starts filled, and keeping them
+ * as one form is what stops "add" and "edit" drifting into validating different
+ * things about the same advertisement.
+ */
+function AdvertisementFormModal({
+  open, actorId, campaignId, ad, onClose, onSaved,
+}: {
+  open: boolean
+  actorId: number
+  campaignId: number
+  ad?: Advertisement
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const toast = useToast()
+  const [title, setTitle] = useState('')
+  const [media, setMedia] = useState<{ url: string; type: AdType; filename: string } | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [duration, setDuration] = useState('20')
+  const [link, setLink] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setTitle(ad?.adTitle ?? '')
+    setMedia(ad ? { url: ad.mediaUrl, type: ad.adType, filename: 'Current creative' } : null)
+    setDuration(String(ad?.adDuration ?? 20))
+    setLink(ad?.clickUrl ?? '')
+    setErrors({})
+  }, [open, ad])
+
+  const pick = async (file: File) => {
+    setUploading(true)
+    setErrors((e) => ({ ...e, media: '' }))
+    try {
+      const stored = await ads.advertisements.uploadMedia(actorId, file)
+      setMedia({ url: stored.mediaUrl, type: stored.adType, filename: stored.originalFilename })
+      // The upload already knows what it handled; asking again is how a video
+      // ends up recorded as an image.
+      if (stored.adType === 'IMAGE') setDuration('0')
+      toast({ title: `${stored.originalFilename} uploaded`, tone: 'ok' })
+    } catch (e) {
+      setErrors((prev) => ({
+        ...prev,
+        media: e instanceof ApiError ? e.message : 'The upload failed.',
+      }))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const save = async () => {
+    const e: Record<string, string> = {}
+    if (!title.trim()) e.adTitle = 'Give the advertisement a title.'
+    if (!media) e.media = 'Upload the creative a viewer will see.'
+    if (!link.trim()) e.clickUrl = 'A promotional link is required.'
+    else if (!/^https?:\/\/.+/.test(link.trim())) {
+      e.clickUrl = 'Enter a full URL, starting with http:// or https://'
+    }
+    if (media?.type === 'VIDEO' && (!duration.trim() || Number(duration) <= 0)) {
+      e.adDuration = 'Say how long the video runs, in seconds.'
+    }
+    setErrors(e)
+    if (Object.keys(e).length) return
+
+    const body = {
+      campaignId,
+      adTitle: title.trim(),
+      mediaUrl: media!.url,
+      adType: media!.type,
+      adDuration: Number(duration) || 0,
+      clickUrl: link.trim(),
+    }
+
+    setSaving(true)
+    try {
+      if (ad) {
+        await ads.advertisements.update(actorId, ad.id, body)
+        toast({ title: `${body.adTitle} updated`, tone: 'ok' })
+      } else {
+        await ads.advertisements.create(actorId, body)
+        toast({ title: `${body.adTitle} added — give it a target, then switch it on`, tone: 'ok' })
+      }
+      onSaved()
+    } catch (cause) {
+      const error = cause instanceof ApiError ? cause : new ApiError(0, 'Something went wrong.')
+      setErrors(error.fields ?? {})
+      toast({ title: error.message, tone: 'bad' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={ad ? 'Edit advertisement' : 'Add an advertisement'}
+      description={ad
+        ? 'The targeting and the delivery already recorded stay as they are.'
+        : 'It joins this campaign as a draft. Target it, then switch it on.'}
+      footer={
+        <>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving || uploading}
+            icon={saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}>
+            {ad ? 'Save changes' : 'Add advertisement'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Advertisement title" required error={errors.adTitle}>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)}
+            placeholder="Autumn teaser — 20s cut" invalid={!!errors.adTitle} />
+        </Field>
+
+        <Field label="Creative" required error={errors.media ?? errors.mediaUrl}
+          hint="MP4, WebM or MOV up to 50 MB — or PNG, JPEG, WebP or GIF">
+          <label className={cn(
+            'flex w-full cursor-pointer items-center gap-3 rounded-lg border border-dashed px-4 py-4 text-left transition-colors',
+            media ? 'border-success-500/50 bg-success-500/5' : 'border-ink-600 bg-ink-950 hover:border-violet-500/60',
+          )}>
+            <input type="file" className="sr-only" accept="video/*,image/*"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = '' }} />
+            {uploading
+              ? <Loader2 className="size-5 shrink-0 animate-spin text-violet-300" />
+              : <Upload className="size-5 shrink-0 text-ink-300" />}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13.5px] text-ink-100">
+                {uploading ? 'Uploading…' : media ? media.filename : 'Choose a file'}
+              </span>
+              <span className="block text-[12px] text-ink-400">
+                {media ? `${media.type === 'VIDEO' ? 'Video' : 'Image'} — click to replace` : 'Video or image'}
+              </span>
+            </span>
+            {media && (
+              <span className="w-20 shrink-0 overflow-hidden rounded-xs border border-ink-700">
+                <span className="relative block aspect-video">
+                  <CreativePreview url={media.url} type={media.type} title={title} />
+                </span>
+              </span>
+            )}
+          </label>
+        </Field>
+
+        {media?.type !== 'IMAGE' && (
+          <Field label="Duration" hint="Seconds" required={media?.type === 'VIDEO'}
+            error={errors.adDuration}>
+            <Input type="number" min="0" value={duration}
+              onChange={(e) => setDuration(e.target.value)} invalid={!!errors.adDuration} />
+          </Field>
+        )}
+
+        <Field label="Promotional link" required error={errors.clickUrl}
+          hint="Where a click goes">
+          <Input value={link} onChange={(e) => setLink(e.target.value)}
+            placeholder="https://example.com/offer" invalid={!!errors.clickUrl} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+/* -------------------------------------------------------------- targeting */
+
+/** One advertisement's targets, each removable and each editable in place. */
+function PlacementChips({
+  actorId, ad, campaign, editable, onChanged,
+}: {
+  actorId: number
+  ad: Advertisement
+  campaign: Campaign
+  editable: boolean
+  onChanged: () => void
+}) {
+  const toast = useToast()
+  const [editing, setEditing] = useState<Placement | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  if (ad.placements.length === 0) {
+    return (
+      <p className="text-[12.5px] text-ink-400">
+        No targets yet — with none, this advertisement is never delivered anywhere, and it cannot
+        be switched on.
+      </p>
+    )
+  }
+
+  const detach = async (p: Placement) => {
+    setBusy(true)
+    try {
+      await ads.targets.detach(actorId, p.id)
+      toast({ title: `Stopped targeting ${p.targetLabel}` })
+      onChanged()
+    } catch (e) {
+      toast({
+        title: e instanceof ApiError ? e.message : 'Could not remove that target',
+        tone: 'bad',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {ad.placements.map((p) => (
+          <span key={p.id}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-ink-600 bg-ink-900 px-2.5 py-1 text-[12.5px] text-ink-200">
+            <span className="letterboard text-ink-400">
+              {p.targetKind === 'video' ? 'TITLE' : 'CAT'}
+            </span>
+            {p.targetLabel}
+            <span className="text-ink-400">·</span>
+            <span className="text-ink-400">{SLOT_LABEL[p.slotPosition]}</span>
+            {p.priority > 1 && (
+              <span className="font-mono text-[11px] text-ink-400" title="Priority">
+                P{p.priority}
+              </span>
+            )}
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setEditing(p)}
+                  aria-label={`Edit the ${p.targetLabel} placement`}
+                  className="ml-0.5 rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-ink-700 hover:text-white"
+                >
+                  <Pencil className="size-3" />
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => detach(p)}
+                  aria-label={`Stop targeting ${p.targetLabel}`}
+                  className="rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-danger-500/15 hover:text-danger-300"
+                >
+                  <X className="size-3" />
+                </button>
+              </>
+            )}
+          </span>
+        ))}
+      </div>
+
+      <PlacementEditModal
+        open={editing !== null}
+        actorId={actorId}
+        placement={editing}
+        campaign={campaign}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); onChanged() }}
+      />
+    </>
+  )
+}
+
+/**
+ * Attach more targets to an advertisement that already exists.
+ *
+ * <p>Several can be chosen at once, and they are attached one at a time because
+ * that is what the API offers. One failing does not undo the rest: what did
+ * attach is reported, and what did not is said plainly, because silently
+ * reporting "done" over a half-applied selection is worse than either.
+ */
+function TargetPickerModal({
+  open, actorId, ad, onClose, onSaved,
+}: {
+  open: boolean
+  actorId: number
+  ad: Advertisement
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const toast = useToast()
+  const [search, setSearch] = useState('')
+  const [chosen, setChosen] = useState<ChosenTarget[]>([])
+  const [slot, setSlot] = useState<SlotPosition>(ad.placements[0]?.slotPosition ?? 'PREROLL')
+  const [priority, setPriority] = useState('1')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const options = useApiData(
+    () => ads.targets.options(actorId, search.trim() || undefined),
+    [actorId, search],
+    open,
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setSearch('')
+    setChosen([])
+    setSlot(ad.placements[0]?.slotPosition ?? 'PREROLL')
+    setPriority('1')
+    setError('')
+  }, [open, ad])
+
+  // What is already targeted in this slot cannot be chosen again — the server
+  // refuses it, and offering it only to refuse it is a worse way to say so.
+  const taken = useMemo(() => {
+    const keys = new Set<string>()
+    for (const p of ad.placements) {
+      if (p.slotPosition !== slot) continue
+      keys.add(p.videoId != null ? `video:${p.videoId}` : `category:${p.categoryId}`)
+    }
+    return keys
+  }, [ad.placements, slot])
+
+  const toggle = (t: ChosenTarget) =>
+    setChosen((list) =>
+      list.some((x) => x.kind === t.kind && x.id === t.id)
+        ? list.filter((x) => !(x.kind === t.kind && x.id === t.id))
+        : [...list, t])
+
+  const isChosen = (kind: 'video' | 'category', id: number) =>
+    chosen.some((t) => t.kind === kind && t.id === id)
+
+  const attach = async () => {
+    if (chosen.length === 0) {
+      setError('Choose at least one title or category to target.')
+      return
+    }
+    setError('')
+    setSaving(true)
+
+    const failed: string[] = []
+    let added = 0
+    for (const target of chosen) {
+      try {
+        await ads.targets.attach(actorId, ad.id, {
+          videoId: target.kind === 'video' ? target.id : null,
+          categoryId: target.kind === 'category' ? target.id : null,
+          slotPosition: slot,
+          priority: Number(priority) || 1,
+        })
+        added += 1
+      } catch (e) {
+        failed.push(`${target.label} — ${e instanceof ApiError ? e.message : 'could not be added'}`)
+      }
+    }
+    setSaving(false)
+
+    if (added > 0) {
+      toast({ title: added === 1 ? 'Target added' : `${added} targets added`, tone: 'ok' })
+    }
+    if (failed.length > 0) {
+      setError(failed.join(' · '))
+      onSaved()   // reload: some of it did land
+      return
+    }
+    onSaved()
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Target “${ad.adTitle}”`}
+      description="Where this advertisement appears. A title and its category can both be targeted — a viewer still sees it once."
+      width="lg"
+      footer={
+        <>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={attach} disabled={saving}
+            icon={saving ? <Loader2 className="size-4 animate-spin" /> : <Target className="size-4" />}>
+            {chosen.length > 1 ? `Add ${chosen.length} targets` : 'Add target'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Slot" required hint="Where it appears">
+            <Select value={slot} onChange={(e) => setSlot(e.target.value as SlotPosition)}>
+              {(Object.keys(SLOT_LABEL) as SlotPosition[]).map((s) => (
+                <option key={s} value={s}>{SLOT_LABEL[s]}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Priority" hint="1 is shown first">
+            <Input type="number" min="1" value={priority}
+              onChange={(e) => setPriority(e.target.value)} />
+          </Field>
+        </div>
+
+        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search titles and categories" />
+
+        {options.loading && !options.data ? (
+          <p className="text-[12.5px] text-ink-400">Loading what can be targeted…</p>
+        ) : options.error ? (
+          <Failed error={options.error} onRetry={options.reload} />
+        ) : (
+          <div className="max-h-[42vh] space-y-5 overflow-y-auto pr-1">
+            <TargetGroup
+              heading="Categories"
+              note="Every title in the category, including ones added later."
+              options={(options.data?.categories ?? []).filter((o) => !taken.has(`category:${o.id}`))}
+              isChosen={(id) => isChosen('category', id)}
+              onToggle={(o) => toggle({ kind: 'category', id: o.id, label: o.label })}
+            />
+            <TargetGroup
+              heading="Titles"
+              note="One specific title."
+              options={(options.data?.videos ?? []).filter((o) => !taken.has(`video:${o.id}`))}
+              isChosen={(id) => isChosen('video', id)}
+              onToggle={(o) => toggle({ kind: 'video', id: o.id, label: o.label })}
+            />
+          </div>
+        )}
+
+        {error && <p className="text-[12.5px] text-danger-400">{error}</p>}
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Change a placement's slot, priority or window.
+ *
+ * <p>The target itself is not editable: a placement that changes what it points
+ * at is a different placement, and the impressions recorded against the old one
+ * would be attributed to the new target. Remove it and add the one meant instead.
+ */
+function PlacementEditModal({
+  open, actorId, placement, campaign, onClose, onSaved,
+}: {
+  open: boolean
+  actorId: number
+  placement: Placement | null
+  campaign: Campaign
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const toast = useToast()
+  const [slot, setSlot] = useState<SlotPosition>('PREROLL')
+  const [priority, setPriority] = useState('1')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open || !placement) return
+    setSlot(placement.slotPosition)
+    setPriority(String(placement.priority))
+    setFrom(dateOnly(placement.activeFrom))
+    setTo(dateOnly(placement.activeTo))
+    setError('')
+  }, [open, placement])
+
+  if (!placement) return null
+
+  const save = async () => {
+    if (from && to && new Date(to) <= new Date(from)) {
+      setError('The placement must stop after it starts.')
+      return
+    }
+    setError('')
+    setSaving(true)
+    try {
+      await ads.targets.retarget(actorId, placement.id, {
+        slotPosition: slot,
+        priority: Number(priority) || 1,
+        activeFrom: from ? startOfDay(from) : null,
+        activeTo: to ? endOfDay(to) : null,
+      })
+      toast({ title: `${placement.targetLabel} updated`, tone: 'ok' })
+      onSaved()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'That did not work')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Placement on ${placement.targetLabel}`}
+      description="The delivery already recorded against this placement is kept."
+      width="sm"
+      footer={
+        <>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving}
+            icon={saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}>
+            Save placement
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <p className="rounded-sm border border-danger-500/35 bg-danger-500/8 px-3 py-2 text-[12.5px] text-danger-300">
+            {error}
+          </p>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Slot" required>
+            <Select value={slot} onChange={(e) => setSlot(e.target.value as SlotPosition)}>
+              {(Object.keys(SLOT_LABEL) as SlotPosition[]).map((s) => (
+                <option key={s} value={s}>{SLOT_LABEL[s]}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Priority" hint="1 is shown first">
+            <Input type="number" min="1" value={priority}
+              onChange={(e) => setPriority(e.target.value)} />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Runs from">
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </Field>
+          <Field label="Runs until">
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </Field>
+        </div>
+
+        <p className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-400">
+          <CalendarRange className="mt-0.5 size-3.5 shrink-0" />
+          A placement cannot outlive its campaign, which runs {dateOnly(campaign.startDate)} →{' '}
+          {dateOnly(campaign.endDate)}. A wider window is trimmed to that.
         </p>
       </div>
-      <Letterboard tone={ad.status === 'ACTIVE' ? (ad.servable ? 'live' : 'review') : 'neutral'}>
-        {ad.status}
-      </Letterboard>
-      {ad.status === 'ACTIVE' && !ad.servable && (
-        <span className="text-[12px] text-ink-400" title="Switched on, but its campaign is not running">
-          not running
-        </span>
-      )}
-      <Button size="sm" variant="quiet" disabled={busy} onClick={toggle}>
-        {ad.status === 'ACTIVE' ? 'Switch off' : 'Switch on'}
-      </Button>
-    </li>
+    </Modal>
   )
 }
 
