@@ -4,10 +4,17 @@ spring.application.name=Skopia
 # real application.properties is gitignored so nobody's local database settings
 # land in the repo. Credentials can also come from the environment: override
 # with SKOPIA_DB_URL / SKOPIA_DB_USER / SKOPIA_DB_PASSWORD.
-spring.datasource.url=${SKOPIA_DB_URL:jdbc:mysql://localhost:3306/skopia?createDatabaseIfNotExist=true&serverTimezone=UTC}
+spring.datasource.url=${SKOPIA_DB_URL:jdbc:mysql://localhost:3306/skopia?createDatabaseIfNotExist=true&connectionTimeZone=SERVER&preserveInstants=false}
 spring.datasource.username=${SKOPIA_DB_USER:root}
 spring.datasource.password=${SKOPIA_DB_PASSWORD:}
 
+# preserveInstants=false stores a LocalDateTime as the wall-clock time it is,
+# rather than converting it through the JVM's zone on the way in and back on the
+# way out. The conversion round-trips, so the API looked right — but the rows
+# held a time shifted by whatever zone the machine that wrote them was in, so
+# raw SQL disagreed with the UI and two developers in different countries read
+# different campaign windows out of the same row.
+#
 # `update` keeps rows between runs. schema.sql is the hand-written initial DB
 # (the EER diagram, as DDL); run it once against a fresh database if you would
 # rather own the schema yourself than let Hibernate derive it.
