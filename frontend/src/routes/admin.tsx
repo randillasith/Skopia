@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate} from 'react-router-dom'
 import {
   Users, AlertTriangle, Ban, ShieldCheck, Plus, Megaphone, Eye,
-  Download, Trash2, ScrollText,
+  Download, ScrollText, CreditCard, Receipt,
 } from 'lucide-react'
 import {
-  Button, Field, Input, Select, Textarea, Table, Th, Td, Tr, Tabs, Modal,
-  EmptyState, Placeholder, Toggle, useToast, SearchInput, Avatar, Section, Checkbox,
+  Button, Field, Input, Select, Table, Th, Td, Tr, Tabs, Modal,
+  EmptyState, Toggle, useToast, SearchInput, Avatar, Section,
+  NotAvailableYet,
 } from '@/components/primitives'
 import { Letterboard, BillingBoard } from '@/components/world'
 import { BackOfHouse } from '@/components/Shell'
@@ -23,12 +24,10 @@ import {
   type QueueItem, type ServerComplaint,
 } from '@/lib/reports'
 import { videoIdOf } from '@/lib/catalogue'
+
+import { ads, type Campaign as AdCampaign } from '@/lib/ads'
 import {
-  CAMPAIGNS, PLANS,
-  PAYMENTS, ANNOUNCEMENTS, UNDECIDED,
-} from '@/lib/data'
-import {
-  ACCOUNTS, CHANNELS, GRANTS, STAFF_ROLES,
+  GRANTS, STAFF_ROLES,
   type Account, type StaffRole,
 } from '@/lib/session'
 
@@ -47,6 +46,7 @@ export function AdminDashboard() {
   const [queue, setQueue] = useState<ServerComplaint[] | null>(null)
   const [stats, setStats] = useState<PlatformUserStats | null>(null)
   const [logs, setLogs] = useState<ActivityLogRow[]>([])
+  const [campaigns, setCampaigns] = useState<AdCampaign[] | null>(null)
 
   useEffect(() => {
     const abort = new AbortController()
@@ -54,6 +54,9 @@ export function AdminDashboard() {
     administration.stats().then(setStats).catch(() => setStats(null))
     administration.activityLogs(abort.signal).then((rows) => setLogs(rows.slice(0, 6))).catch(() => setLogs([]))
     complaints.queue(abort.signal).then(setQueue).catch(() => setQueue(null))
+    // An administrator may read advertising, so the campaign figure is the real
+    // one rather than a count of fixtures.
+    ads.campaigns.list(null).then(setCampaigns).catch(() => setCampaigns(null))
     return () => abort.abort()
   }, [])
 
@@ -68,7 +71,13 @@ export function AdminDashboard() {
           ['Accounts', count(stats?.totalUsers ?? accounts?.length), stats ? `${stats.activeUsers} active` : accounts ? `${accounts.filter((a) => a.status === 'Active').length} active` : 'could not be read'],
           ['Titles', catalogueLoading ? '—' : String(videos.length), `${inReview.length} awaiting review`],
           ['Open complaints', count(queue ? openComplaints.length : null), queue ? `${queue.filter((c) => c.priority === 'URGENT').length} urgent` : 'could not be read'],
-          ['Active campaigns', String(CAMPAIGNS.filter((c) => c.status === 'Active').length), 'from the prototype'],
+          [
+            'Active campaigns',
+            count(campaigns ? campaigns.filter((c) => c.status === 'ACTIVE').length : null),
+            campaigns
+              ? `${campaigns.filter((c) => c.status === 'SCHEDULED').length} scheduled`
+              : 'could not be read',
+          ],
         ].map(([l, v, sub]) => (
           <div key={l} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{l}</p>
@@ -451,7 +460,6 @@ export function AdminRoles() {
     role: r,
     holders: roleAccounts.filter((a) => a.staff.includes(r)),
   }))
-  const moderatorGrants = CHANNELS.flatMap((c) => c.moderators.map((m) => ({ channel: c, accountId: m })))
 
   const createStaff = async () => {
     setSaving(true)
@@ -538,36 +546,16 @@ export function AdminRoles() {
 
       <Section title="Channel moderators — for reference only" className="mt-10">
         <p className="mb-4 max-w-[70ch] text-[13.5px] leading-relaxed text-ink-300">
-          Listed so you can see them during an investigation. You cannot grant or revoke these; each
-          one is the channel owner's to change, and it reaches that channel alone.
+          A channel owner appoints their own moderators, and the grant reaches that channel alone.
+          An administrator can see them during an investigation but cannot grant or revoke one.
         </p>
-        {moderatorGrants.length === 0 ? (
-          <p className="text-[14px] text-ink-300">No channel has appointed a moderator.</p>
-        ) : (
-          <div className="rounded-lg border border-ink-700 bg-ink-850">
-            <Table labels={['Account', 'Moderates', 'Appointed by']}>
-              <thead>
-                <tr><Th>Account</Th><Th>Moderates</Th><Th>Appointed by</Th></tr>
-              </thead>
-              <tbody>
-                {moderatorGrants.map(({ channel, accountId }) => {
-                  const a = ACCOUNTS.find((x) => x.id === accountId)
-                  const owner = ACCOUNTS.find((x) => x.channelId === channel.id)
-                  return (
-                    <Tr key={`${channel.id}-${accountId}`}>
-                      <Td>
-                        <span className="text-white">{a?.name ?? accountId}</span>
-                        <span className="ml-2 font-mono text-[11px] text-ink-300">@{a?.handle}</span>
-                      </Td>
-                      <Td>{channel.name}</Td>
-                      <Td className="text-ink-300">{owner?.name ?? '—'}</Td>
-                    </Tr>
-                  )
-                })}
-              </tbody>
-            </Table>
-          </div>
-        )}
+        <NotAvailableYet
+          what="Channel moderator grants"
+          icon={<ShieldCheck className="size-7" />}
+          body="Channels and their moderators are not stored on the server yet, so this cannot be
+            listed. It previously showed a fixed example list, which is no basis for an
+            investigation."
+        />
       </Section>
 
       <Modal
@@ -806,73 +794,15 @@ export function AdminModeration() {
 /* ================================================================= plans */
 
 export function AdminPlans() {
-  const toast = useToast()
-  const [editing, setEditing] = useState<string | null>(null)
-
   return (
-    <BackOfHouse
-      title="Subscription plans"
-      actions={<Button size="sm" variant="primary" icon={<Plus className="size-4" />}>New plan</Button>}
-    >
-      <div className="flex items-start gap-2.5 rounded-sm border border-warning-500/35 bg-warning-500/8 px-4 py-3">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-400" />
-        <p className="text-[13.5px] leading-relaxed text-ink-200">
-          Plan names, prices, durations and entitlements are not yet decided. The fields are here;
-          the values are placeholders.
-        </p>
-      </div>
-
-      <div className="mt-6 rounded-lg border border-ink-700 bg-ink-850">
-        <Table labels={["Plan", "Price", "Period", "Entitlements", ""]}>
-          <thead>
-            <tr><Th>Plan</Th><Th numeric>Price</Th><Th>Period</Th><Th>Entitlements</Th><Th /></tr>
-          </thead>
-          <tbody>
-            {PLANS.map((p) => (
-              <Tr key={p.id}>
-                <Td><span className="font-marquee font-bold text-white">{p.name}</span></Td>
-                <Td numeric><Placeholder>{UNDECIDED}</Placeholder></Td>
-                <Td><Placeholder>{UNDECIDED}</Placeholder></Td>
-                <Td className="text-ink-300">{p.entitlements.length} listed</Td>
-                <Td>
-                  <div className="flex justify-end">
-                    <Button size="sm" variant="quiet" onClick={() => setEditing(p.id)}>Edit</Button>
-                  </div>
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </div>
-
-      <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title={`Edit ${PLANS.find((p) => p.id === editing)?.name ?? ''}`}
-        footer={
-          <>
-            <Button variant="quiet" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button variant="primary" onClick={() => toast({ title: 'Plan persistence is not implemented yet', tone: 'bad' })}>
-              Save plan
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Field label="Plan name" required>
-            <Input defaultValue={PLANS.find((p) => p.id === editing)?.name} />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Price" hint="Not yet decided"><Input placeholder="—" /></Field>
-            <Field label="Billing period" hint="Not yet decided">
-              <Select defaultValue=""><option value="">Choose</option><option>Monthly</option><option>Yearly</option></Select>
-            </Field>
-          </div>
-          <Field label="Entitlements">
-            <Textarea defaultValue={PLANS.find((p) => p.id === editing)?.entitlements.join('\n')} />
-          </Field>
-        </div>
-      </Modal>
+    <BackOfHouse title="Subscription plans">
+      <NotAvailableYet
+        what="Subscription plans"
+        icon={<CreditCard className="size-7" />}
+        body="This is where plans are created and priced, and where what each one unlocks is
+          decided. Nothing on the server stores a plan yet, so there is nothing to list — and
+          rather than show invented ones, this screen waits for the subscription module."
+      />
     </BackOfHouse>
   )
 }
@@ -880,77 +810,15 @@ export function AdminPlans() {
 /* =============================================================== refunds */
 
 export function AdminRefunds() {
-  const toast = useToast()
-  const [confirming, setConfirming] = useState<string | null>(null)
-
   return (
     <BackOfHouse title="Refunds">
-      <div className="flex items-start gap-2.5 rounded-sm border border-ink-700 bg-ink-850 px-4 py-3">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-400" />
-        <p className="text-[13.5px] leading-relaxed text-ink-200">
-          Only refunds that have already been approved can be processed here. Who approves them, and
-          by what workflow, is an open decision in the project documentation.
-        </p>
-      </div>
-
-      <div className="mt-6 rounded-lg border border-ink-700 bg-ink-850">
-        <Table labels={["Transaction", "Date", "Pass", "Amount", "Status", ""]}>
-          <thead>
-            <tr>
-              <Th>Transaction</Th><Th>Date</Th><Th>Pass</Th><Th numeric>Amount</Th>
-              <Th>Status</Th><Th />
-            </tr>
-          </thead>
-          <tbody>
-            {PAYMENTS.map((p) => (
-              <Tr key={p.id}>
-                <Td><span className="font-mono tabular-nums text-ink-100">{p.id}</span></Td>
-                <Td><span className="font-mono tabular-nums text-ink-300">{p.date}</span></Td>
-                <Td>{p.plan}</Td>
-                <Td numeric><Placeholder>{UNDECIDED}</Placeholder></Td>
-                <Td>
-                  <Letterboard tone={p.status === 'Refunded' ? 'soon' : p.status === 'Failed' ? 'bad' : 'ok'}>
-                    {p.status.toUpperCase()}
-                  </Letterboard>
-                </Td>
-                <Td>
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="quiet"
-                      disabled={p.status !== 'Settled'}
-                      onClick={() => setConfirming(p.id)}
-                    >
-                      Process refund
-                    </Button>
-                  </div>
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </div>
-
-      <Modal
-        open={!!confirming}
-        onClose={() => setConfirming(null)}
-        title={`Process refund for ${confirming}?`}
-        width="sm"
-        footer={
-          <>
-            <Button variant="quiet" onClick={() => setConfirming(null)}>Cancel</Button>
-            <Button variant="primary" onClick={() => toast({ title: 'Refund processing is not implemented yet', tone: 'bad' })}>
-              Confirm refund
-            </Button>
-          </>
-        }
-      >
-        <p className="text-[14px] leading-relaxed text-ink-200">
-          The refund is sent to the payment gateway and recorded against the subscription. If the
-          gateway rejects it, nothing is marked as completed and you can try again.
-        </p>
-        <Checkbox checked onChange={() => {}} label="This refund has already been approved" />
-      </Modal>
+      <NotAvailableYet
+        what="Refunds"
+        icon={<Receipt className="size-7" />}
+        body="Approved refunds are processed here against the payment that was taken. No payment
+          is recorded anywhere yet, so there is nothing to refund. The screen opens for real the
+          day billing does."
+      />
     </BackOfHouse>
   )
 }
@@ -958,102 +826,15 @@ export function AdminRefunds() {
 /* ========================================================= announcements */
 
 export function AdminAnnouncements() {
-  const toast = useToast()
-  const [composing, setComposing] = useState(false)
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [err, setErr] = useState('')
-
-  const publish = () => {
-    if (!title.trim() || !body.trim()) return setErr('Both a title and a message are required before publishing.')
-    setErr('')
-    toast({ title: 'Announcement persistence is not implemented yet', tone: 'bad' })
-  }
-
   return (
-    <BackOfHouse
-      title="Announcements"
-      actions={
-        <Button size="sm" variant="primary" icon={<Plus className="size-4" />} onClick={() => setComposing(true)}>
-          New announcement
-        </Button>
-      }
-    >
-      <ul className="space-y-3">
-        {ANNOUNCEMENTS.map((a) => (
-          <li key={a.id} className="rounded-lg border border-ink-700 bg-ink-850 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Letterboard tone={a.status === 'Published' ? 'ok' : a.status === 'Scheduled' ? 'soon' : 'neutral'}>
-                    {a.status.toUpperCase()}
-                  </Letterboard>
-                  <Letterboard>{a.audience}</Letterboard>
-                </div>
-                <h3 className="font-marquee mt-2 text-[17px] font-bold text-white">{a.title}</h3>
-                <p className="mt-1 max-w-[70ch] text-[13.5px] leading-relaxed text-ink-300">{a.body}</p>
-                {a.published && (
-                  <p className="mt-1.5 font-mono text-[11px] text-ink-300">Published {a.published}</p>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="quiet" disabled>Edit</Button>
-                <Button size="sm" variant="quiet" onClick={() => toast({ title: 'Announcement persistence is not implemented yet', tone: 'bad' })}>
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      <Modal
-        open={composing}
-        onClose={() => setComposing(false)}
-        title="New announcement"
-        description="Viewers see this clearly marked as coming from Skopia."
-        footer={
-          <>
-            <Button variant="quiet" onClick={() => setComposing(false)}>Cancel</Button>
-            <Button onClick={() => toast({ title: 'Announcement persistence is not implemented yet', tone: 'bad' })}>Save draft</Button>
-            <Button variant="primary" onClick={publish}>Publish</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Field label="Title" required error={err && !title.trim() ? err : undefined}>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Scheduled maintenance" />
-          </Field>
-          <Field label="Message" required error={err && title.trim() && !body.trim() ? err : undefined}>
-            <Textarea value={body} onChange={(e) => setBody(e.target.value)}
-              placeholder="What is happening, when, and what it means for viewers." />
-          </Field>
-          <Field label="Audience">
-            <Select defaultValue="Everyone">
-              <option>Everyone</option><option>Subscribers</option><option>Creators</option>
-            </Select>
-          </Field>
-          <p className="text-[12.5px] text-ink-300">
-            Targeting, scheduling and expiry rules are not fully defined yet.
-          </p>
-
-          <div className="rounded-sm border border-ink-700 bg-ink-950 p-4">
-            <p className="letterboard mb-2 text-ink-300">Preview</p>
-            <div className="flex items-start gap-2.5 rounded-sm border border-cyan-400/30 bg-cyan-400/6 px-3.5 py-3">
-              <Megaphone className="mt-0.5 size-4 shrink-0 text-cyan-400" />
-              <div>
-                <p className="text-[13px] font-medium text-white">
-                  {title || 'Announcement title'}
-                </p>
-                <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-300">
-                  {body || 'Your message appears here.'}
-                </p>
-                <p className="mt-1 font-mono text-[10px] text-cyan-300">FROM SKOPIA</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
+    <BackOfHouse title="Announcements">
+      <NotAvailableYet
+        what="Platform announcements"
+        icon={<Megaphone className="size-7" />}
+        body="Announcements are written here and shown to everyone on the platform. Writing one
+          would have nowhere to be kept and nobody to reach, so the composer stays closed until
+          announcements are stored and delivered."
+      />
     </BackOfHouse>
   )
 }
