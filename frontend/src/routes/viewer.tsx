@@ -11,7 +11,7 @@ import {
 import { PosterPlate, Lightbox, BillingBoard, Letterboard } from '@/components/world'
 import { Player, ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { AdSlot, useBackendVideoId } from '@/components/AdSlot'
+import { AdSlot } from '@/components/AdSlot'
 import {
   GENRES, NOTIFICATIONS, fmt, clock, seconds, isVerified, tagsFor, type Video,
 } from '@/lib/data'
@@ -613,10 +613,12 @@ export function Watch() {
   const [autoplay, setAutoplay] = useState(true)
   const [at, setAt] = useState(0)
   // FR5: the break before the feature is a real advertisement, chosen by the
-  // serving engine from what is booked against this title. `undefined` means
-  // still resolving, which is why the break is not ended on a falsy id.
+  // serving engine from what is booked against this title. The id is the one the
+  // catalogue already gave us — this used to search the API by title to find it
+  // back, from when the page rendered placeholder titles that had no id of their
+  // own.
   const [adShowing, setAdShowing] = useState(true)
-  const backendVideoId = useBackendVideoId(v?.title)
+  const backendVideoId = numericId
   const [comment, setComment] = useState('')
   const [order, setOrder] = useState<'top' | 'new'>('top')
 
