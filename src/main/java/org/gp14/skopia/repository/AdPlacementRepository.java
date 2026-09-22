@@ -17,6 +17,23 @@ public interface AdPlacementRepository extends JpaRepository<AdPlacement, Long> 
 
     List<AdPlacement> findByAdvertisementCampaignId(Long campaignId);
 
+    /**
+     * Placements across a page of campaigns, with their targets already joined.
+     *
+     * <p>The fetch joins matter as much as the batching: building a placement's
+     * label reads its video or its category, and without them that is another two
+     * queries per placement once the list has them.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT p FROM AdPlacement p
+            LEFT JOIN FETCH p.video
+            LEFT JOIN FETCH p.category
+            JOIN FETCH p.advertisement a
+            WHERE a.campaign.id IN :campaignIds
+            """)
+    List<AdPlacement> findForCampaigns(
+            @org.springframework.data.repository.query.Param("campaignIds") List<Long> campaignIds);
+
     void deleteByAdvertisementId(Long adId);
 
     boolean existsByAdvertisementIdAndVideoIdAndSlotPosition(Long adId, Long videoId, SlotPosition slot);

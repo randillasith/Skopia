@@ -14,8 +14,12 @@ import org.gp14.skopia.repository.VideoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Targeting: which titles and categories an advertisement is attached to.
@@ -34,6 +38,15 @@ public class AdPlacementService {
     private final VideoRepository videos;
     private final CategoryRepository categories;
     private final AdvertisingAccess access;
+
+    /**
+     * How many titles the picker offers at once.
+     *
+     * <p>It is a search box, not a listing: past a screenful the way to find a
+     * title is to type more of its name, and sending the catalogue makes the
+     * dialog slow to open on exactly the libraries where it matters.
+     */
+    private static final int TARGET_PICKER_LIMIT = 50;
 
     public AdPlacementService(AdPlacementRepository placements,
                               AdvertisementRepository advertisements,
@@ -187,24 +200,32 @@ public class AdPlacementService {
         access.require(actorId);
         String needle = search == null ? "" : search.trim().toLowerCase();
 
+        // One query for every category's title count, rather than one per
+        // category — and the titles themselves come back already limited by the
+        // database. Loading the catalogue to filter and count it in Java worked
+        // on six titles and is the whole table on a real one.
+        Map<Long, Long> counts = new HashMap<>();
+        for (Object[] row : videos.countByCategory()) {
+            counts.put((Long) row[0], (Long) row[1]);
+        }
+
         List<TargetOptionsResponse.Option> categoryOptions = categories.findAll().stream()
                 .filter(c -> needle.isEmpty() || c.getCategoryName().toLowerCase().contains(needle))
                 .map(c -> new TargetOptionsResponse.Option(
                         c.getId(),
                         c.getCategoryName(),
                         c.getCategoryDesc(),
-                        (long) videos.findByCategoryId(c.getId()).size()))
+                        counts.getOrDefault(c.getId(), 0L)))
                 .toList();
 
-        List<TargetOptionsResponse.Option> videoOptions = videos.findAll().stream()
-                .filter(v -> needle.isEmpty() || v.getTitle().toLowerCase().contains(needle))
-                .limit(200)
-                .map(v -> new TargetOptionsResponse.Option(
-                        v.getId(),
-                        v.getTitle(),
-                        v.getCategory() == null ? "Uncategorised" : v.getCategory().getCategoryName(),
-                        null))
-                .toList();
+        List<TargetOptionsResponse.Option> videoOptions =
+                videos.searchForTargeting(needle, PageRequest.of(0, TARGET_PICKER_LIMIT)).stream()
+                        .map(v -> new TargetOptionsResponse.Option(
+                                v.getId(),
+                                v.getTitle(),
+                                v.getCategory() == null ? "Uncategorised" : v.getCategory().getCategoryName(),
+                                null))
+                        .toList();
 
         return new TargetOptionsResponse(categoryOptions, videoOptions);
     }

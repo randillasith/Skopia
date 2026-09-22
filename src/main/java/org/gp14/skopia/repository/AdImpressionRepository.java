@@ -53,6 +53,25 @@ public interface AdImpressionRepository extends JpaRepository<AdImpression, Long
                                       @Param("from") LocalDateTime from,
                                       @Param("to") LocalDateTime to);
 
+    /**
+     * The same totals for a whole page of campaigns, in one query.
+     *
+     * <p>{@link #totalsForCampaign} answers for one, which is what the list used
+     * to call once per row. A campaign with no impressions yet has no row here at
+     * all, so callers default rather than expecting one back per id.
+     */
+    @Query("""
+            SELECT new org.gp14.skopia.advertising.dto.CampaignTotalsRow(
+                       i.placement.advertisement.campaign.id,
+                       COUNT(i),
+                       SUM(CASE WHEN i.wasClicked = TRUE THEN 1 ELSE 0 END))
+            FROM AdImpression i
+            WHERE i.placement.advertisement.campaign.id IN :campaignIds
+            GROUP BY i.placement.advertisement.campaign.id
+            """)
+    List<org.gp14.skopia.advertising.dto.CampaignTotalsRow> totalsForCampaigns(
+            @Param("campaignIds") List<Long> campaignIds);
+
     @Query("""
             SELECT new org.gp14.skopia.advertising.dto.MetricTotalsRow(
                        COUNT(i), SUM(CASE WHEN i.wasClicked = TRUE THEN 1 ELSE 0 END))
