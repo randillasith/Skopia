@@ -59,6 +59,12 @@ public class AdPlacementService {
         access.require(actorId);
         Advertisement ad = advertisements.findById(adId)
                 .orElseThrow(() -> AdvertisingException.notFound("Advertisement", adId));
+        access.requireOwner(actorId, owner(ad), "advertisement");
+        if (ad.getCampaign() != null
+                && ad.getCampaign().getCampaignStatus() == CampaignStatus.ARCHIVED) {
+            throw AdvertisingException.conflict(
+                    "An archived campaign's targeting is kept as it was for reporting.");
+        }
 
         boolean hasVideo = request.videoId() != null;
         boolean hasCategory = request.categoryId() != null;
@@ -118,7 +124,61 @@ public class AdPlacementService {
         access.require(actorId);
         AdPlacement placement = placements.findById(placementId)
                 .orElseThrow(() -> AdvertisingException.notFound("Placement", placementId));
+        access.requireOwner(actorId, owner(placement.getAdvertisement()), "placement");
         placements.delete(placement);
+    }
+
+    /**
+     * Change a placement's priority or its window without detaching and re-attaching.
+     *
+     * <p>Re-attaching was the only way to change either, and it loses the
+     * placement's id — which is what impressions point at, so the delivery already
+     * recorded stops being attributable to the targeting that produced it. This
+     * edits in place and leaves that history intact.
+     */
+    @Transactional
+    public PlacementResponse retarget(Long actorId, Long placementId, PlacementRequest request) {
+        access.require(actorId);
+        AdPlacement placement = placements.findById(placementId)
+                .orElseThrow(() -> AdvertisingException.notFound("Placement", placementId));
+        Advertisement ad = placement.getAdvertisement();
+        access.requireOwner(actorId, owner(ad), "placement");
+
+        if (request.slotPosition() != null && request.slotPosition() != placement.getSlotPosition()) {
+            boolean taken = placement.targetsVideo()
+                    ? placements.existsByAdvertisementIdAndVideoIdAndSlotPosition(
+                            ad.getId(), placement.getVideo().getId(), request.slotPosition())
+                    : placements.existsByAdvertisementIdAndCategoryIdAndSlotPosition(
+                            ad.getId(), placement.getCategory().getId(), request.slotPosition());
+            if (taken) {
+                throw AdvertisingException.conflict(
+                        "This advertisement already fills that slot on that target.");
+            }
+            placement.setSlotPosition(request.slotPosition());
+        }
+        if (request.priority() != null) {
+            placement.setPriority(Math.max(1, request.priority()));
+        }
+
+        LocalDateTime campaignFrom = ad.getCampaign().getStartDate();
+        LocalDateTime campaignTo = ad.getCampaign().getEndDate();
+        LocalDateTime from = request.activeFrom() == null ? placement.getActiveFrom()
+                : max(request.activeFrom(), campaignFrom);
+        LocalDateTime to = request.activeTo() == null ? placement.getActiveTo()
+                : min(request.activeTo(), campaignTo);
+        if (!to.isAfter(from)) {
+            throw AdvertisingException.invalid(
+                    "That placement window falls outside the campaign's own dates.");
+        }
+        placement.setActiveFrom(from);
+        placement.setActiveTo(to);
+
+        return toResponse(placements.save(placement));
+    }
+
+    private static Long owner(Advertisement ad) {
+        return ad == null || ad.getCampaign() == null || ad.getCampaign().getCreatedBy() == null
+                ? null : ad.getCampaign().getCreatedBy().getId();
     }
 
     /** Everything the targeting picker offers, in one call. */

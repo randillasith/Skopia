@@ -33,7 +33,20 @@ public class SecurityConfig {
                         .requestMatchers("/api/complaints/**").hasAnyRole("SUPPORT_OFFICER", "ADMINISTRATOR")
                         .requestMatchers("/api/reports/**").authenticated()
                         .requestMatchers("/api/watchlist", "/api/history", "/api/videos/watchlist", "/api/videos/history").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/videos/**", "/api/advertisements/**", "/api/ads/**", "/api/placements/**", "/uploads/**").permitAll()
+                        // --- FR5, advertisement management ---------------------------
+                        // Serving is the only advertising surface a viewer touches, and
+                        // it has to work for guests or no advertisement ever runs.
+                        // Everything that manages, reports on or lists inventory is
+                        // staff-only: these paths used to fall through to the catch-all
+                        // below, so a forged X-User-Id header was the whole of the
+                        // protection on them.
+                        .requestMatchers(HttpMethod.GET, "/api/ads/active", "/api/ads/click/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/ads/impressions").permitAll()
+                        .requestMatchers("/api/ad-campaigns/**", "/api/advertisements/**",
+                                "/api/advertising/**", "/api/ads/**")
+                                .hasAnyRole("MARKETING_OFFICER", "ADMINISTRATOR")
+
+                        .requestMatchers(HttpMethod.GET, "/api/videos/**", "/api/placements/**", "/uploads/**").permitAll()
                         .requestMatchers("/api/videos/**").authenticated()
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/error").permitAll()
                         .requestMatchers("/api/**").permitAll()

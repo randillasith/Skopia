@@ -41,6 +41,7 @@ class AdvertisingApiIntegrationTest {
 
     @Autowired MockMvc mvc;
     @Autowired AdvertisingFixture fixture;
+    @Autowired org.gp14.skopia.security.TokenService tokens;
 
     /**
      * The test's own reader. Spring Boot 4 does not publish a Jackson 2
@@ -55,7 +56,7 @@ class AdvertisingApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        officer = String.valueOf(fixture.officer().getId());
+        officer = "Bearer " + tokens.issue(fixture.officer().getId());
         documentary = fixture.category("Documentary");
         longExposure = fixture.video("The Long Exposure", documentary);
     }
@@ -69,7 +70,7 @@ class AdvertisingApiIntegrationTest {
         /* 1. "I want to upload advertisement content such as video, images and links" */
         JsonNode uploaded = body(mvc.perform(multipart("/api/advertisements/media")
                         .file(new MockMultipartFile("file", "trailer.mp4", "video/mp4", new byte[] { 1, 2 }))
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer))
+                        .header("Authorization", officer))
                 .andExpect(status().isOk())
                 .andReturn());
         assertThat(uploaded.get("adType").asText()).isEqualTo("VIDEO");
@@ -77,7 +78,7 @@ class AdvertisingApiIntegrationTest {
 
         /* 2. "I want to create and schedule ad campaigns" */
         JsonNode campaign = body(mvc.perform(post("/api/ad-campaigns")
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer)
+                        .header("Authorization", officer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"campaignName":"Autumn Season Launch","advertiser":"Meridian Films",
@@ -89,7 +90,7 @@ class AdvertisingApiIntegrationTest {
         assertThat(campaign.get("status").asText()).isEqualTo("DRAFT");
 
         JsonNode ad = body(mvc.perform(post("/api/advertisements")
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer)
+                        .header("Authorization", officer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"campaignId":%d,"adTitle":"Autumn trailer","mediaUrl":"%s",
@@ -102,13 +103,13 @@ class AdvertisingApiIntegrationTest {
 
         /* 3. "I want to assign advertisements to selected videos or video categories" */
         JsonNode options = body(mvc.perform(get("/api/advertisements/target-options")
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer))
+                        .header("Authorization", officer))
                 .andExpect(status().isOk()).andReturn());
         assertThat(options.get("categories")).isNotEmpty();
         assertThat(options.get("videos")).isNotEmpty();
 
         mvc.perform(post("/api/advertisements/{id}/targets", adId)
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer)
+                        .header("Authorization", officer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"categoryId":%d,"slotPosition":"PREROLL","priority":1}
@@ -118,12 +119,12 @@ class AdvertisingApiIntegrationTest {
                 .andExpect(jsonPath("$.targetLabel").value("Documentary"));
 
         mvc.perform(post("/api/advertisements/{id}/activate", adId)
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer))
+                        .header("Authorization", officer))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
         mvc.perform(post("/api/ad-campaigns/{id}/confirm", campaignId)
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer))
+                        .header("Authorization", officer))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
@@ -149,7 +150,7 @@ class AdvertisingApiIntegrationTest {
         /* 6. "I want to monitor ad performance metrics" */
         LocalDate today = LocalDate.now();
         mvc.perform(get("/api/ad-campaigns/{id}/metrics", campaignId)
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer)
+                        .header("Authorization", officer)
                         .param("from", today.toString()).param("to", today.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.impressions").value(1))
@@ -157,7 +158,7 @@ class AdvertisingApiIntegrationTest {
                 .andExpect(jsonPath("$.ctr").value(100.0));
 
         MvcResult csv = mvc.perform(get("/api/ad-campaigns/{id}/metrics.csv", campaignId)
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer))
+                        .header("Authorization", officer))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition",
                         "attachment; filename=\"campaign-" + campaignId + "-performance.csv\""))
@@ -172,11 +173,92 @@ class AdvertisingApiIntegrationTest {
     void guardsTheManagementEndpoints() throws Exception {
         mvc.perform(get("/api/ad-campaigns")).andExpect(status().isUnauthorized());
 
+        // A real account with a real token, but not one that holds advertising.
+        // Refused by the filter chain, which answers before the controller runs.
         mvc.perform(get("/api/ad-campaigns")
-                        .header(AdvertisingAccess.ACTOR_HEADER, fixture.viewer().getId()))
+                        .header("Authorization", "Bearer " + tokens.issue(fixture.viewer().getId())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("a forged X-User-Id header buys nothing — the header is not read any more")
+    void refusesAForgedActorHeader() throws Exception {
+        // The regression guard for the hole this module shipped with: every
+        // management endpoint took the caller's id from a request header, so
+        // `X-User-Id: 1` was enough to create campaigns in a marketing officer's
+        // name. Other parts of the platform still send the header, so this asserts
+        // it is ignored rather than that it is absent.
+        mvc.perform(post("/api/ad-campaigns")
+                        .header("X-User-Id", fixture.officer().getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(campaignBody("Forged")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("a tampered or unparseable token is refused")
+    void refusesABadToken() throws Exception {
+        mvc.perform(get("/api/ad-campaigns").header("Authorization", "Bearer not-a-token"))
+                .andExpect(status().isUnauthorized());
+
+        String valid = tokens.issue(fixture.officer().getId());
+        // Flip the last character of the signature. HMAC means this cannot verify.
+        String tampered = valid.substring(0, valid.length() - 1) + (valid.endsWith("A") ? "B" : "A");
+        mvc.perform(get("/api/ad-campaigns").header("Authorization", "Bearer " + tampered))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("one officer cannot change another officer's campaign")
+    void refusesAColleaguesCampaign() throws Exception {
+        String id = json.readTree(mvc.perform(post("/api/ad-campaigns")
+                        .header("Authorization", officer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(campaignBody("Ours")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asText();
+
+        String colleague = "Bearer " + tokens.issue(fixture.officer().getId());
+
+        // Reading is shared: the console shows one list and that is useful.
+        mvc.perform(get("/api/ad-campaigns/" + id).header("Authorization", colleague))
+                .andExpect(status().isOk());
+
+        // Changing it is not.
+        mvc.perform(delete("/api/ad-campaigns/" + id).header("Authorization", colleague))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value(
-                        org.hamcrest.Matchers.containsString("granted by an administrator")));
+                        org.hamcrest.Matchers.containsString("another marketing officer")));
+
+        mvc.perform(put("/api/ad-campaigns/" + id)
+                        .header("Authorization", colleague)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(campaignBody("Theirs")))
+                .andExpect(status().isForbidden());
+
+        // The officer who booked it still can.
+        mvc.perform(delete("/api/ad-campaigns/" + id).header("Authorization", officer))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("an administrator can act on a campaign they did not book")
+    void letsAnAdministratorClearUp() throws Exception {
+        String id = json.readTree(mvc.perform(post("/api/ad-campaigns")
+                        .header("Authorization", officer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(campaignBody("Left behind")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asText();
+
+        mvc.perform(delete("/api/ad-campaigns/" + id)
+                        .header("Authorization", "Bearer " + tokens.issue(fixture.administrator().getId())))
+                .andExpect(status().isNoContent());
+    }
+
+    private static String campaignBody(String name) {
+        return "{\"campaignName\":\"" + name + "\",\"advertiser\":\"Anyone\","
+                + "\"startDate\":\"2026-01-01T00:00:00\",\"endDate\":\"2027-01-01T00:00:00\",\"budget\":1}";
     }
 
     @Test
@@ -193,7 +275,7 @@ class AdvertisingApiIntegrationTest {
     @DisplayName("a form error comes back per field, so the UI can put it under the input")
     void reportsValidationPerField() throws Exception {
         mvc.perform(post("/api/ad-campaigns")
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer)
+                        .header("Authorization", officer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"campaignName":"","advertiser":"Meridian Films"}
@@ -209,7 +291,7 @@ class AdvertisingApiIntegrationTest {
     void refusesABackwardsWindow() throws Exception {
         LocalDateTime start = LocalDateTime.now().plusDays(10);
         mvc.perform(post("/api/ad-campaigns")
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer)
+                        .header("Authorization", officer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"campaignName":"Backwards","startDate":"%s","endDate":"%s"}
@@ -223,7 +305,7 @@ class AdvertisingApiIntegrationTest {
     @DisplayName("asking for a campaign that does not exist is a 404")
     void missingCampaignIs404() throws Exception {
         mvc.perform(get("/api/ad-campaigns/{id}", 999_999)
-                        .header(AdvertisingAccess.ACTOR_HEADER, officer))
+                        .header("Authorization", officer))
                 .andExpect(status().isNotFound());
     }
 

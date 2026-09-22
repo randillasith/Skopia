@@ -5,6 +5,8 @@ import org.gp14.skopia.advertising.dto.ImpressionRequest;
 import org.gp14.skopia.advertising.dto.ServedAdResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.gp14.skopia.model.user.User;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -19,10 +21,15 @@ import java.util.Map;
  * ever ran. What they do not do is expose anything a viewer should not see — a
  * served advertisement carries its creative and a tracking link, never a campaign,
  * a budget or an advertiser's own URL.
+ *
+ * <p>Because they are open, what a caller may <em>assert</em> is limited. A viewer
+ * id is taken from the bearer token when there is one and ignored when the body
+ * offers a different one: an advertiser is billed per impression, and a request
+ * that can name any viewer it likes is a request that can bill anybody's account
+ * for anything. A guest still counts — as a null viewer, which is the truth.
  */
 @RestController
 @RequestMapping("/api/ads")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AdServingController {
 
     private final AdServingService serving;
@@ -40,19 +47,25 @@ public class AdServingController {
      */
     @GetMapping("/active")
     public List<ServedAdResponse> active(
+            @AuthenticationPrincipal User principal,
             @RequestParam Long videoId,
             @RequestParam(required = false) SlotPosition slot,
-            @RequestParam(required = false) Long viewerId,
             @RequestParam(required = false) String device,
             @RequestParam(required = false, defaultValue = "1") int limit) {
-        return serving.serve(videoId, slot, viewerId, device, limit);
+        // The viewer is whoever the token says, or nobody. It is no longer a
+        // parameter, because a delivery record naming a viewer the caller chose
+        // is not a record of anything.
+        return serving.serve(videoId, slot, AdvertisingAccess.idOf(principal), device, limit);
     }
 
     /** Log an advertisement the client rendered from a placement it already held. */
     @PostMapping("/impressions")
-    public ResponseEntity<Map<String, Object>> impression(@Valid @RequestBody ImpressionRequest request) {
+    public ResponseEntity<Map<String, Object>> impression(
+            @AuthenticationPrincipal User principal,
+            @Valid @RequestBody ImpressionRequest request) {
         var impression = serving.recordImpression(
-                request.placementId(), request.videoId(), request.viewerId(), request.deviceType());
+                request.placementId(), request.videoId(),
+                AdvertisingAccess.idOf(principal), request.deviceType());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("impressionId", impression.getId(), "shownAt", impression.getShownAt()));
     }

@@ -98,7 +98,7 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse update(Long actorId, Long id, CampaignRequest request) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         checkWindow(request.startDate(), request.endDate());
 
         if (campaign.getCampaignStatus() == CampaignStatus.ARCHIVED) {
@@ -119,10 +119,29 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse confirm(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
+        // Confirming is the draft-to-booked step and nothing else. Without this a
+        // paused campaign could be restarted by confirming it, which skips the
+        // check that resume makes, and an archived one could be brought back.
+        if (campaign.getCampaignStatus() != CampaignStatus.DRAFT) {
+            throw AdvertisingException.conflict(switch (campaign.getCampaignStatus()) {
+                case PAUSED -> "That campaign is paused. Resume it rather than confirming it again.";
+                case ARCHIVED -> "An archived campaign cannot be confirmed.";
+                default -> "That campaign is already confirmed.";
+            });
+        }
         if (advertisements.findByCampaignId(id).isEmpty()) {
             throw AdvertisingException.conflict(
                     "Add at least one advertisement before confirming the campaign.");
+        }
+        // Every advertisement on a campaign about to run needs somewhere to run.
+        // Confirming without placements books delivery that cannot happen, and the
+        // officer finds out days later from a report showing nothing.
+        if (advertisements.findByCampaignId(id).stream()
+                .noneMatch(ad -> !placements.findByAdvertisementId(ad.getId()).isEmpty())) {
+            throw AdvertisingException.conflict(
+                    "Target at least one title or category before confirming — an advertisement "
+                            + "with no placement is never delivered.");
         }
         if (!LocalDateTime.now().isBefore(campaign.getEndDate())) {
             throw AdvertisingException.conflict(
@@ -135,7 +154,7 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse pause(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         CampaignStatus now = campaign.effectiveStatus(LocalDateTime.now());
         if (!now.servable()) {
             throw AdvertisingException.conflict("Only a running or scheduled campaign can be paused.");
@@ -153,7 +172,7 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse resume(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         if (campaign.getCampaignStatus() != CampaignStatus.PAUSED) {
             throw AdvertisingException.conflict("That campaign is not paused.");
         }
@@ -175,7 +194,10 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse archive(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
+        if (campaign.getCampaignStatus() == CampaignStatus.ARCHIVED) {
+            throw AdvertisingException.conflict("That campaign is already archived.");
+        }
         campaign.setCampaignStatus(CampaignStatus.ARCHIVED);
         return toResponse(campaigns.save(campaign));
     }
@@ -189,7 +211,7 @@ public class AdCampaignService {
     @Transactional
     public void delete(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         if (campaign.getCampaignStatus() != CampaignStatus.DRAFT) {
             throw AdvertisingException.conflict(
                     "Only a draft can be deleted. Archive this campaign instead — its recorded "
@@ -204,6 +226,21 @@ public class AdCampaignService {
 
     AdCampaign load(Long id) {
         return campaigns.findById(id).orElseThrow(() -> AdvertisingException.notFound("Campaign", id));
+    }
+
+    /**
+     * Load a campaign this caller may change.
+     *
+     * <p>Reading is open to every officer — the console shows one list and that is
+     * useful. Changing is not: holding the marketing role says you may run
+     * advertising, not that you may edit a colleague's booking. An administrator
+     * passes, because clearing up after a departed officer is their job.
+     */
+    private AdCampaign loadOwned(Long actorId, Long id) {
+        AdCampaign campaign = load(id);
+        access.requireOwner(actorId, campaign.getCreatedBy() == null ? null
+                : campaign.getCreatedBy().getId(), "campaign");
+        return campaign;
     }
 
     private void apply(AdCampaign campaign, CampaignRequest request) {

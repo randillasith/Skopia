@@ -10,11 +10,17 @@ import org.springframework.stereotype.Component;
 /**
  * Who is allowed to work on advertising, and as whom.
  *
- * <p>Skopia has no Spring Security filter chain — the platform authenticates by
- * passing the signed-in user's id with the request — so FR5 enforces its own rule
- * on top of that same convention rather than inventing a second one. Every
- * management endpoint resolves its caller here first; the serving and logging
- * endpoints deliberately do not, because viewers are the ones hitting those.
+ * <p>The caller is the account behind the request's bearer token, resolved by
+ * {@code BearerTokenFilter} into the Spring Security principal. It used to be
+ * whatever number the client put in an {@code X-User-Id} header, which meant the
+ * entire advertising API was protected by a guessable integer: sending
+ * {@code X-User-Id: 1} was enough to create campaigns in a marketing officer's
+ * name. Nothing here reads that header any more.
+ *
+ * <p>The filter chain already refuses the wrong role before a controller runs.
+ * These checks stay as the second line: they are what a service call that did not
+ * come through the chain still has to pass, and they explain the refusal in
+ * words the console can show.
  *
  * <p>Two roles pass: a marketing officer, and an administrator (who reaches every
  * staff console). A campaign is always attributed to a marketing officer, so an
@@ -24,9 +30,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AdvertisingAccess {
-
-    /** The header the frontend sends. Matches the rest of the platform's calls. */
-    public static final String ACTOR_HEADER = "X-User-Id";
 
     private final UserRepository users;
     private final MarketingOfficerRepository officers;
@@ -85,6 +88,35 @@ public class AdvertisingAccess {
             return true;
         } catch (AdvertisingException e) {
             return false;
+        }
+    }
+
+    /**
+     * The id behind an authenticated principal, or null when there is nobody.
+     *
+     * <p>Null reaches {@link #require} and comes back as a 401 with something to
+     * read, which is friendlier than the filter chain's bare status for the few
+     * paths that are open to anonymous callers and check afterwards.
+     */
+    public static Long idOf(User principal) {
+        return principal == null ? null : principal.getId();
+    }
+
+    /**
+     * Refuse a caller who did not book this campaign.
+     *
+     * <p>Holding the marketing role says you may run advertising; it does not say
+     * you may edit somebody else's booking. An administrator is exempt, because
+     * clearing up after a departed officer is exactly their job.
+     */
+    public void requireOwner(Long actorId, Long ownerId, String what) {
+        if (administrators.existsById(actorId)) {
+            return;
+        }
+        if (ownerId == null || !ownerId.equals(actorId)) {
+            throw AdvertisingException.forbidden(
+                    "This " + what + " belongs to another marketing officer. "
+                            + "An administrator can act on it; a colleague cannot.");
         }
     }
 }

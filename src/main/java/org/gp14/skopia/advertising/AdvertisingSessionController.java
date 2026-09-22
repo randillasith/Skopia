@@ -2,61 +2,45 @@ package org.gp14.skopia.advertising;
 
 import org.gp14.skopia.advertising.dto.AdvertisingSessionResponse;
 import org.gp14.skopia.model.user.User;
-import org.gp14.skopia.repository.AdministratorRepository;
 import org.gp14.skopia.repository.MarketingOfficerRepository;
-import org.gp14.skopia.repository.UserRepository;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Binds a signed-in account to the numeric id the advertising API works in.
+ * What the advertising console is allowed to do, for whoever is signed in.
  *
- * <p>The frontend knows who is signed in by handle; every FR5 endpoint identifies
- * its caller by {@code X-User-Id}. Something has to turn one into the other, and
- * doing it here — once, behind the same {@link AdvertisingAccess} check the rest of
- * the module uses — is better than teaching every screen to guess.
+ * <p>This used to take a handle as a query parameter and answer with that
+ * account's id, because the frontend knew who was signed in by handle and the API
+ * worked in numeric ids. Two things were wrong with it: a handle is not proof of
+ * identity, so anyone could ask for anyone's id; and the answer told them which
+ * handles hold advertising rights, which is a list worth having if you intend to
+ * misuse one.
  *
- * <p><strong>Known limitation.</strong> A handle is not proof of identity. Skopia
- * has no session store or token validation yet: {@code /api/auth/login} issues a
- * token nobody checks, and every endpoint on the platform already trusts a
- * caller-supplied user id. This endpoint is exactly as strong as that, and no
- * stronger. When real authentication lands, this should read the authenticated
- * principal instead of a query parameter, and {@code X-User-Id} should stop being
- * trusted across the whole API — not only here. Documented in
- * {@code docs/fr5/README.md}.
+ * <p>It now reports the caller and nobody else. The id comes from the bearer
+ * token, so the question "who am I" has one possible answer and asking about
+ * somebody else is not expressible.
  */
 @RestController
 @RequestMapping("/api/advertising")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AdvertisingSessionController {
 
-    private final UserRepository users;
     private final MarketingOfficerRepository officers;
-    private final AdministratorRepository administrators;
     private final AdvertisingAccess access;
 
-    public AdvertisingSessionController(UserRepository users,
-                                        MarketingOfficerRepository officers,
-                                        AdministratorRepository administrators,
+    public AdvertisingSessionController(MarketingOfficerRepository officers,
                                         AdvertisingAccess access) {
-        this.users = users;
         this.officers = officers;
-        this.administrators = administrators;
         this.access = access;
     }
 
     @GetMapping("/session")
-    public AdvertisingSessionResponse session(@RequestParam String handle) {
-        String clean = handle.startsWith("@") ? handle.substring(1).trim() : handle.trim();
-        User user = users.findByUsername(clean)
-                .orElseThrow(() -> AdvertisingException.forbidden(
-                        "No Skopia account with the handle @" + clean + "."));
-
-        access.require(user.getId());
+    public AdvertisingSessionResponse session(@AuthenticationPrincipal User principal) {
+        User user = access.require(AdvertisingAccess.idOf(principal));
 
         boolean isOfficer = officers.existsById(user.getId());
         return new AdvertisingSessionResponse(
                 user.getId(),
-                clean,
+                user.getUsername(),
                 displayName(user),
                 isOfficer ? "marketing officer" : "administrator",
                 isOfficer);
