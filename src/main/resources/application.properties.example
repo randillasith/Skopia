@@ -20,7 +20,9 @@ spring.jpa.open-in-view=false
 # SKOPIA_AUTH_SECRET. Never commit the real value.
 skopia.auth.secret=${SKOPIA_AUTH_SECRET}
 skopia.auth.ttl-seconds=${SKOPIA_AUTH_TTL_SECONDS:3600}
-skopia.cors.allowed-origins=${SKOPIA_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+# The dev server's origin, as set in frontend/vite.config.ts. A mismatch here
+# refuses every call the UI makes, before it reaches a controller.
+skopia.cors.allowed-origins=${SKOPIA_CORS_ALLOWED_ORIGINS:http://localhost:5175,http://localhost:5173}
 
 server.port=8081
 

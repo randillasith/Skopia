@@ -55,8 +55,18 @@ public class SecurityConfig {
                 .build();
     }
 
+    /**
+     * Which origins the browser may call the API from.
+     *
+     * <p>The default has to match the port the dev server actually uses, which is
+     * the one in {@code frontend/vite.config.ts}. It said 5173 — Vite's own
+     * default — while this project runs on 5175, so every request the UI made was
+     * refused before it reached a controller and nobody could sign in. Both are
+     * listed because the port is a project choice somebody may change back.
+     */
     @Bean
-    CorsConfigurationSource corsConfigurationSource(@Value("${skopia.cors.allowed-origins:http://localhost:5173}") String origins) {
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${skopia.cors.allowed-origins:http://localhost:5175,http://localhost:5173}") String origins) {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
