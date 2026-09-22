@@ -1,0 +1,270 @@
+package org.gp14.skopia.advertising;
+
+import org.gp14.skopia.advertising.dto.CampaignRequest;
+import org.gp14.skopia.advertising.dto.CampaignResponse;
+import org.gp14.skopia.advertising.dto.MetricTotalsRow;
+import org.gp14.skopia.advertising.dto.PlacementResponse;
+import org.gp14.skopia.model.advertisement.AdCampaign;
+import org.gp14.skopia.model.user.MarketingOfficer;
+import org.gp14.skopia.repository.AdCampaignRepository;
+import org.gp14.skopia.repository.AdImpressionRepository;
+import org.gp14.skopia.repository.AdPlacementRepository;
+import org.gp14.skopia.repository.AdvertisementRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Campaign management: the booking, its window, and the statuses it moves through.
+ *
+ * <p>Two rules run through everything here. A campaign's end date must fall after
+ * its start date, checked on every write rather than only at creation — the second
+ * edit is where an impossible window normally gets in. And a status a person chose
+ * is never silently replaced by one the clock implies: {@link AdCampaign#effectiveStatus}
+ * derives, and the transitions below are the only things that store.
+ */
+@Service
+public class AdCampaignService {
+
+    private final AdCampaignRepository campaigns;
+    private final AdvertisementRepository advertisements;
+    private final AdPlacementRepository placements;
+    private final AdImpressionRepository impressions;
+    private final AdvertisingAccess access;
+    private final AdPlacementService placementService;
+
+    public AdCampaignService(AdCampaignRepository campaigns,
+                             AdvertisementRepository advertisements,
+                             AdPlacementRepository placements,
+                             AdImpressionRepository impressions,
+                             AdvertisingAccess access,
+                             AdPlacementService placementService) {
+        this.campaigns = campaigns;
+        this.advertisements = advertisements;
+        this.placements = placements;
+        this.impressions = impressions;
+        this.access = access;
+        this.placementService = placementService;
+    }
+
+    /* ------------------------------------------------------------- reading */
+
+    @Transactional(readOnly = true)
+    public List<CampaignResponse> list(Long actorId, String search, CampaignStatus status) {
+        access.require(actorId);
+        String needle = (search == null || search.isBlank()) ? null : search.trim();
+        LocalDateTime now = LocalDateTime.now();
+
+        // The status filter is deliberately NOT pushed into the query. The database
+        // can only filter the stored status, and the whole point of the derived one
+        // is that the two disagree between expiry sweeps: a campaign that lapsed an
+        // hour ago is still SCHEDULED in the table, so asking SQL for EXPIRED would
+        // leave it out of the tab it visibly belongs to. Searching is pushed down,
+        // since text matching cannot drift.
+        List<AdCampaign> rows = campaigns.search(needle, null);
+
+        return rows.stream()
+                .filter(c -> status == null || c.effectiveStatus(now) == status)
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CampaignResponse get(Long actorId, Long id) {
+        access.require(actorId);
+        return toResponse(load(id));
+    }
+
+    /* ------------------------------------------------------------- writing */
+
+    @Transactional
+    public CampaignResponse create(Long actorId, CampaignRequest request) {
+        MarketingOfficer officer = access.actingOfficer(actorId);
+        checkWindow(request.startDate(), request.endDate());
+
+        AdCampaign campaign = new AdCampaign();
+        campaign.setCreatedBy(officer);
+        apply(campaign, request);
+        campaign.setCampaignStatus(CampaignStatus.DRAFT);
+        return toResponse(campaigns.save(campaign));
+    }
+
+    @Transactional
+    public CampaignResponse update(Long actorId, Long id, CampaignRequest request) {
+        access.require(actorId);
+        AdCampaign campaign = load(id);
+        checkWindow(request.startDate(), request.endDate());
+
+        if (campaign.getCampaignStatus() == CampaignStatus.ARCHIVED) {
+            throw AdvertisingException.conflict(
+                    "An archived campaign is kept for reporting and cannot be edited.");
+        }
+        apply(campaign, request);
+        return toResponse(campaigns.save(campaign));
+    }
+
+    /**
+     * Confirm a draft, which is what puts it in front of viewers.
+     *
+     * <p>A campaign with no advertisement attached would be confirmed and then
+     * deliver nothing, which reads as a serving bug rather than an empty booking —
+     * so it is refused here, where the reason is still obvious.
+     */
+    @Transactional
+    public CampaignResponse confirm(Long actorId, Long id) {
+        access.require(actorId);
+        AdCampaign campaign = load(id);
+        if (advertisements.findByCampaignId(id).isEmpty()) {
+            throw AdvertisingException.conflict(
+                    "Add at least one advertisement before confirming the campaign.");
+        }
+        if (!LocalDateTime.now().isBefore(campaign.getEndDate())) {
+            throw AdvertisingException.conflict(
+                    "This campaign's end date has already passed. Move it before confirming.");
+        }
+        campaign.setCampaignStatus(CampaignStatus.SCHEDULED);
+        return toResponse(campaigns.save(campaign));
+    }
+
+    @Transactional
+    public CampaignResponse pause(Long actorId, Long id) {
+        access.require(actorId);
+        AdCampaign campaign = load(id);
+        CampaignStatus now = campaign.effectiveStatus(LocalDateTime.now());
+        if (!now.servable()) {
+            throw AdvertisingException.conflict("Only a running or scheduled campaign can be paused.");
+        }
+        campaign.setCampaignStatus(CampaignStatus.PAUSED);
+        return toResponse(campaigns.save(campaign));
+    }
+
+    /**
+     * Resume a paused campaign.
+     *
+     * <p>Stored as SCHEDULED rather than ACTIVE and left to the dates to resolve —
+     * a campaign paused before it started should not come back already running.
+     */
+    @Transactional
+    public CampaignResponse resume(Long actorId, Long id) {
+        access.require(actorId);
+        AdCampaign campaign = load(id);
+        if (campaign.getCampaignStatus() != CampaignStatus.PAUSED) {
+            throw AdvertisingException.conflict("That campaign is not paused.");
+        }
+        if (!LocalDateTime.now().isBefore(campaign.getEndDate())) {
+            throw AdvertisingException.conflict(
+                    "This campaign ended while it was paused. Extend its end date to run it again.");
+        }
+        campaign.setCampaignStatus(CampaignStatus.SCHEDULED);
+        return toResponse(campaigns.save(campaign));
+    }
+
+    /**
+     * Take a campaign out of the working list.
+     *
+     * <p>Deactivation, not deletion. The impressions and clicks it already earned
+     * stay where they are, so last month's report does not change because somebody
+     * tidied up this month's list.
+     */
+    @Transactional
+    public CampaignResponse archive(Long actorId, Long id) {
+        access.require(actorId);
+        AdCampaign campaign = load(id);
+        campaign.setCampaignStatus(CampaignStatus.ARCHIVED);
+        return toResponse(campaigns.save(campaign));
+    }
+
+    /**
+     * Delete a campaign outright. Allowed only while it is a draft that never ran.
+     *
+     * <p>Anything that has served has delivery logs pointing at it, and removing it
+     * would leave reporting with a hole it cannot explain. Those are archived.
+     */
+    @Transactional
+    public void delete(Long actorId, Long id) {
+        access.require(actorId);
+        AdCampaign campaign = load(id);
+        if (campaign.getCampaignStatus() != CampaignStatus.DRAFT) {
+            throw AdvertisingException.conflict(
+                    "Only a draft can be deleted. Archive this campaign instead — its recorded "
+                            + "impressions and clicks are kept so past reporting stays accurate.");
+        }
+        advertisements.findByCampaignId(id).forEach(ad -> placements.deleteByAdvertisementId(ad.getId()));
+        advertisements.deleteAll(advertisements.findByCampaignId(id));
+        campaigns.delete(campaign);
+    }
+
+    /* ------------------------------------------------------------ internals */
+
+    AdCampaign load(Long id) {
+        return campaigns.findById(id).orElseThrow(() -> AdvertisingException.notFound("Campaign", id));
+    }
+
+    private void apply(AdCampaign campaign, CampaignRequest request) {
+        campaign.setCampaignName(request.campaignName().trim());
+        campaign.setAdvertiser(request.advertiser() == null ? null : request.advertiser().trim());
+        campaign.setStartDate(request.startDate());
+        campaign.setEndDate(request.endDate());
+        campaign.setBudget(request.budget() == null ? BigDecimal.ZERO : request.budget());
+    }
+
+    /** UC-FR5-01 extension 6a — an end date on or before the start is rejected. */
+    private void checkWindow(LocalDateTime start, LocalDateTime end) {
+        if (start != null && end != null && !end.isAfter(start)) {
+            throw AdvertisingException.invalid("The end date must fall after the start date.");
+        }
+    }
+
+    CampaignResponse toResponse(AdCampaign c) {
+        LocalDateTime now = LocalDateTime.now();
+        MetricTotalsRow totals = impressions.totalsForCampaign(c.getId(), c.getCreatedAt() == null
+                ? LocalDateTime.of(1970, 1, 1, 0, 0) : c.getCreatedAt().minusYears(1), now.plusYears(1));
+        long shown = totals == null ? 0 : totals.impressions();
+        long clicked = totals == null ? 0 : totals.clickCount();
+
+        Set<String> targets = new LinkedHashSet<>();
+        List<PlacementResponse> all = placements.findByAdvertisementCampaignId(c.getId()).stream()
+                .map(placementService::toResponse)
+                .sorted(Comparator.comparing(PlacementResponse::targetLabel))
+                .toList();
+        all.forEach(p -> targets.add(p.targetLabel()));
+
+        MarketingOfficer owner = c.getCreatedBy();
+        return new CampaignResponse(
+                c.getId(),
+                c.getCampaignName(),
+                c.getAdvertiser(),
+                c.effectiveStatus(now),
+                c.getCampaignStatus(),
+                c.getStartDate(),
+                c.getEndDate(),
+                c.getBudget(),
+                owner == null ? null : owner.getId(),
+                owner == null ? null : displayName(owner),
+                c.getCreatedAt(),
+                c.getUpdatedAt(),
+                advertisements.findByCampaignId(c.getId()).size(),
+                List.copyOf(targets),
+                shown,
+                clicked,
+                ctr(shown, clicked));
+    }
+
+    private static String displayName(MarketingOfficer officer) {
+        String first = officer.getFirstName() == null ? "" : officer.getFirstName();
+        String last = officer.getLastName() == null ? "" : officer.getLastName();
+        String full = (first + " " + last).trim();
+        return full.isEmpty() ? officer.getUsername() : full;
+    }
+
+    /** Clicks over impressions, as a percentage. Zero impressions is 0%, not NaN. */
+    static double ctr(long impressions, long clicks) {
+        return impressions == 0 ? 0d : Math.round((clicks * 10_000d) / impressions) / 100d;
+    }
+}
