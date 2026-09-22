@@ -202,6 +202,24 @@ class AdAnalyticsServiceTest {
         assertThat(csv).contains(today + ",8,2,25.0");
     }
 
+@Test
+    @DisplayName("a campaign name that looks like a formula is exported as text")
+    void neutralisesSpreadsheetFormulas() {
+        // Excel, Numbers and Sheets all evaluate a cell beginning = + - or @ when
+        // the file is opened. These names are typed by people, so a name like this
+        // is a live formula in the officer's spreadsheet unless it is defused.
+        campaigns.update(actor, campaignId, new CampaignRequest(
+                "=HYPERLINK(\"http://example.invalid\",\"Results\")", "Meridian Films",
+                LocalDateTime.now().minusDays(10), LocalDateTime.now().plusDays(20), BigDecimal.ZERO));
+
+        String csv = analytics.csvForCampaign(actor, campaignId, null, null);
+
+        assertThat(csv)
+                .as("the cell must not start with = or a spreadsheet will run it")
+                .doesNotContain("Campaign,=HYPERLINK");
+        assertThat(csv).contains("Campaign,\"'=HYPERLINK");
+    }
+
     @Test
     @DisplayName("a campaign name containing a comma does not break the CSV")
     void quotesAwkwardNames() {
