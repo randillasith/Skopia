@@ -197,6 +197,14 @@ public final class SkopiaServlet extends HttpServlet {
                         String.valueOf(data.getOrDefault("text", "")), parentId)); return;
             }
         }
+        if (parts.length == 3 && parts[0].equals("api") && parts[1].equals("comments") && method.equals("PUT")) {
+            long userId = requireUser(request);
+            Object text = body(request).get("text");
+            if (!(text instanceof String)) throw new IllegalArgumentException("Comment text is required");
+            boolean updated = repository.updateComment(parseId(parts[2]), userId, (String) text);
+            sendJson(response, updated ? 200 : 404,
+                    updated ? Map.of("message", "Comment updated") : Map.of("error", "Comment not found")); return;
+        }
         if (parts.length == 3 && parts[0].equals("api") && parts[1].equals("comments") && method.equals("DELETE")) {
             boolean deleted = repository.deleteComment(parseId(parts[2]), requireUser(request));
             sendJson(response, deleted ? 200 : 404,
@@ -321,8 +329,7 @@ public final class SkopiaServlet extends HttpServlet {
     }
 
     private void protectVideo(Map<String, Object> video, Long userId, boolean premium) {
-        boolean ownVideo = userId != null && ((Number) video.get("creatorId")).longValue() == userId;
-        boolean canWatch = !"PREMIUM".equals(video.get("accessType")) || premium || ownVideo;
+        boolean canWatch = VideoAccessPolicy.decide(video, userId, premium) == VideoAccessPolicy.Decision.ALLOWED;
         video.put("canWatch", canWatch);
         if (!canWatch) video.remove("videoUrl");
     }
@@ -330,20 +337,20 @@ public final class SkopiaServlet extends HttpServlet {
     private void requireVideoAccess(long videoId, Long userId) throws SQLException {
         Map<String, Object> video = repository.video(videoId, userId == null ? 0 : userId);
         if (video == null) throw new ApiException(404, "Video not found");
-        boolean ownVideo = userId != null && ((Number) video.get("creatorId")).longValue() == userId;
-        if (!"PUBLISHED".equals(video.get("status")) && !ownVideo) throw new ApiException(404, "Video not found");
-        if ("PREMIUM".equals(video.get("accessType")) && !ownVideo
-                && (userId == null || !accounts.hasPremium(userId)))
-            throw new ApiException(402, "A premium subscription is required");
+        boolean premium = userId != null && "PREMIUM".equals(video.get("accessType")) && accounts.hasPremium(userId);
+        requireAccessDecision(VideoAccessPolicy.decide(video, userId, premium), "Video not found");
     }
 
     private void requireUploadAccess(String path, Long userId) throws SQLException {
         Map<String, Object> policy = repository.uploadPolicy(path);
         if (policy == null) return;
-        boolean ownVideo = userId != null && ((Number) policy.get("creatorId")).longValue() == userId;
-        if (!"PUBLISHED".equals(policy.get("status")) && !ownVideo) throw new ApiException(404, "File not found");
-        if ("PREMIUM".equals(policy.get("accessType")) && !ownVideo
-                && (userId == null || !accounts.hasPremium(userId)))
+        boolean premium = userId != null && "PREMIUM".equals(policy.get("accessType")) && accounts.hasPremium(userId);
+        requireAccessDecision(VideoAccessPolicy.decide(policy, userId, premium), "File not found");
+    }
+
+    private void requireAccessDecision(VideoAccessPolicy.Decision decision, String hiddenMessage) {
+        if (decision == VideoAccessPolicy.Decision.HIDDEN) throw new ApiException(404, hiddenMessage);
+        if (decision == VideoAccessPolicy.Decision.PREMIUM_REQUIRED)
             throw new ApiException(402, "A premium subscription is required");
     }
 

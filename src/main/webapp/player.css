@@ -1,0 +1,24 @@
+.video-card { display: block; color: inherit; text-decoration: none; }
+.video-card:focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
+.card-watch { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--primary); font-size: 12px; font-weight: 700; }
+.video-card:focus-visible .play-hover { opacity: 1; }
+.viewer-player { overflow: hidden; background: var(--surface-1); border: 1px solid var(--surface-3); border-radius: 18px; box-shadow: var(--shadow); }
+.viewer-player .player { border-radius: 0; box-shadow: none; object-fit: contain; }
+.player-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 14px; }
+.player-toolbar .icon-btn { flex-shrink: 0; background: var(--surface-2); color: var(--text); }
+.player-toolbar button:focus-visible, .player-speed select:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.player-time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.player-speed { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 12px; }
+.player-speed select { padding: 7px; border: 1px solid var(--outline); border-radius: 8px; background: var(--surface-2); color: var(--text); }
+.player-message { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px 14px; }
+.player-message p { margin: 0; color: var(--muted); font-size: 12px; }
+.player-message button { flex-shrink: 0; }
+.viewer-player:fullscreen { display: flex; flex-direction: column; justify-content: center; width: 100%; height: 100%; background: #000; border: 0; border-radius: 0; }
+.viewer-player:fullscreen .player { flex: 1; min-height: 0; aspect-ratio: auto; }
+@media (max-width: 520px) {
+  .player-toolbar { gap: 7px; padding: 10px; }
+  .player-toolbar .button { padding: 9px 12px; }
+  .player-time { margin-left: auto; }
+  .player-speed { margin-left: 0; }
+  .player-message { align-items: flex-start; flex-direction: column; padding: 0 10px 12px; }
+}

@@ -1,0 +1,9 @@
+.comment-text { white-space: pre-wrap; }
+.comment-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.comment-edit { border: 0; background: none; color: var(--primary); padding: 0; cursor: pointer; font-size: 11px; }
+.comment-edit:hover { text-decoration: underline; }
+.comment-edit-form { margin-top: 10px; }
+.comment-edit-form textarea { resize: vertical; min-height: 85px; }
+.comment-edit-form .comment-actions { margin-top: 10px; }
+.comment-edit-form .button { font-size: 12px; padding: 7px 13px; }
+.comment-edit-error { color: var(--danger); }

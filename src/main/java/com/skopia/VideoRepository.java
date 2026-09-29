@@ -229,6 +229,15 @@ final class VideoRepository {
         }
     }
 
+    boolean updateComment(long commentId, long userId, String text) throws SQLException {
+        String cleaned = VideoValidator.comment(text);
+        try (Connection c = database.open(); PreparedStatement ps = c.prepareStatement(
+                "UPDATE comments SET comment_text=? WHERE comment_id=? AND user_id=? AND comment_status='VISIBLE'")) {
+            ps.setString(1, cleaned); ps.setLong(2, commentId); ps.setLong(3, userId);
+            return ps.executeUpdate() == 1;
+        }
+    }
+
     boolean deleteComment(long commentId, long userId) throws SQLException {
         try (Connection c = database.open(); PreparedStatement ps = c.prepareStatement(
                 "UPDATE comments SET comment_status='DELETED',comment_text='' WHERE comment_id=? AND user_id=?")) {

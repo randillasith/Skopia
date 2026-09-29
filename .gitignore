@@ -1,12 +1,3 @@
-<<<<<<< Updated upstream
-HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
-
-### STS ###
-=======
 target/
 out/
 lib/*.jar
@@ -31,7 +22,6 @@ src/main/webapp/uploads/*
 *.ipr
 
 ### Eclipse ###
->>>>>>> Stashed changes
 .apt_generated
 .classpath
 .factorypath
@@ -40,15 +30,6 @@ src/main/webapp/uploads/*
 .springBeans
 .sts4-cache
 
-<<<<<<< Updated upstream
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-=======
->>>>>>> Stashed changes
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
@@ -61,15 +42,6 @@ build/
 
 ### VS Code ###
 .vscode/
-<<<<<<< Updated upstream
-src/main/resources/application.properties
-src/main/resources/application-local.properties
-src/main/resources/application.properties.backup
-.env
-*.env
-!.env.example
-=======
 
 ### Mac OS ###
 .DS_Store
->>>>>>> Stashed changes

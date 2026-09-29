@@ -10,7 +10,7 @@ This source implements **Video Content, Playback, Viewer Interaction, Accounts, 
 - Video title, description, category, creator, upload date, views, and duration
 - Like/unlike videos
 - Add and remove videos from a watchlist
-- Post and delete viewer comments
+- Post, edit, and delete your own viewer comments
 - Creator Studio to upload, edit, publish/draft, and delete videos
 - Local MP4/WebM/OGG/MOV uploads and image thumbnails (maximum request size: 250 MB)
 - Responsive desktop, tablet, and mobile layout
@@ -36,16 +36,19 @@ Reporting, notification, advertisement, and platform-admin functions are intenti
 
 1. Open this project in IntelliJ IDEA and allow Maven to load `pom.xml`.
 2. In the XAMPP Control Panel, start **MySQL** only. Smart Tomcat will start Tomcat, so do not also start Tomcat from XAMPP.
-3. Open **Run > Edit Configurations**, click **+**, and select **Smart Tomcat**.
-4. Use these values:
+3. Select the included **Skopia (8081)** run configuration. If it does not appear, reopen the project. To configure it manually, open **Run > Edit Configurations**, click **+**, and select **Smart Tomcat**.
+4. Use these values for a manual configuration:
 
-   - **Tomcat Server:** `C:\xampp\tomcat`
+   - **Tomcat Server:** `C:\Users\User\Downloads\Filmflex\untitled\apache-tomcat-9.0.102` (or another Tomcat 9 installation)
    - **Deployment Directory:** `C:\Users\User\Downloads\untitled1\src\main\webapp`
    - **Context Path:** `/untitled1`
-   - **Server Port:** `8080`
+   - **Server Port:** `8081`
+   - **Admin Port:** `8006`
    - **Use classpath of module:** `untitled1`
 
-5. Run the Smart Tomcat configuration and open <http://localhost:8080/untitled1/>.
+5. Stop the previous failed Tomcat run, run **Skopia (8081)**, and open <http://localhost:8081/untitled1/>.
+
+Port `8080` is used by NVIDIA Broadcast on this computer. Using it causes Tomcat's `Address already in use: bind` error, and browsing to that port returns NVIDIA Broadcast's `Cannot GET /untitled1` response. This project's Smart Tomcat configuration uses `8081` for HTTP and `8006` for shutdown to avoid the occupied ports.
 
 The default XAMPP database settings are already configured: host `127.0.0.1`, port `3306`, database `skopia`, user `root`, and an empty password. The application creates its database, tables, and demo records automatically.
 
@@ -156,6 +159,8 @@ See `VALIDATION_TEST_REPORT.md` for the test evidence.
 | POST | `/api/videos/{id}/like` | Toggle like |
 | POST | `/api/videos/{id}/save` | Toggle watchlist |
 | GET/POST | `/api/videos/{id}/comments` | Read/post comments |
+| PUT | `/api/comments/{id}` | Edit your own visible comment (1–1000 characters) |
+| DELETE | `/api/comments/{id}` | Delete your own comment |
 | POST | `/api/videos/{id}/progress` | Save playback position |
 | GET | `/api/history` | View watch history |
 | GET | `/api/watchlist` | View saved videos |
