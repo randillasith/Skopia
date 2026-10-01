@@ -14,8 +14,12 @@ import org.gp14.skopia.repository.VideoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Targeting: which titles and categories an advertisement is attached to.
@@ -34,6 +38,15 @@ public class AdPlacementService {
     private final VideoRepository videos;
     private final CategoryRepository categories;
     private final AdvertisingAccess access;
+
+    /**
+     * How many titles the picker offers at once.
+     *
+     * <p>It is a search box, not a listing: past a screenful the way to find a
+     * title is to type more of its name, and sending the catalogue makes the
+     * dialog slow to open on exactly the libraries where it matters.
+     */
+    private static final int TARGET_PICKER_LIMIT = 50;
 
     public AdPlacementService(AdPlacementRepository placements,
                               AdvertisementRepository advertisements,
@@ -59,6 +72,12 @@ public class AdPlacementService {
         access.require(actorId);
         Advertisement ad = advertisements.findById(adId)
                 .orElseThrow(() -> AdvertisingException.notFound("Advertisement", adId));
+        access.requireOwner(actorId, owner(ad), "advertisement");
+        if (ad.getCampaign() != null
+                && ad.getCampaign().getCampaignStatus() == CampaignStatus.ARCHIVED) {
+            throw AdvertisingException.conflict(
+                    "An archived campaign's targeting is kept as it was for reporting.");
+        }
 
         boolean hasVideo = request.videoId() != null;
         boolean hasCategory = request.categoryId() != null;
@@ -118,7 +137,61 @@ public class AdPlacementService {
         access.require(actorId);
         AdPlacement placement = placements.findById(placementId)
                 .orElseThrow(() -> AdvertisingException.notFound("Placement", placementId));
+        access.requireOwner(actorId, owner(placement.getAdvertisement()), "placement");
         placements.delete(placement);
+    }
+
+    /**
+     * Change a placement's priority or its window without detaching and re-attaching.
+     *
+     * <p>Re-attaching was the only way to change either, and it loses the
+     * placement's id — which is what impressions point at, so the delivery already
+     * recorded stops being attributable to the targeting that produced it. This
+     * edits in place and leaves that history intact.
+     */
+    @Transactional
+    public PlacementResponse retarget(Long actorId, Long placementId, PlacementRequest request) {
+        access.require(actorId);
+        AdPlacement placement = placements.findById(placementId)
+                .orElseThrow(() -> AdvertisingException.notFound("Placement", placementId));
+        Advertisement ad = placement.getAdvertisement();
+        access.requireOwner(actorId, owner(ad), "placement");
+
+        if (request.slotPosition() != null && request.slotPosition() != placement.getSlotPosition()) {
+            boolean taken = placement.targetsVideo()
+                    ? placements.existsByAdvertisementIdAndVideoIdAndSlotPosition(
+                            ad.getId(), placement.getVideo().getId(), request.slotPosition())
+                    : placements.existsByAdvertisementIdAndCategoryIdAndSlotPosition(
+                            ad.getId(), placement.getCategory().getId(), request.slotPosition());
+            if (taken) {
+                throw AdvertisingException.conflict(
+                        "This advertisement already fills that slot on that target.");
+            }
+            placement.setSlotPosition(request.slotPosition());
+        }
+        if (request.priority() != null) {
+            placement.setPriority(Math.max(1, request.priority()));
+        }
+
+        LocalDateTime campaignFrom = ad.getCampaign().getStartDate();
+        LocalDateTime campaignTo = ad.getCampaign().getEndDate();
+        LocalDateTime from = request.activeFrom() == null ? placement.getActiveFrom()
+                : max(request.activeFrom(), campaignFrom);
+        LocalDateTime to = request.activeTo() == null ? placement.getActiveTo()
+                : min(request.activeTo(), campaignTo);
+        if (!to.isAfter(from)) {
+            throw AdvertisingException.invalid(
+                    "That placement window falls outside the campaign's own dates.");
+        }
+        placement.setActiveFrom(from);
+        placement.setActiveTo(to);
+
+        return toResponse(placements.save(placement));
+    }
+
+    private static Long owner(Advertisement ad) {
+        return ad == null || ad.getCampaign() == null || ad.getCampaign().getCreatedBy() == null
+                ? null : ad.getCampaign().getCreatedBy().getId();
     }
 
     /** Everything the targeting picker offers, in one call. */
@@ -127,24 +200,32 @@ public class AdPlacementService {
         access.require(actorId);
         String needle = search == null ? "" : search.trim().toLowerCase();
 
+        // One query for every category's title count, rather than one per
+        // category — and the titles themselves come back already limited by the
+        // database. Loading the catalogue to filter and count it in Java worked
+        // on six titles and is the whole table on a real one.
+        Map<Long, Long> counts = new HashMap<>();
+        for (Object[] row : videos.countByCategory()) {
+            counts.put((Long) row[0], (Long) row[1]);
+        }
+
         List<TargetOptionsResponse.Option> categoryOptions = categories.findAll().stream()
                 .filter(c -> needle.isEmpty() || c.getCategoryName().toLowerCase().contains(needle))
                 .map(c -> new TargetOptionsResponse.Option(
                         c.getId(),
                         c.getCategoryName(),
                         c.getCategoryDesc(),
-                        (long) videos.findByCategoryId(c.getId()).size()))
+                        counts.getOrDefault(c.getId(), 0L)))
                 .toList();
 
-        List<TargetOptionsResponse.Option> videoOptions = videos.findAll().stream()
-                .filter(v -> needle.isEmpty() || v.getTitle().toLowerCase().contains(needle))
-                .limit(200)
-                .map(v -> new TargetOptionsResponse.Option(
-                        v.getId(),
-                        v.getTitle(),
-                        v.getCategory() == null ? "Uncategorised" : v.getCategory().getCategoryName(),
-                        null))
-                .toList();
+        List<TargetOptionsResponse.Option> videoOptions =
+                videos.searchForTargeting(needle, PageRequest.of(0, TARGET_PICKER_LIMIT)).stream()
+                        .map(v -> new TargetOptionsResponse.Option(
+                                v.getId(),
+                                v.getTitle(),
+                                v.getCategory() == null ? "Uncategorised" : v.getCategory().getCategoryName(),
+                                null))
+                        .toList();
 
         return new TargetOptionsResponse(categoryOptions, videoOptions);
     }

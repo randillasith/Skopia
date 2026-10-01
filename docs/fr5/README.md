@@ -113,14 +113,21 @@ proves this with no sweep having run at all.
 
 ## API
 
-Management endpoints identify their caller with the `X-User-Id` header. Serving
-endpoints deliberately do not — viewers, including signed-out ones, call those.
+Management endpoints identify their caller by the request's bearer token —
+`Authorization: Bearer <token>`, issued by `/api/auth/login`. They are refused
+by the filter chain unless the account holds the marketing or administrator
+role. Serving endpoints deliberately take no credentials: viewers, including
+signed-out ones, call those.
+
+Reading a campaign is open to any officer, because the console shows one list.
+Changing one is not — a campaign belongs to the officer who booked it, and only
+they or an administrator may edit, pause, archive or delete it.
 
 ### Session
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/api/advertising/session?handle=` | Resolves a handle to the `actorId` used below. 403 if that account may not manage advertising. |
+| `GET` | `/api/advertising/session` | Reports the calling account. Takes no parameters: it answers for the token and nobody else. 403 if that account may not manage advertising. |
 
 ### Campaigns
 
@@ -145,6 +152,7 @@ endpoints deliberately do not — viewers, including signed-out ones, call those
 | `POST` | `/api/advertisements/{id}/deactivate` | |
 | `DELETE` | `/api/advertisements/{id}` | 409 once it has been shown. |
 | `GET` · `POST` | `/api/advertisements/{id}/targets` | 400 for both-or-neither; 409 for a duplicate. |
+| `PUT` | `/api/advertisements/targets/{placementId}` | Change a placement's slot, priority or window in place, keeping the delivery already recorded against it. |
 | `DELETE` | `/api/advertisements/targets/{placementId}` | |
 | `GET` | `/api/advertisements/target-options?search=` | Categories and titles in one call. |
 | `POST` | `/api/advertisements/media` | `multipart/form-data`, field `file`. |
@@ -223,25 +231,24 @@ whoever happens to be first in the table.
 
 These are real, and worth carrying into the next sprint rather than discovering.
 
-1. **A handle is not proof of identity.** `/api/advertising/session` trusts the
-   handle it is given, and every management endpoint trusts `X-User-Id`. That is
-   not weaker than the rest of Skopia — `/api/auth/login` already issues a token
-   nobody validates, and other controllers already trust caller-supplied ids — but
-   it is not authentication. When real sessions land, this should read the
-   authenticated principal, and `X-User-Id` should stop being trusted across the
-   **whole** API, not only here.
+1. **Delivery can still be inflated by an anonymous caller.** The serving
+   endpoint has to be open — guests see advertisements — and every call to it
+   logs an impression. Repeats from the same *identified* viewer inside thirty
+   seconds now collapse into one, and a click has to come from the viewer the
+   advertisement was shown to, within six hours. Neither helps against a script
+   with no session calling `/api/ads/active` in a loop. That needs rate limiting
+   or a signed serve token, which is infrastructure rather than a change here.
 
-2. **Two frontends claim `/`.** `frontend/` (React, this branch) and
+2. **Two frontends claim `/`.** `frontend/` (React) and
    `src/main/resources/static/` (FR-Admin's plain HTML) both produce an
-   `index.html`. A full `mvnw package` copies the React bundle last so it wins, but
-   `-DskipFrontend=true` leaves the other one serving. The team should decide which
-   is the product.
+   `index.html`. A full `mvnw package` copies the React bundle last so it wins,
+   but `-DskipFrontend=true` leaves the other one serving. The team should decide
+   which is the product.
 
-3. **The catalogue the UI renders is still placeholder data.**
-   `frontend/src/lib/data.ts` holds titles with ids like `v-1041`, while serving
-   works in real `videos.video_id`. `useBackendVideoId` bridges the two by matching
-   on title, and should be deleted the moment browse and watch read the catalogue
-   from the API.
+3. **Budget is recorded, not enforced.** Delivery does not stop when spend
+   reaches it, because there is no cost-per-impression anywhere in the
+   documentation to spend against. The campaign form says so rather than implying
+   a cap it does not apply. Enforcing it means agreeing a pricing model first.
 
 4. **Metrics are computed from the raw log on every request.** At Skopia's scale
    that is the right trade, and it avoids a whole class of bug where a dashboard
@@ -249,9 +256,24 @@ These are real, and worth carrying into the next sprint rather than discovering.
    lives in `AdImpressionRepository`, so the day the log outgrows this, the change
    is to point those queries at a summary table and nothing above them moves.
 
-5. **Budget is recorded, not enforced.** Delivery does not stop when spend reaches
-   it, because there is no cost-per-impression anywhere in the documentation to
-   spend against.
+5. **The campaign list is not paginated.** It batches its fetches, so the cost is
+   five queries whatever the number of campaigns, but the response still carries
+   all of them. The search filter is the current answer; a page parameter is the
+   real one.
+
+### Closed since the last revision
+
+- **Authentication.** Management endpoints took the caller from an `X-User-Id`
+  header that nothing verified — `X-User-Id: 1` created campaigns in an officer's
+  name. The caller is the bearer token's account now, the paths are named in
+  `SecurityConfig`, and a test asserts the forged header buys nothing.
+- **Authorisation.** Holding the marketing role let an officer edit, pause,
+  archive and delete any colleague's campaign. Ownership is checked on every
+  mutation; administrators stay exempt.
+- **The session lookup.** It took a handle and answered with that account's id,
+  which let anyone enumerate who holds advertising. It answers for the caller.
+- **The placeholder catalogue.** Browse and watch read the API, so
+  `useBackendVideoId` — which searched by title to find an id back — is gone.
 
 ---
 

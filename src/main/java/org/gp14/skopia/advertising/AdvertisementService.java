@@ -64,6 +64,7 @@ public class AdvertisementService {
         access.require(actorId);
         AdCampaign campaign = campaigns.findById(request.campaignId())
                 .orElseThrow(() -> AdvertisingException.notFound("Campaign", request.campaignId()));
+        access.requireOwner(actorId, owner(campaign), "campaign");
         if (campaign.getCampaignStatus() == CampaignStatus.ARCHIVED) {
             throw AdvertisingException.conflict("An archived campaign takes no new advertisements.");
         }
@@ -78,7 +79,7 @@ public class AdvertisementService {
     @Transactional
     public AdvertisementResponse update(Long actorId, Long id, AdvertisementRequest request) {
         access.require(actorId);
-        Advertisement ad = load(id);
+        Advertisement ad = loadOwned(actorId, id);
         if (!ad.getCampaign().getId().equals(request.campaignId())) {
             throw AdvertisingException.invalid(
                     "An advertisement cannot be moved between campaigns — its delivery history "
@@ -92,7 +93,7 @@ public class AdvertisementService {
     @Transactional
     public AdvertisementResponse activate(Long actorId, Long id) {
         access.require(actorId);
-        Advertisement ad = load(id);
+        Advertisement ad = loadOwned(actorId, id);
         if (placements.findByAdvertisementId(id).isEmpty()) {
             throw AdvertisingException.conflict(
                     "Assign this advertisement to a title or a category before activating it — "
@@ -105,7 +106,7 @@ public class AdvertisementService {
     @Transactional
     public AdvertisementResponse deactivate(Long actorId, Long id) {
         access.require(actorId);
-        Advertisement ad = load(id);
+        Advertisement ad = loadOwned(actorId, id);
         ad.setAdStatus(AdStatus.INACTIVE);
         return toResponse(advertisements.save(ad));
     }
@@ -119,7 +120,7 @@ public class AdvertisementService {
     @Transactional
     public void delete(Long actorId, Long id) {
         access.require(actorId);
-        Advertisement ad = load(id);
+        Advertisement ad = loadOwned(actorId, id);
         MetricTotalsRow totals = impressions.totalsForAd(id, epoch(), far());
         if (totals != null && totals.impressions() > 0) {
             throw AdvertisingException.conflict(
@@ -135,6 +136,23 @@ public class AdvertisementService {
     Advertisement load(Long id) {
         return advertisements.findById(id)
                 .orElseThrow(() -> AdvertisingException.notFound("Advertisement", id));
+    }
+
+    /**
+     * Load an advertisement this caller may change.
+     *
+     * <p>An advertisement has no owner of its own — it belongs to whoever booked
+     * the campaign it sits under, so that is who is checked.
+     */
+    private Advertisement loadOwned(Long actorId, Long id) {
+        Advertisement ad = load(id);
+        access.requireOwner(actorId, owner(ad.getCampaign()), "advertisement");
+        return ad;
+    }
+
+    private static Long owner(AdCampaign campaign) {
+        return campaign == null || campaign.getCreatedBy() == null
+                ? null : campaign.getCreatedBy().getId();
     }
 
     private void apply(Advertisement ad, AdvertisementRequest request) {

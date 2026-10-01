@@ -26,7 +26,6 @@ const SKIP_AFTER = 5
 export function AdSlot({
   videoId,
   slot = 'PREROLL',
-  viewerId = null,
   onFinished,
 }: {
   /**
@@ -37,7 +36,8 @@ export function AdSlot({
    */
   videoId: number | null | undefined
   slot?: SlotPosition
-  viewerId?: number | null
+  // No viewer prop: who saw this is the server's business, taken from the
+  // bearer token. A guest has none and is recorded as one.
   /** Called when the break is over — skipped, ended, or never filled. */
   onFinished: () => void
 }) {
@@ -62,7 +62,7 @@ export function AdSlot({
     let live = true
 
     ads.serving
-      .active(videoId, slot, { viewerId, device: deviceKind() })
+      .active(videoId, slot, { device: deviceKind() })
       .then((served) => {
         if (!live) return
         if (served.length === 0) {
@@ -79,7 +79,7 @@ export function AdSlot({
       })
 
     return () => { live = false }
-  }, [videoId, slot, viewerId])
+  }, [videoId, slot])
 
   // The countdown, and the automatic end of a video advertisement.
   useEffect(() => {
@@ -160,40 +160,3 @@ export function AdSlot({
   )
 }
 
-/**
- * Resolve one of the prototype's titles to the backend's numeric video id.
- *
- * <p>A seam, and a temporary one. The catalogue this UI renders is still the
- * placeholder list in `lib/data.ts`, whose ids look like `v-1041`, while the
- * serving API works in the real `videos.video_id`. Matching on the title is what
- * bridges the two until the browse and watch screens read the catalogue from the
- * API — at which point the numeric id is already in hand and this goes away.
- *
- * <p>Returns `undefined` while looking, and `null` when there is no such title,
- * so the player can tell "still asking" from "not in the catalogue".
- */
-export function useBackendVideoId(title: string | undefined): number | null | undefined {
-  const [id, setId] = useState<number | null | undefined>(undefined)
-
-  useEffect(() => {
-    if (!title) {
-      setId(null)
-      return
-    }
-    let live = true
-    setId(undefined)
-
-    fetch(`/api/videos?search=${encodeURIComponent(title)}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { id: number; title: string }[]) => {
-        if (!live) return
-        const exact = rows.find((v) => v.title.toLowerCase() === title.toLowerCase())
-        setId(exact?.id ?? null)
-      })
-      .catch(() => { if (live) setId(null) })
-
-    return () => { live = false }
-  }, [title])
-
-  return id
-}

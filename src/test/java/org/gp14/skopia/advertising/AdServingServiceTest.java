@@ -218,7 +218,8 @@ class AdServingServiceTest {
         live("Autumn Season Launch", placement -> placement.category(documentary));
         Long impressionId = serve(longExposure).get(0).impressionId();
 
-        String destination = serving.recordClick(impressionId);
+        // Shown to a guest, so there is no viewer to match against.
+        String destination = serving.recordClick(impressionId, null);
         assertThat(destination).isEqualTo("https://example.invalid/autumn");
 
         var clicked = impressions.findById(impressionId).orElseThrow();
@@ -227,7 +228,7 @@ class AdServingServiceTest {
         assertThat(firstClick).isNotNull();
 
         // A second click — a double-click, or a retried redirect — must not bill twice.
-        assertThat(serving.recordClick(impressionId)).isEqualTo(destination);
+        assertThat(serving.recordClick(impressionId, null)).isEqualTo(destination);
         assertThat(impressions.findById(impressionId).orElseThrow().getClickedAt())
                 .isEqualTo(firstClick);
     }
@@ -255,6 +256,81 @@ class AdServingServiceTest {
     }
 
     /* ------------------------------------------------------------ plumbing */
+
+
+    /* ------------------------------------------------- delivery integrity */
+
+    @Test
+    @DisplayName("the same advertisement shown to the same viewer twice in a moment is one impression")
+    void collapsesRepeatShowings() {
+        live("Autumn Season Launch", placement -> placement.category(documentary));
+        Long viewerId = fixture.viewer().getId();
+
+        List<ServedAdResponse> first = serving.serve(
+                longExposure.getId(), SlotPosition.PREROLL, viewerId, "desktop", 1);
+        List<ServedAdResponse> second = serving.serve(
+                longExposure.getId(), SlotPosition.PREROLL, viewerId, "desktop", 1);
+
+        assertThat(first).hasSize(1);
+        assertThat(second).hasSize(1);
+        assertThat(second.get(0).impressionId())
+                .as("a remount, a refresh or a retry is not a second delivery to bill for")
+                .isEqualTo(first.get(0).impressionId());
+        assertThat(impressions.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("two different viewers seeing it are two impressions")
+    void countsSeparateViewersSeparately() {
+        live("Autumn Season Launch", placement -> placement.category(documentary));
+
+        serving.serve(longExposure.getId(), SlotPosition.PREROLL,
+                fixture.viewer().getId(), "desktop", 1);
+        serving.serve(longExposure.getId(), SlotPosition.PREROLL,
+                fixture.viewer().getId(), "desktop", 1);
+
+        assertThat(impressions.count())
+                .as("collapsing these would lose real delivery")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a click on somebody else's impression is refused")
+    void refusesAClickFromTheWrongViewer() {
+        live("Autumn Season Launch", placement -> placement.category(documentary));
+        Long shownTo = fixture.viewer().getId();
+        Long somebodyElse = fixture.viewer().getId();
+
+        Long impressionId = serving.serve(
+                longExposure.getId(), SlotPosition.PREROLL, shownTo, "desktop", 1).get(0).impressionId();
+
+        // The ids are sequential, so without this check walking them is a way to
+        // bill an advertiser for clicks nobody made.
+        assertThatThrownBy(() -> serving.recordClick(impressionId, somebodyElse))
+                .isInstanceOf(AdvertisingException.class)
+                .hasMessageContaining("shown to somebody else");
+
+        assertThat(impressions.findById(impressionId).orElseThrow().getWasClicked()).isFalse();
+
+        // The viewer it was actually shown to is still fine.
+        assertThat(serving.recordClick(impressionId, shownTo)).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("a click long after the advertisement was shown is refused")
+    void refusesAStaleClick() {
+        live("Autumn Season Launch", placement -> placement.category(documentary));
+        Long impressionId = serve(longExposure).get(0).impressionId();
+
+        // Age the impression rather than waiting six hours for it.
+        var impression = impressions.findById(impressionId).orElseThrow();
+        impression.setShownAt(LocalDateTime.now().minusDays(2));
+        impressions.save(impression);
+
+        assertThatThrownBy(() -> serving.recordClick(impressionId, null))
+                .isInstanceOf(AdvertisingException.class)
+                .hasMessageContaining("too long ago");
+    }
 
     private List<ServedAdResponse> serve(Video video) {
         return serving.serve(video.getId(), SlotPosition.PREROLL, null, "desktop", 1);

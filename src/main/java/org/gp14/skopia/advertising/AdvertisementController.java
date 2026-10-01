@@ -9,6 +9,8 @@ import org.gp14.skopia.advertising.dto.TargetOptionsResponse;
 import org.gp14.skopia.advertising.dto.UploadedMediaResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.gp14.skopia.model.user.User;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,7 +25,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/advertisements")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AdvertisementController {
 
     private final AdvertisementService advertisements;
@@ -40,52 +41,52 @@ public class AdvertisementController {
 
     @GetMapping
     public List<AdvertisementResponse> list(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @RequestParam Long campaignId) {
-        return advertisements.listForCampaign(actorId, campaignId);
+        return advertisements.listForCampaign(AdvertisingAccess.idOf(principal), campaignId);
     }
 
     @GetMapping("/{id}")
     public AdvertisementResponse get(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return advertisements.get(actorId, id);
+        return advertisements.get(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping
     public ResponseEntity<AdvertisementResponse> create(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @Valid @RequestBody AdvertisementRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(advertisements.create(actorId, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(advertisements.create(AdvertisingAccess.idOf(principal), request));
     }
 
     @PutMapping("/{id}")
     public AdvertisementResponse update(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @Valid @RequestBody AdvertisementRequest request) {
-        return advertisements.update(actorId, id, request);
+        return advertisements.update(AdvertisingAccess.idOf(principal), id, request);
     }
 
     @PostMapping("/{id}/activate")
     public AdvertisementResponse activate(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return advertisements.activate(actorId, id);
+        return advertisements.activate(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping("/{id}/deactivate")
     public AdvertisementResponse deactivate(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return advertisements.deactivate(actorId, id);
+        return advertisements.deactivate(AdvertisingAccess.idOf(principal), id);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        advertisements.delete(actorId, id);
+        advertisements.delete(AdvertisingAccess.idOf(principal), id);
         return ResponseEntity.noContent().build();
     }
 
@@ -93,41 +94,50 @@ public class AdvertisementController {
 
     @GetMapping("/{id}/targets")
     public List<PlacementResponse> targets(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return placements.forAdvertisement(actorId, id);
+        return placements.forAdvertisement(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping("/{id}/targets")
     public ResponseEntity<PlacementResponse> attach(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @Valid @RequestBody PlacementRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(placements.attach(actorId, id, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(placements.attach(AdvertisingAccess.idOf(principal), id, request));
+    }
+
+    /** Change a placement's slot, priority or window, keeping its delivery history. */
+    @PutMapping("/targets/{placementId}")
+    public PlacementResponse retarget(
+            @AuthenticationPrincipal User principal,
+            @PathVariable Long placementId,
+            @Valid @RequestBody PlacementRequest request) {
+        return placements.retarget(AdvertisingAccess.idOf(principal), placementId, request);
     }
 
     @DeleteMapping("/targets/{placementId}")
     public ResponseEntity<Void> detach(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long placementId) {
-        placements.detach(actorId, placementId);
+        placements.detach(AdvertisingAccess.idOf(principal), placementId);
         return ResponseEntity.noContent().build();
     }
 
     /** What the targeting picker offers: categories and titles, in one call. */
     @GetMapping("/target-options")
     public TargetOptionsResponse options(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @RequestParam(required = false) String search) {
-        return placements.options(actorId, search);
+        return placements.options(AdvertisingAccess.idOf(principal), search);
     }
 
     /* ------------------------------------------------------------- media */
 
     @PostMapping("/media")
     public UploadedMediaResponse upload(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @RequestParam("file") MultipartFile file) {
-        return media.store(actorId, file);
+        return media.store(AdvertisingAccess.idOf(principal), file);
     }
 }

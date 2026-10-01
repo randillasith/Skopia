@@ -22,6 +22,26 @@ import java.util.List;
 @Repository
 public interface AdImpressionRepository extends JpaRepository<AdImpression, Long> {
 
+    /**
+     * The most recent impression of one placement to one identified viewer.
+     *
+     * <p>Used to collapse repeats. A player that remounts, a viewer who refreshes,
+     * or a client that retries all ask for the same advertisement again within
+     * seconds, and every one of those used to be a separate row an advertiser was
+     * billed for.
+     */
+    @Query("""
+            SELECT i FROM AdImpression i
+            WHERE i.placement.id = :placementId
+              AND i.viewer.id = :viewerId
+              AND i.shownAt >= :since
+            ORDER BY i.shownAt DESC
+            LIMIT 1
+            """)
+    java.util.Optional<AdImpression> findRecent(@Param("placementId") Long placementId,
+                                                @Param("viewerId") Long viewerId,
+                                                @Param("since") LocalDateTime since);
+
     @Query("""
             SELECT new org.gp14.skopia.advertising.dto.MetricTotalsRow(
                        COUNT(i), SUM(CASE WHEN i.wasClicked = TRUE THEN 1 ELSE 0 END))
@@ -32,6 +52,25 @@ public interface AdImpressionRepository extends JpaRepository<AdImpression, Long
     MetricTotalsRow totalsForCampaign(@Param("campaignId") Long campaignId,
                                       @Param("from") LocalDateTime from,
                                       @Param("to") LocalDateTime to);
+
+    /**
+     * The same totals for a whole page of campaigns, in one query.
+     *
+     * <p>{@link #totalsForCampaign} answers for one, which is what the list used
+     * to call once per row. A campaign with no impressions yet has no row here at
+     * all, so callers default rather than expecting one back per id.
+     */
+    @Query("""
+            SELECT new org.gp14.skopia.advertising.dto.CampaignTotalsRow(
+                       i.placement.advertisement.campaign.id,
+                       COUNT(i),
+                       SUM(CASE WHEN i.wasClicked = TRUE THEN 1 ELSE 0 END))
+            FROM AdImpression i
+            WHERE i.placement.advertisement.campaign.id IN :campaignIds
+            GROUP BY i.placement.advertisement.campaign.id
+            """)
+    List<org.gp14.skopia.advertising.dto.CampaignTotalsRow> totalsForCampaigns(
+            @Param("campaignIds") List<Long> campaignIds);
 
     @Query("""
             SELECT new org.gp14.skopia.advertising.dto.MetricTotalsRow(

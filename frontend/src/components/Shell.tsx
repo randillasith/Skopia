@@ -5,15 +5,14 @@ import {
   Bell, Search, Menu, X, LayoutGrid, Clapperboard, Bookmark,
   History, Sparkles, CreditCard, Flag, LifeBuoy, User, Upload, BarChart3,
   Megaphone, Inbox, Users, ShieldCheck, ScrollText, Settings, Gauge, Receipt,
-  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, Check, ListVideo,
+  MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, ListVideo,
   Compass, Flame, ListEnd,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { NOTIFICATIONS } from '@/lib/data'
 import { useLibrary } from '@/lib/library'
 import {
-  CHANNELS, DEMO_IDENTITIES, STAFF_ROLES, accountById, canStaff, describe,
-  homeFor, isCreator, moderatedChannels, ownedChannel,
+  CHANNELS, STAFF_ROLES, canStaff, describe,
+  isCreator, moderatedChannels, ownedChannel,
   type StaffRole,
 } from '@/lib/session'
 import { useSession } from '@/lib/session-context'
@@ -45,7 +44,7 @@ function GrantChip({ children, tone }: { children: React.ReactNode; tone: 'staff
 }
 
 /**
- * The account menu, and the prototype's identity switcher folded into it.
+ * The account menu.
  *
  * It lists what the signed-in account actually holds rather than a single role,
  * because the three grants are independent — see lib/session.ts. An account with
@@ -53,7 +52,7 @@ function GrantChip({ children, tone }: { children: React.ReactNode; tone: 'staff
  * should look unremarkable.
  */
 export function AccountMenu({ compact = false }: { compact?: boolean }) {
-  const { viewer, signOut, becomeDemo } = useSession()
+  const { viewer, signOut } = useSession()
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
   const own = ownedChannel(viewer)
@@ -168,44 +167,6 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
                 </MenuItem>
               </div>
 
-              {/* the prototype device, fenced off and labelled */}
-              <div className="border-t border-ink-700 bg-ink-900/60 py-1">
-                <p className="letterboard px-3.5 pb-1 pt-2 text-ink-300">
-                  Switch identity — prototype only
-                </p>
-                {/* These identities exist only in this page. Screens backed by
-                    the API will correctly find nothing for them; sign in for
-                    those. */}
-                {DEMO_IDENTITIES.map((d) => {
-                  const a = d.id ? accountById(d.id) : null
-                  const active = (viewer?.id ?? null) === d.id
-                  return (
-                    <button
-                      key={d.id ?? 'guest'}
-                      role="menuitem"
-                      onClick={() => {
-                        becomeDemo(d.id)
-                        setOpen(false)
-                        nav(d.id ? homeFor(accountById(d.id)) : '/')
-                      }}
-                      className="flex w-full items-start gap-2 px-3.5 py-1.5 text-left transition-colors hover:bg-ink-800"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={cn(
-                            'block truncate text-[13px]',
-                            active ? 'text-cyan-300' : 'text-ink-100',
-                          )}
-                        >
-                          {a ? a.name : 'Guest'}
-                        </span>
-                        <span className="block truncate text-[11px] text-ink-300">{d.caption}</span>
-                      </span>
-                      {active && <Check className="mt-0.5 size-3.5 shrink-0 text-cyan-300" />}
-                    </button>
-                  )
-                })}
-              </div>
             </motion.div>
           </>
         )}
@@ -331,7 +292,6 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
   const { viewer } = useSession()
   const { subscriptions, queue } = useLibrary()
   const nav = useNavigate()
-  const unread = NOTIFICATIONS.filter((n) => !n.read).length
   const followed = CHANNELS.filter((c) => subscriptions.includes(c.handle))
   const canUpload = isCreator(viewer)
 
@@ -452,13 +412,12 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
 
           <Link
             to="/notifications"
-            aria-label={`Notifications — ${unread} unread`}
+            aria-label="Notifications"
             className="relative rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-white"
           >
+            {/* No badge: nothing raises a notification yet, so a dot here would
+                promise something waiting that is not. */}
             <Bell className="size-5" />
-            {unread > 0 && (
-              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-cyan-400 ring-2 ring-canvas" />
-            )}
           </Link>
 
           <div className="hidden sm:block"><AccountMenu /></div>

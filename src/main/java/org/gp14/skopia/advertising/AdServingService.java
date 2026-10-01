@@ -12,6 +12,7 @@ import org.gp14.skopia.repository.VideoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -148,8 +149,37 @@ public class AdServingService {
         return record(placement, shownAgainst, viewerId, deviceType, LocalDateTime.now());
     }
 
+    /**
+     * How close together two showings of the same advertisement to the same viewer
+     * count as one.
+     *
+     * <p>A player that remounts, a refresh, or a retried request all ask again
+     * within seconds. Each used to be a row the advertiser paid for. Thirty
+     * seconds is shorter than any advertisement worth billing for and longer than
+     * any of those accidents.
+     */
+    private static final Duration SAME_SHOWING = Duration.ofSeconds(30);
+
+    /**
+     * How long after being shown an advertisement a click still belongs to it.
+     *
+     * <p>Clicks arrive from a redirect the viewer follows, so they land within
+     * seconds or minutes. A click on an impression from last week is not a viewer
+     * changing their mind; it is somebody walking the id space.
+     */
+    private static final Duration CLICK_WINDOW = Duration.ofHours(6);
+
     private AdImpression record(AdPlacement placement, Video video, Long viewerId,
                                 String deviceType, LocalDateTime at) {
+        // One showing, one row. Only for an identified viewer: two guests are
+        // indistinguishable here, so collapsing them would lose real delivery.
+        // Anonymous repeat-calling is the residual gap, noted in the module docs.
+        if (viewerId != null) {
+            var recent = impressions.findRecent(placement.getId(), viewerId, at.minus(SAME_SHOWING));
+            if (recent.isPresent()) {
+                return recent.get();
+            }
+        }
         AdImpression impression = new AdImpression();
         impression.setPlacement(placement);
         impression.setVideo(video);
@@ -172,9 +202,25 @@ public class AdServingService {
      * destination and leaves {@code clickedAt} at the first one.
      */
     @Transactional
-    public String recordClick(Long impressionId) {
+    public String recordClick(Long impressionId, Long viewerId) {
         AdImpression impression = impressions.findById(impressionId)
                 .orElseThrow(() -> AdvertisingException.notFound("Impression", impressionId));
+
+        // A click belongs to the viewer the advertisement was shown to. Without
+        // this, any id could be clicked by anybody — and since the ids are
+        // sequential, walking them is a way to bill an advertiser for clicks
+        // nobody made. An impression shown to a guest has nobody to check, so it
+        // is allowed; that is the honest limit of what this can tell.
+        Long shownTo = impression.getViewer() == null ? null : impression.getViewer().getId();
+        if (shownTo != null && !shownTo.equals(viewerId)) {
+            throw AdvertisingException.forbidden(
+                    "That advertisement was shown to somebody else.");
+        }
+        if (impression.getShownAt() != null
+                && impression.getShownAt().isBefore(LocalDateTime.now().minus(CLICK_WINDOW))) {
+            throw AdvertisingException.invalid(
+                    "That advertisement was shown too long ago to be followed now.");
+        }
 
         Advertisement ad = impression.getPlacement().getAdvertisement();
         String destination = ad.getClickUrl();

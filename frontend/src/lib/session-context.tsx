@@ -8,10 +8,10 @@
  */
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { accountById, type Account, type Viewer } from './session'
+import { type Account, type Viewer } from './session'
 import { accounts, toAccount, type SignUpInput } from './accounts'
 import {
-  SESSION_KEY, SIGNED_OUT, clearSession, readSession, writeSession,
+  clearSession, readSession, writeSession,
   type SignedSession,
 } from './auth-storage'
 
@@ -35,7 +35,6 @@ type SessionValue = {
    * screen backed by the API will find nothing for them. Kept because several
    * screens have no backend yet and need somebody to be.
    */
-  becomeDemo: (accountId: string | null) => void
 }
 
 const SessionCtx = createContext<SessionValue>({
@@ -48,7 +47,6 @@ const SessionCtx = createContext<SessionValue>({
     throw new Error('No session provider')
   },
   signOut: () => {},
-  becomeDemo: () => {},
 })
 
 export const useSession = () => useContext(SessionCtx)
@@ -60,29 +58,10 @@ export const useSession = () => useContext(SessionCtx)
  * decides anything from. On load the id is handed back to the server, which
  * answers with what the account actually is.
  */
-type Stored = SignedSession | { kind: 'demo'; id: string } | null
+type Stored = SignedSession | null
 
 function readStored(): Stored {
-  const signed = readSession()
-  if (signed) return signed
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEY)
-    if (!raw || raw === SIGNED_OUT) return null
-    const parsed = JSON.parse(raw)
-    if (parsed?.kind === 'demo' && typeof parsed.id === 'string') return parsed
-    return null
-  } catch {
-    // Private windows, blocked site data and stale formats all land here.
-    return null
-  }
-}
-
-function writeDemo(id: string) {
-  try {
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify({ kind: 'demo', id }))
-  } catch {
-    // Nothing to do — the session simply will not outlive the page.
-  }
+  return readSession()
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -95,11 +74,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = readStored()
     if (!stored) {
-      setResolving(false)
-      return
-    }
-    if ('kind' in stored && stored.kind === 'demo') {
-      setViewer(accountById(stored.id))
       setResolving(false)
       return
     }
@@ -151,11 +125,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signOut: () => {
         clearSession()
         setViewer(null)
-      },
-      becomeDemo: (id) => {
-        if (id) writeDemo(id)
-        else clearSession()
-        setViewer(id ? accountById(id) : null)
       },
     }),
     [viewer, resolving],

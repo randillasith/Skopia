@@ -6,6 +6,7 @@ import org.gp14.skopia.model.video.AccessTier;
 import org.gp14.skopia.model.video.Category;
 import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.*;
+import org.gp14.skopia.security.PasswordService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
@@ -45,6 +46,17 @@ public class AdvertisingSeedData {
     /** Mirrors {@code STAFF_ROLES.marketing} in the frontend's session model. */
     private static final String OFFICER_HANDLE = "m.madhusara";
 
+    /**
+     * The development password for every seeded account.
+     *
+     * <p>It is hashed on the way in like any other. It used to be stored as the
+     * literal string, which worked only while the login endpoint fell back to
+     * comparing plain text — once that fallback was removed, correctly, the
+     * seeded marketing officer could not sign in and the advertising console was
+     * unreachable on a fresh database.
+     */
+    private static final String PASSWORD = "skopia";
+
     private static final List<String> CATEGORIES = List.of(
             "Documentary", "Short Film", "Series", "Talk", "Music", "Learning");
 
@@ -63,14 +75,16 @@ public class AdvertisingSeedData {
                                                    ContentCreatorRepository creators,
                                                    CategoryRepository categories,
                                                    VideoRepository videos,
-                                                   AccessTierRepository tiers) {
+                                                   AccessTierRepository tiers,
+                                                   PasswordService passwords) {
         return args -> {
-            seedOfficer(users, officers);
-            seedCatalogue(users, creators, categories, videos, tiers);
+            seedOfficer(users, officers, passwords);
+            seedCatalogue(users, creators, categories, videos, tiers, passwords);
         };
     }
 
-    private ContentCreator newCreator(UserRepository users, ContentCreatorRepository creators) {
+    private ContentCreator newCreator(UserRepository users, ContentCreatorRepository creators,
+                                      PasswordService passwords) {
         String handle = "meridian";
         if (users.existsByUsername(handle)) {
             return creators.findAll().stream().findFirst().orElseThrow();
@@ -78,7 +92,7 @@ public class AdvertisingSeedData {
         ContentCreator creator = new ContentCreator();
         creator.setUsername(handle);
         creator.setEmail(handle + "@skopia.test");
-        creator.setPasswordHash("skopia");
+        creator.setPasswordHash(passwords.encode(PASSWORD));
         creator.setFirstName("Meridian");
         creator.setLastName("Films");
         creator.setAccountStatus("ACTIVE");
@@ -90,7 +104,8 @@ public class AdvertisingSeedData {
         return creators.save(creator);
     }
 
-    private void seedOfficer(UserRepository users, MarketingOfficerRepository officers) {
+    private void seedOfficer(UserRepository users, MarketingOfficerRepository officers,
+                             PasswordService passwords) {
         if (users.existsByUsername(OFFICER_HANDLE)) {
             return;
         }
@@ -98,7 +113,7 @@ public class AdvertisingSeedData {
         officer.setUsername(OFFICER_HANDLE);
         officer.setEmail(OFFICER_HANDLE + "@skopia.test");
         // Development credentials only; AuthController accepts a plain-text match.
-        officer.setPasswordHash("skopia");
+        officer.setPasswordHash(passwords.encode(PASSWORD));
         officer.setFirstName("Madhusara");
         officer.setLastName("J. P. M.");
         officer.setAccountStatus("ACTIVE");
@@ -119,7 +134,8 @@ public class AdvertisingSeedData {
      */
     private void seedCatalogue(UserRepository users, ContentCreatorRepository creators,
                                CategoryRepository categories, VideoRepository videos,
-                               AccessTierRepository tiers) {
+                               AccessTierRepository tiers,
+                               PasswordService passwords) {
         if (categories.count() > 0 || videos.count() > 0) {
             return;
         }
@@ -128,7 +144,7 @@ public class AdvertisingSeedData {
         // catalogue query reaches through v.creator.id, which inner-joins, so a
         // creatorless video is invisible to browse and therefore to advertising.
         ContentCreator creator = creators.findAll().stream().findFirst()
-                .orElseGet(() -> newCreator(users, creators));
+                .orElseGet(() -> newCreator(users, creators, passwords));
 
         AccessTier free = tiers.findAll().stream().findFirst().orElseGet(() -> {
             AccessTier tier = new AccessTier();
