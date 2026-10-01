@@ -46,8 +46,8 @@ public class SecurityConfig {
                                 "/api/advertising/**", "/api/ads/**")
                                 .hasAnyRole("MARKETING_OFFICER", "ADMINISTRATOR")
 
-                        .requestMatchers(HttpMethod.GET, "/api/videos/**", "/api/placements/**", "/uploads/**").permitAll()
-                        .requestMatchers("/api/videos/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/videos", "/api/videos/**", "/api/placements", "/api/placements/**", "/uploads/**").permitAll()
+                        .requestMatchers("/api/videos", "/api/videos/**").authenticated()
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/error").permitAll()
                         .requestMatchers("/api/**").permitAll()
                         .anyRequest().permitAll())

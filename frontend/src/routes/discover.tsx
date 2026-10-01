@@ -256,7 +256,7 @@ export function Trending() {
                 </span>
                 <Link to={`/watch/${v.id}`} className="w-32 shrink-0 overflow-hidden rounded-xs sm:w-44">
                   <span className="block aspect-video">
-                    <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                    <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact lettering={false} />
                   </span>
                 </Link>
                 <div className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ export function Queue() {
                   </span>
                   <Link to={`/watch/${v.id}`} className="w-28 shrink-0 overflow-hidden rounded-xs sm:w-36">
                     <span className="block aspect-video">
-                      <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                      <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact lettering={false} />
                     </span>
                   </Link>
                   <div className="min-w-0 flex-1">

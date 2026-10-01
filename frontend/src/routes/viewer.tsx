@@ -46,7 +46,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
     <article className="group min-w-0">
       <Lightbox interactive>
         <Link to={`/watch/${v.id}`} className="block aspect-video" aria-label={`Play ${v.title}`}>
-          <PosterPlate title={v.title} seed={v.seed} category={v.category} compact />
+          <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact />
           {typeof v.progress === 'number' && (
             <span className="absolute inset-x-0 bottom-0 block h-0.5 bg-ink-700">
               <span className="block h-full bg-cyan-400" style={{ width: `${v.progress * 100}%` }} />
@@ -246,6 +246,7 @@ export function Browse() {
                     creator={lead.creator}
                     runtime={lead.runtime}
                     seed={lead.seed} category={lead.category}
+                    thumbnailUrl={lead.thumbnailUrl}
                   />
                 </Link>
               </Lightbox>
@@ -307,7 +308,7 @@ export function Browse() {
                       >
                         <span className="w-24 shrink-0 overflow-hidden rounded-xs">
                           <span className="block aspect-video">
-                            <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                            <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact lettering={false} />
                           </span>
                         </span>
                         <span className="min-w-0 flex-1">
@@ -1068,7 +1069,7 @@ export function Watch() {
                     <Link to={`/watch/${r.id}`} className="group flex gap-3">
                       <span className="w-32 shrink-0 overflow-hidden rounded-xs">
                         <span className="block aspect-video">
-                          <PosterPlate title={r.title} seed={r.seed} category={r.category} compact lettering={false} />
+                          <PosterPlate title={r.title} seed={r.seed} category={r.category} thumbnailUrl={r.thumbnailUrl} compact lettering={false} />
                         </span>
                       </span>
                       <span className="min-w-0">
@@ -1280,7 +1281,7 @@ export function Watchlist() {
                   </span>
                   <Link to={`/watch/${v.id}`} className="w-32 shrink-0 overflow-hidden rounded-xs sm:w-40">
                     <span className="block aspect-video">
-                      <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                      <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact lettering={false} />
                     </span>
                   </Link>
                   <div className="min-w-0 flex-1">

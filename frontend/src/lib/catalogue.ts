@@ -147,7 +147,7 @@ export function toVideo(row: ServerVideo): Video {
     progress: duration > 0 && position > 0 ? Math.min(1, position / duration) : undefined,
     seed: seedOf(row.id),
     mediaUrl: row.videoUrl ?? null,
-    thumbnailUrl: row.thumbnailUrl ?? null,
+    thumbnailUrl: row.thumbnailUrl || `https://picsum.photos/seed/${seedOf(row.id) * 37 + 11}/640/360`,
     creatorId: row.creatorId ?? null,
     categoryId: row.categoryId ?? null,
     liked: row.liked === true,

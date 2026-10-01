@@ -292,6 +292,7 @@ export function Player({
             runtime={video.runtime}
             seed={video.seed}
             category={video.category}
+            thumbnailUrl={video.thumbnailUrl}
           />
           <div className="absolute inset-0 bg-ink-950/45" />
         </>

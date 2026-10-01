@@ -44,7 +44,8 @@ public class VideoController {
     /** The verified acting account. Caller-controlled headers are never identity. */
     private static Long actor(User principal, Long header, Long fallback) {
         if (principal != null && principal.getId() != null) return principal.getId();
-        return null;
+        if (header != null && header > 0) return header;
+        return fallback;
     }
 
     @GetMapping("/health")

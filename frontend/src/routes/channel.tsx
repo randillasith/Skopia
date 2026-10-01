@@ -212,6 +212,7 @@ export function ChannelPage() {
                         runtime={featured.runtime}
                         seed={featured.seed}
                         category={featured.category}
+                        thumbnailUrl={featured.thumbnailUrl}
                       />
                     </Link>
                   </Lightbox>

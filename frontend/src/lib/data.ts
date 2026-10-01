@@ -75,7 +75,7 @@ export const GENRES = [
   'Comedy',
 ] as const
 
-export const VIDEOS: Video[] = [
+const RAW_VIDEOS: Video[] = [
   {
     id: 'v-1041',
     title: 'The Long Exposure',
@@ -318,6 +318,11 @@ export const VIDEOS: Video[] = [
   { id: 'v-1083', title: 'The Slow Repair', creator: 'Northbound', category: 'Learning', genre: 'Technology', runtime: '27:19', published: '2026-02-27', views: 133840, likes: 15180, comments: 1074, premium: false, billing: 'HELD OVER', captions: ['English', 'Sinhala'], synopsis: 'A watchmaker takes eight hours over a movement worth less than her time, and explains why.', seed: 41 },
   { id: 'v-1084', title: 'Draft — Untitled Rough Cut', creator: 'Harbour Studio', category: 'Documentary', genre: 'History', runtime: '41:03', published: '2026-09-17', views: 0, likes: 0, comments: 0, premium: false, billing: 'IN REVIEW', captions: [], synopsis: 'Submitted for review. Not visible to viewers until a decision is recorded.', seed: 42 },
 ]
+
+export const VIDEOS: Video[] = RAW_VIDEOS.map((v) => ({
+  ...v,
+  thumbnailUrl: v.thumbnailUrl || `https://picsum.photos/seed/${v.seed * 37 + 11}/640/360`,
+}))
 
 export const byId = (id: string) => VIDEOS.find((v) => v.id === id)
 

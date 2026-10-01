@@ -165,7 +165,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
         <Lightbox interactive>
           <span className="relative block aspect-video">
             {cover ? (
-              <PosterPlate title={cover.title} seed={cover.seed} category={cover.category} compact lettering={false} />
+              <PosterPlate title={cover.title} seed={cover.seed} category={cover.category} thumbnailUrl={cover.thumbnailUrl} compact lettering={false} />
             ) : (
               <span className="block size-full bg-ink-850" />
             )}
@@ -230,6 +230,7 @@ export function Playlists() {
                         title={byId(watchLater[0])!.title}
                         seed={byId(watchLater[0])!.seed}
                         category={byId(watchLater[0])!.category}
+                        thumbnailUrl={byId(watchLater[0])!.thumbnailUrl}
                         compact
                         lettering={false}
                       />
@@ -334,7 +335,7 @@ export function PlaylistDetail() {
             <Lightbox>
               <span className="block aspect-video">
                 {items[0] ? (
-                  <PosterPlate title={items[0].title} seed={items[0].seed} category={items[0].category} compact lettering={false} />
+                  <PosterPlate title={items[0].title} seed={items[0].seed} category={items[0].category} thumbnailUrl={items[0].thumbnailUrl} compact lettering={false} />
                 ) : (
                   <span className="block size-full bg-ink-850" />
                 )}
@@ -406,7 +407,7 @@ export function PlaylistDetail() {
                     </span>
                     <Link to={`/watch/${v.id}`} className="w-32 shrink-0 overflow-hidden rounded-xs sm:w-40">
                       <span className="block aspect-video">
-                        <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                        <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact lettering={false} />
                       </span>
                     </Link>
                     <div className="min-w-0 flex-1">

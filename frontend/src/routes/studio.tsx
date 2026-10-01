@@ -121,7 +121,7 @@ export function StudioLibrary() {
                   <Link to={`/studio/video/${v.id}`} className="flex items-center gap-3 group">
                     <span className="w-16 shrink-0 overflow-hidden rounded-xs">
                       <span className="block aspect-video">
-                        <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
+                        <PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact lettering={false} />
                       </span>
                     </span>
                     <span className="font-marquee font-bold text-white group-hover:text-violet-200">
@@ -466,7 +466,7 @@ export function StudioUpload() {
                 <div className="flex flex-col gap-5 sm:flex-row">
                   <Lightbox className="w-full shrink-0 sm:w-56">
                     <span className="block aspect-video">
-                      <PosterPlate title={title} seed={title.length + 2} compact />
+                      <PosterPlate title={title} seed={title.length + 2} compact thumbnailUrl={posterUrl} />
                     </span>
                   </Lightbox>
                   <div className="min-w-0">
@@ -672,7 +672,7 @@ export function StudioEdit() {
           <div>
             <p className="letterboard mb-2 text-ink-300">Thumbnail</p>
             <Lightbox interactive>
-              <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} category={v.category} compact /></span>
+              <span className="block aspect-video"><PosterPlate title={v.title} seed={v.seed} category={v.category} thumbnailUrl={v.thumbnailUrl} compact /></span>
             </Lightbox>
             <Button size="sm" className="mt-2.5 w-full" icon={<Upload className="size-4" />}>Replace</Button>
           </div>

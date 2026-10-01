@@ -152,6 +152,7 @@ export function PosterPlate({
   runtime,
   seed,
   category,
+  thumbnailUrl,
   className,
   compact = false,
   lettering = true,
@@ -162,12 +163,38 @@ export function PosterPlate({
   seed: number
   /** Biases the composition. Omit for an even spread across all twelve. */
   category?: string
+  thumbnailUrl?: string | null
   className?: string
   /** Drops the studio/runtime line but keeps the title. */
   compact?: boolean
   /** Ground only. Use on thumbnails under ~140px, where type cannot be read. */
   lettering?: boolean
 }) {
+  const [primaryError, setPrimaryError] = useState(false)
+  const [fallbackError, setFallbackError] = useState(false)
+
+  const seedThumbnail = seed ? `https://picsum.photos/seed/${seed * 37 + 11}/640/360` : null
+  const currentSrc = (thumbnailUrl && !primaryError) ? thumbnailUrl : (!fallbackError ? seedThumbnail : null)
+
+  if (currentSrc) {
+    return (
+      <div className={cn('relative size-full overflow-hidden bg-ink-950', className)}>
+        <img
+          src={currentSrc}
+          alt={title}
+          className="size-full object-cover"
+          onError={() => {
+            if (thumbnailUrl && !primaryError) {
+              setPrimaryError(true)
+            } else {
+              setFallbackError(true)
+            }
+          }}
+        />
+      </div>
+    )
+  }
+
   const r = rng(seed)
   const forms = (category && CATEGORY_FORMS[category]) || null
   const form = forms ? forms[seed % forms.length] : seed % 12

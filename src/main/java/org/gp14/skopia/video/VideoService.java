@@ -145,7 +145,7 @@ public class VideoService {
             finalThumbnailUrl = saveUploadedFile(thumbnailFile, false);
         }
         if (finalThumbnailUrl == null || finalThumbnailUrl.isBlank()) {
-            throw new IllegalArgumentException("Thumbnail file or URL is required");
+            finalThumbnailUrl = "/uploads/default-thumbnail.jpg";
         }
 
         Video video = new Video();
@@ -548,7 +548,9 @@ public class VideoService {
                 .title(v.getTitle())
                 .description(v.getDescription())
                 .videoUrl(v.getVideoUrl())
-                .thumbnailUrl(v.getThumbnailUrl())
+                .thumbnailUrl((v.getThumbnailUrl() != null && !v.getThumbnailUrl().isBlank() && !v.getThumbnailUrl().contains("default-thumbnail.jpg")) 
+                        ? v.getThumbnailUrl() 
+                        : "https://picsum.photos/seed/" + (v.getId() != null ? v.getId() : 1) + "/640/360")
                 .durationSeconds(v.getDuration() != null ? v.getDuration() : 0)
                 .viewCount(v.getViewCount() != null ? v.getViewCount() : 0L)
                 .accessType(accessType)
@@ -627,7 +629,7 @@ public class VideoService {
 
             String fileName = UUID.randomUUID().toString() + extension;
             Path targetPath = UPLOAD_DIR.resolve(fileName);
-            Files.copy(file.getInputStream(), targetPath);
+            Files.copy(file.getInputStream(), targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             return "/uploads/" + fileName;
         } catch (IOException e) {
             throw new RuntimeException("Failed to save uploaded file", e);

@@ -147,6 +147,7 @@ export function Lobby() {
                   creator={headline.creator}
                   runtime={headline.runtime}
                   seed={headline.seed} category={headline.category}
+                  thumbnailUrl={headline.thumbnailUrl}
                 />
               </Link>
             </Lightbox>
@@ -249,7 +250,7 @@ function AuthFrame({
       </div>
       <aside className="relative hidden overflow-hidden border-l border-ink-800 bg-inset lg:block">
         <div className="absolute inset-0 opacity-70">
-          <PosterPlate title="" seed={3} compact />
+          <PosterPlate title="" seed={3} compact thumbnailUrl={showing?.thumbnailUrl} />
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/40 to-transparent" />
         {showing && (
