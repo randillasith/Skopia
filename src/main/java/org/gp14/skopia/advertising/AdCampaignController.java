@@ -5,6 +5,8 @@ import org.gp14.skopia.advertising.dto.CampaignRequest;
 import org.gp14.skopia.advertising.dto.CampaignResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.gp14.skopia.model.user.User;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,13 +15,12 @@ import java.util.Map;
 /**
  * Campaign management (FR5 — create, schedule and assign ad campaigns).
  *
- * <p>Every endpoint identifies its caller through {@code X-User-Id}, the same
- * convention the rest of the platform's API uses, and {@link AdvertisingAccess}
- * decides whether that account may be here.
+ * <p>The caller is the account behind the request's bearer token. The filter
+ * chain refuses anyone without the marketing or administrator role before these
+ * methods run; {@link AdvertisingAccess} checks again and says why.
  */
 @RestController
 @RequestMapping("/api/ad-campaigns")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AdCampaignController {
 
     private final AdCampaignService campaigns;
@@ -32,67 +33,67 @@ public class AdCampaignController {
 
     @GetMapping
     public List<CampaignResponse> list(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) CampaignStatus status) {
-        return campaigns.list(actorId, search, status);
+        return campaigns.list(AdvertisingAccess.idOf(principal), search, status);
     }
 
     @GetMapping("/{id}")
     public CampaignResponse get(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return campaigns.get(actorId, id);
+        return campaigns.get(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping
     public ResponseEntity<CampaignResponse> create(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @Valid @RequestBody CampaignRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(campaigns.create(actorId, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(campaigns.create(AdvertisingAccess.idOf(principal), request));
     }
 
     @PutMapping("/{id}")
     public CampaignResponse update(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @Valid @RequestBody CampaignRequest request) {
-        return campaigns.update(actorId, id, request);
+        return campaigns.update(AdvertisingAccess.idOf(principal), id, request);
     }
 
     @PostMapping("/{id}/confirm")
     public CampaignResponse confirm(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return campaigns.confirm(actorId, id);
+        return campaigns.confirm(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping("/{id}/pause")
     public CampaignResponse pause(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return campaigns.pause(actorId, id);
+        return campaigns.pause(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping("/{id}/resume")
     public CampaignResponse resume(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return campaigns.resume(actorId, id);
+        return campaigns.resume(AdvertisingAccess.idOf(principal), id);
     }
 
     @PostMapping("/{id}/archive")
     public CampaignResponse archive(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        return campaigns.archive(actorId, id);
+        return campaigns.archive(AdvertisingAccess.idOf(principal), id);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id) {
-        campaigns.delete(actorId, id);
+        campaigns.delete(AdvertisingAccess.idOf(principal), id);
         return ResponseEntity.noContent().build();
     }
 
@@ -105,8 +106,8 @@ public class AdCampaignController {
      */
     @PostMapping("/sweep-expired")
     public Map<String, Object> sweep(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId) {
-        campaigns.list(actorId, null, null); // access check, and it is cheap
+            @AuthenticationPrincipal User principal) {
+        campaigns.list(AdvertisingAccess.idOf(principal), null, null); // access check, and it is cheap
         return Map.of("updated", expiry.run());
     }
 }

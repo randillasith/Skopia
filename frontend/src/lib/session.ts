@@ -100,10 +100,12 @@ export type Account = {
   channelId: string | null
   /**
    * The account's id on the server, which is what every API call identifies the
-   * caller by. Null for the prototype identities below, which exist only in this
-   * page and so cannot act on the server's behalf.
+   * caller by.
    */
   userId?: number | null
+  /** The legal name, kept apart from `name`, which is what others see. */
+  firstName?: string | null
+  lastName?: string | null
   /** The server calls this account a content creator, whatever it owns here. */
   isContentCreator?: boolean
   isPremium?: boolean
@@ -167,25 +169,6 @@ export function homeFor(v: Viewer): string {
   }
   return '/browse'
 }
-
-/* ------------------------------------------------ the prototype identities */
-
-/**
- * Sign-in is not wired to a backend, so the prototype switches between real
- * account shapes instead of between roles. The list is chosen to show that the
- * three grants are independent: u-1003 moderates a channel without owning one,
- * u-1007 both watches and moderates, and no staff role implies a channel.
- */
-export const DEMO_IDENTITIES: { id: string | null; caption: string }[] = [
-  { id: null, caption: 'Signed out — browsing as a guest' },
-  { id: 'u-1007', caption: 'Ordinary account, moderates one channel' },
-  { id: 'u-1008', caption: 'Ordinary account, suspended' },
-  { id: 'u-1005', caption: 'Owns a channel' },
-  { id: 'u-1003', caption: 'Moderates a channel, owns none' },
-  { id: 'u-1004', caption: 'Staff — advertising' },
-  { id: 'u-1002', caption: 'Staff — complaints' },
-  { id: 'u-1001', caption: 'Staff — everything' },
-]
 
 /* ------------------------------------------------------- the grants, shown */
 

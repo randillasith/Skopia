@@ -92,6 +92,8 @@ export function toAccount(server: ServerAccount): Account {
       [server.firstName, server.lastName].filter(Boolean).join(' ').trim() ||
       server.username,
     handle: server.username,
+    firstName: server.firstName,
+    lastName: server.lastName,
     email: server.email,
     joined: '',
     lastSeen: 'now',
@@ -280,6 +282,8 @@ export type UpdateStaffInput = Partial<Omit<CreateStaffInput, 'username' | 'emai
 
 /** What an account holder can change about themselves. */
 export type ProfileChanges = {
+  firstName?: string
+  lastName?: string
   displayName?: string
   email?: string
   bio?: string

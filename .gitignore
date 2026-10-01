@@ -31,8 +31,29 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Playwright MCP scratch output
+.playwright-mcp/
+
+# macOS
+.DS_Store
+
+# Local agent tooling and dev-server launcher config
+.claude/
+
+# Impeccable design-tool scratch and local review captures
+.impeccable/
+
+# Local configuration. Every machine points at its own database on its own port,
+# so the real file is untracked — copy application.properties.example over it and
+# edit. application-local.properties is the Spring-profile alternative.
 src/main/resources/application.properties
 src/main/resources/application-local.properties
+
+# Uploaded media is runtime data, not source. Advertisement creative (FR5) lands
+# in uploads/ads/. The two files already tracked here stay tracked — git keeps
+# what it is already following — so this only stops new ones being committed.
+uploads/
 src/main/resources/application.properties.backup
 .env
 *.env

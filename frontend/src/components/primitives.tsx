@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { X, ChevronDown, Check, Search, Inbox } from 'lucide-react'
+import { X, ChevronDown, Check, Search, Inbox, Construction } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 const EASE = [0.16, 1, 0.3, 1] as const
@@ -589,5 +589,43 @@ export function Section({
       </div>
       {children}
     </section>
+  )
+}
+
+/* --------------------------------------------------------- not built yet */
+
+/**
+ * A module whose screen exists but whose server side does not.
+ *
+ * <p>The alternative was a screen full of invented plans, payments and
+ * notifications with controls that quietly did nothing when pressed. Showing
+ * fabricated rows as though they were the account's own is worse than showing
+ * none: somebody eventually reads one as a fact. This says plainly what the
+ * screen will do and that it cannot do it yet, and offers no control that
+ * cannot act.
+ */
+export function NotAvailableYet({
+  what,
+  body,
+  icon,
+  action,
+}: {
+  /** The module, named as the person would name it. */
+  what: string
+  /** What the screen will show once it has something to read. */
+  body: string
+  icon?: React.ReactNode
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="rounded-lg border border-ink-700 bg-ink-850">
+      <div className="flex flex-col items-center px-6 py-14 text-center">
+        <div className="mb-3 text-ink-300">{icon ?? <Construction className="size-7" />}</div>
+        <p className="letterboard mb-2 text-ink-400">Not available yet</p>
+        <h3 className="font-marquee text-[18px] font-bold text-white">{what}</h3>
+        <p className="mt-2 max-w-md text-[13.5px] leading-relaxed text-ink-300">{body}</p>
+        {action && <div className="mt-5">{action}</div>}
+      </div>
+    </div>
   )
 }

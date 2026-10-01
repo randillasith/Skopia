@@ -11,6 +11,35 @@ import java.util.List;
 @Repository
 public interface VideoRepository extends JpaRepository<Video, Long> {
     List<Video> findByCategoryId(Long categoryId);
+
+    /**
+     * How many titles sit in each category, in one query.
+     *
+     * <p>The targeting picker shows a count beside every category. Asking per
+     * category meant a query each, and asking by loading the titles meant loading
+     * the catalogue to call {@code .size()} on it.
+     */
+    @Query("""
+            SELECT v.category.id, COUNT(v) FROM Video v
+            WHERE v.category.id IS NOT NULL
+            GROUP BY v.category.id
+            """)
+    List<Object[]> countByCategory();
+
+    /**
+     * Titles matching a search, capped by the database rather than in memory.
+     *
+     * <p>An empty needle matches everything, which is what an unfiltered picker
+     * wants — but it wants the first page of it, not the whole catalogue.
+     */
+    @Query("""
+            SELECT v FROM Video v
+            LEFT JOIN FETCH v.category
+            WHERE :needle = '' OR LOWER(v.title) LIKE CONCAT('%', :needle, '%')
+            ORDER BY v.title ASC
+            """)
+    List<Video> searchForTargeting(@Param("needle") String needle,
+                                   org.springframework.data.domain.Pageable page);
     List<Video> findByCreatorId(Long creatorId);
     List<Video> findByTitleContainingIgnoreCase(String titleKeyword);
     List<Video> findByVideoStatus(String videoStatus);

@@ -2,7 +2,7 @@ package org.gp14.skopia.advertising;
 
 import org.gp14.skopia.advertising.dto.CampaignRequest;
 import org.gp14.skopia.advertising.dto.CampaignResponse;
-import org.gp14.skopia.advertising.dto.MetricTotalsRow;
+import org.gp14.skopia.advertising.dto.CampaignTotalsRow;
 import org.gp14.skopia.advertising.dto.PlacementResponse;
 import org.gp14.skopia.model.advertisement.AdCampaign;
 import org.gp14.skopia.model.user.MarketingOfficer;
@@ -18,7 +18,9 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Campaign management: the booking, its window, and the statuses it moves through.
@@ -69,9 +71,36 @@ public class AdCampaignService {
         // since text matching cannot drift.
         List<AdCampaign> rows = campaigns.search(needle, null);
 
-        return rows.stream()
+        List<AdCampaign> shown = rows.stream()
                 .filter(c -> status == null || c.effectiveStatus(now) == status)
-                .map(this::toResponse)
+                .toList();
+        if (shown.isEmpty()) {
+            return List.of();
+        }
+
+        // Everything the rows need, fetched for all of them at once. Building each
+        // response on its own ran three queries per campaign — the delivery totals,
+        // the placements and the advertisements — which is fine for the handful a
+        // demo has and is hundreds of round trips for a year of bookings.
+        List<Long> ids = shown.stream().map(AdCampaign::getId).toList();
+
+        Map<Long, CampaignTotalsRow> totals = impressions.totalsForCampaigns(ids).stream()
+                .collect(Collectors.toMap(CampaignTotalsRow::campaignId, r -> r));
+
+        Map<Long, List<PlacementResponse>> targets = placements.findForCampaigns(ids).stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getAdvertisement().getCampaign().getId(),
+                        Collectors.mapping(placementService::toResponse, Collectors.toList())));
+
+        Map<Long, Long> adCounts = advertisements.findByCampaignIdIn(ids).stream()
+                .collect(Collectors.groupingBy(
+                        ad -> ad.getCampaign().getId(), Collectors.counting()));
+
+        return shown.stream()
+                .map(c -> toResponse(c, now,
+                        totals.get(c.getId()),
+                        targets.getOrDefault(c.getId(), List.of()),
+                        adCounts.getOrDefault(c.getId(), 0L).intValue()))
                 .toList();
     }
 
@@ -98,7 +127,7 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse update(Long actorId, Long id, CampaignRequest request) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         checkWindow(request.startDate(), request.endDate());
 
         if (campaign.getCampaignStatus() == CampaignStatus.ARCHIVED) {
@@ -119,10 +148,29 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse confirm(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
+        // Confirming is the draft-to-booked step and nothing else. Without this a
+        // paused campaign could be restarted by confirming it, which skips the
+        // check that resume makes, and an archived one could be brought back.
+        if (campaign.getCampaignStatus() != CampaignStatus.DRAFT) {
+            throw AdvertisingException.conflict(switch (campaign.getCampaignStatus()) {
+                case PAUSED -> "That campaign is paused. Resume it rather than confirming it again.";
+                case ARCHIVED -> "An archived campaign cannot be confirmed.";
+                default -> "That campaign is already confirmed.";
+            });
+        }
         if (advertisements.findByCampaignId(id).isEmpty()) {
             throw AdvertisingException.conflict(
                     "Add at least one advertisement before confirming the campaign.");
+        }
+        // Every advertisement on a campaign about to run needs somewhere to run.
+        // Confirming without placements books delivery that cannot happen, and the
+        // officer finds out days later from a report showing nothing.
+        if (advertisements.findByCampaignId(id).stream()
+                .noneMatch(ad -> !placements.findByAdvertisementId(ad.getId()).isEmpty())) {
+            throw AdvertisingException.conflict(
+                    "Target at least one title or category before confirming — an advertisement "
+                            + "with no placement is never delivered.");
         }
         if (!LocalDateTime.now().isBefore(campaign.getEndDate())) {
             throw AdvertisingException.conflict(
@@ -135,7 +183,7 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse pause(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         CampaignStatus now = campaign.effectiveStatus(LocalDateTime.now());
         if (!now.servable()) {
             throw AdvertisingException.conflict("Only a running or scheduled campaign can be paused.");
@@ -153,7 +201,7 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse resume(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         if (campaign.getCampaignStatus() != CampaignStatus.PAUSED) {
             throw AdvertisingException.conflict("That campaign is not paused.");
         }
@@ -175,7 +223,10 @@ public class AdCampaignService {
     @Transactional
     public CampaignResponse archive(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
+        if (campaign.getCampaignStatus() == CampaignStatus.ARCHIVED) {
+            throw AdvertisingException.conflict("That campaign is already archived.");
+        }
         campaign.setCampaignStatus(CampaignStatus.ARCHIVED);
         return toResponse(campaigns.save(campaign));
     }
@@ -189,7 +240,7 @@ public class AdCampaignService {
     @Transactional
     public void delete(Long actorId, Long id) {
         access.require(actorId);
-        AdCampaign campaign = load(id);
+        AdCampaign campaign = loadOwned(actorId, id);
         if (campaign.getCampaignStatus() != CampaignStatus.DRAFT) {
             throw AdvertisingException.conflict(
                     "Only a draft can be deleted. Archive this campaign instead — its recorded "
@@ -204,6 +255,21 @@ public class AdCampaignService {
 
     AdCampaign load(Long id) {
         return campaigns.findById(id).orElseThrow(() -> AdvertisingException.notFound("Campaign", id));
+    }
+
+    /**
+     * Load a campaign this caller may change.
+     *
+     * <p>Reading is open to every officer — the console shows one list and that is
+     * useful. Changing is not: holding the marketing role says you may run
+     * advertising, not that you may edit a colleague's booking. An administrator
+     * passes, because clearing up after a departed officer is their job.
+     */
+    private AdCampaign loadOwned(Long actorId, Long id) {
+        AdCampaign campaign = load(id);
+        access.requireOwner(actorId, campaign.getCreatedBy() == null ? null
+                : campaign.getCreatedBy().getId(), "campaign");
+        return campaign;
     }
 
     private void apply(AdCampaign campaign, CampaignRequest request) {
@@ -221,19 +287,28 @@ public class AdCampaignService {
         }
     }
 
+    /** One campaign, fetching what it needs. Used where there is only one. */
     CampaignResponse toResponse(AdCampaign c) {
         LocalDateTime now = LocalDateTime.now();
-        MetricTotalsRow totals = impressions.totalsForCampaign(c.getId(), c.getCreatedAt() == null
-                ? LocalDateTime.of(1970, 1, 1, 0, 0) : c.getCreatedAt().minusYears(1), now.plusYears(1));
+        List<Long> id = List.of(c.getId());
+        return toResponse(c, now,
+                impressions.totalsForCampaigns(id).stream().findFirst().orElse(null),
+                placements.findForCampaigns(id).stream().map(placementService::toResponse).toList(),
+                advertisements.findByCampaignId(c.getId()).size());
+    }
+
+    /** One campaign, from figures already fetched for the whole page. */
+    private CampaignResponse toResponse(AdCampaign c, LocalDateTime now,
+                                        CampaignTotalsRow totals,
+                                        List<PlacementResponse> placementsForCampaign,
+                                        int adCount) {
         long shown = totals == null ? 0 : totals.impressions();
         long clicked = totals == null ? 0 : totals.clickCount();
 
         Set<String> targets = new LinkedHashSet<>();
-        List<PlacementResponse> all = placements.findByAdvertisementCampaignId(c.getId()).stream()
-                .map(placementService::toResponse)
+        placementsForCampaign.stream()
                 .sorted(Comparator.comparing(PlacementResponse::targetLabel))
-                .toList();
-        all.forEach(p -> targets.add(p.targetLabel()));
+                .forEach(p -> targets.add(p.targetLabel()));
 
         MarketingOfficer owner = c.getCreatedBy();
         return new CampaignResponse(
@@ -249,7 +324,7 @@ public class AdCampaignService {
                 owner == null ? null : displayName(owner),
                 c.getCreatedAt(),
                 c.getUpdatedAt(),
-                advertisements.findByCampaignId(c.getId()).size(),
+                adCount,
                 List.copyOf(targets),
                 shown,
                 clicked,

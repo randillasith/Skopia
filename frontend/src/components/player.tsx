@@ -602,15 +602,6 @@ export function Player({
         </div>
       )}
 
-      {/* the demo hook, kept out of the transport so it is never mistaken for one */}
-      {!failed && !ad && (
-        <button
-          onClick={() => setFailed(true)}
-          className="absolute right-3 top-3 z-20 rounded-xs bg-ink-950/70 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-300 backdrop-blur transition-colors hover:text-white"
-        >
-          Demo failure
-        </button>
-      )}
     </div>
   )
 }

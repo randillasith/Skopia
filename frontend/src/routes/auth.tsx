@@ -355,6 +355,8 @@ export function Login() {
 export function Signup() {
   const nav = useNavigate()
   const { signUp } = useSession()
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [name, setName] = useState('')
   const [handle, setHandle] = useState('')
   const [email, setEmail] = useState('')
@@ -384,6 +386,7 @@ export function Signup() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     const clean = handle.trim().replace(/^@/, '')
+    if (!firstName.trim()) return setErr('Enter your first name.')
     if (clean.length < 3) return setErr('Pick a handle of at least three characters.')
     if (!email.includes('@')) return setErr('Enter an email address we can reach you at.')
     if (pw.length < 8) return setErr('Use a password of at least eight characters.')
@@ -395,7 +398,12 @@ export function Signup() {
         username: clean,
         email: email.trim(),
         password: pw,
-        displayName: name.trim() || clean,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        // A display name is what others see; the legal name is not. Falling back
+        // to the first name rather than the handle is the kinder default, and
+        // the profile page can change it later.
+        displayName: name.trim() || firstName.trim() || clean,
         roleType: creator ? 'CONTENT_CREATOR' : 'REGISTERED_VIEWER',
       })
       nav('/onboarding')
@@ -420,11 +428,29 @@ export function Signup() {
       }
     >
       <form className="space-y-4" onSubmit={submit} noValidate>
-        <Field label="Display name" required>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="First name" required>
+            <Input
+              value={firstName}
+              placeholder="Madhusara"
+              autoComplete="given-name"
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+          </Field>
+          <Field label="Last name">
+            <Input
+              value={lastName}
+              placeholder="Jayasinghe"
+              autoComplete="family-name"
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Display name" hint="Defaults to your first name">
           <Input
             value={name}
             placeholder="How you appear on comments"
-            autoComplete="name"
+            autoComplete="nickname"
             onChange={(e) => setName(e.target.value)}
           />
         </Field>

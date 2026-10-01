@@ -6,14 +6,14 @@ import {
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, Toggle, EmptyState,
-  Modal, Section, Avatar, Meter, useToast, Tabs,
+  Modal, Section, Avatar, Meter, useToast, NotAvailableYet,
 } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, Letterboard } from '@/components/world'
 import { Player, ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { AdSlot, useBackendVideoId } from '@/components/AdSlot'
+import { AdSlot } from '@/components/AdSlot'
 import {
-  GENRES, NOTIFICATIONS, fmt, clock, seconds, isVerified, tagsFor, type Video,
+  GENRES, fmt, clock, seconds, isVerified, tagsFor, type Video,
 } from '@/lib/data'
 import { useCatalogue, useVideo, useVideoSearch, useComments } from '@/lib/useCatalogue'
 import { catalogue, videoIdOf } from '@/lib/catalogue'
@@ -613,10 +613,12 @@ export function Watch() {
   const [autoplay, setAutoplay] = useState(true)
   const [at, setAt] = useState(0)
   // FR5: the break before the feature is a real advertisement, chosen by the
-  // serving engine from what is booked against this title. `undefined` means
-  // still resolving, which is why the break is not ended on a falsy id.
+  // serving engine from what is booked against this title. The id is the one the
+  // catalogue already gave us — this used to search the API by title to find it
+  // back, from when the page rendered placeholder titles that had no id of their
+  // own.
   const [adShowing, setAdShowing] = useState(true)
-  const backendVideoId = useBackendVideoId(v?.title)
+  const backendVideoId = numericId
   const [comment, setComment] = useState('')
   const [order, setOrder] = useState<'top' | 'new'>('top')
 
@@ -1491,70 +1493,21 @@ export function ForYou() {
 /* =========================================================== notifications */
 
 export function Notifications() {
-  const nav = useNavigate()
-  const [items, setItems] = useState(NOTIFICATIONS)
-  const [tab, setTab] = useState('all')
-  const shown = tab === 'all' ? items : items.filter((i) => !i.read)
-
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
-            Notifications
-          </h1>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setItems((x) => x.map((i) => ({ ...i, read: true })))}>
-              Mark all read
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => nav('/settings/notifications')}>
-              Preferences
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <Tabs
-            value={tab}
-            onChange={setTab}
-            tabs={[
-              { id: 'all', label: 'All', count: items.length },
-              { id: 'unread', label: 'Unread', count: items.filter((i) => !i.read).length },
-            ]}
+        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+          Notifications
+        </h1>
+        <div className="mt-7">
+          <NotAvailableYet
+            what="Notifications"
+            icon={<Bell className="size-7" />}
+            body="New titles from channels you follow, the outcome of reports you filed, and
+              platform announcements will arrive here. Nothing on the server raises a notification
+              yet, so there is nothing waiting for you."
           />
         </div>
-
-        {shown.length === 0 ? (
-          <div className="mt-8">
-            <EmptyState icon={<Bell className="size-7" />} title="Nothing unread" body="You are all caught up." />
-          </div>
-        ) : (
-          <ul className="mt-2 divide-y divide-ink-800">
-            {shown.map((n) => (
-              <li key={n.id} className="flex items-start gap-3 py-4">
-                <span
-                  className={cn(
-                    'mt-1.5 size-2 shrink-0 rounded-full',
-                    n.read ? 'bg-ink-600' : 'bg-cyan-400',
-                  )}
-                  aria-label={n.read ? 'Read' : 'Unread'}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[15px] font-medium text-white">{n.title}</p>
-                  <p className="mt-0.5 text-[14px] leading-relaxed text-ink-300">{n.body}</p>
-                  <p className="mt-1 font-mono text-[11px] text-ink-300">{n.at}</p>
-                </div>
-                <button
-                  aria-label="Remove notification"
-                  onClick={() => setItems((x) => x.filter((i) => i.id !== n.id))}
-                  className="rounded-xs p-1 text-ink-300 hover:bg-ink-800 hover:text-white"
-                >
-                  <X className="size-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </FrontOfHouse>
   )
@@ -1562,32 +1515,28 @@ export function Notifications() {
 
 /* ------------------------------------------------------ notification prefs */
 
+/**
+ * What to be told about.
+ *
+ * <p>The toggles used to keep their state in this component and report
+ * "Preferences saved" to a screen that had saved nothing — the next page load
+ * put them all back. Until there is somewhere to keep a preference, saying so
+ * is the only honest thing the screen can do.
+ */
 export function NotificationPrefs() {
-  const [prefs, setPrefs] = useState({
-    newVideo: true, subscription: true, complaint: true, announcement: false, recommendations: true,
-  })
-  const toast = useToast()
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
         <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-white">
           Notification preferences
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-ink-300">
-          Turn off anything you do not want. Reports you have submitted always notify you when their
-          status changes.
-        </p>
-        <div className="mt-7 divide-y divide-ink-800 border-y border-ink-800">
-          <Toggle label="New titles" description="When a creator you follow publishes something." checked={prefs.newVideo} onChange={(v) => setPrefs({ ...prefs, newVideo: v })} />
-          <Toggle label="Pass and payment" description="Renewals, plan changes, receipts and failures." checked={prefs.subscription} onChange={(v) => setPrefs({ ...prefs, subscription: v })} />
-          <Toggle label="Report status" description="Always on — you are told what happened to reports you filed." checked={prefs.complaint} onChange={() => toast({ title: 'Report status notifications cannot be turned off' })} />
-          <Toggle label="Platform announcements" description="Maintenance windows and platform news." checked={prefs.announcement} onChange={(v) => setPrefs({ ...prefs, announcement: v })} />
-          <Toggle label="Recommendations" description="Let your history and chosen categories shape For you." checked={prefs.recommendations} onChange={(v) => setPrefs({ ...prefs, recommendations: v })} />
-        </div>
-        <div className="mt-6 flex justify-end">
-          <Button variant="primary" onClick={() => toast({ title: 'Preferences saved', tone: 'ok' })}>
-            Save preferences
-          </Button>
+        <div className="mt-7">
+          <NotAvailableYet
+            what="Notification preferences"
+            icon={<Bell className="size-7" />}
+            body="Choosing what you are told about needs somewhere to keep the choice, and there
+              is no such store yet. This opens together with notifications themselves."
+          />
         </div>
       </div>
     </FrontOfHouse>
@@ -1608,22 +1557,45 @@ export function Profile() {
   const nav = useNavigate()
   const { viewer, signOut } = useSession()
   const actor = actorIdOf(viewer)
-  const [form, setForm] = useState({ displayName: '', email: '', bio: '', contactNo: '' })
+  const blank = { firstName: '', lastName: '', displayName: '', email: '', bio: '', contactNo: '' }
+  const [form, setForm] = useState(blank)
   const [busy, setBusy] = useState(false)
   const [closing, setClosing] = useState(false)
 
+  const loaded = useMemo(
+    () => ({
+      firstName: viewer?.firstName ?? '',
+      lastName: viewer?.lastName ?? '',
+      displayName: viewer?.name ?? '',
+      email: viewer?.email ?? '',
+      // The account endpoint does not return these two, so the form cannot show
+      // what is stored. It therefore sends them only when they are typed into —
+      // blank means "leave it alone", never "erase it".
+      bio: '',
+      contactNo: '',
+    }),
+    [viewer?.id, viewer?.firstName, viewer?.lastName, viewer?.name, viewer?.email],
+  )
+
   useEffect(() => {
-    if (viewer) {
-      setForm({ displayName: viewer.name, email: viewer.email, bio: '', contactNo: '' })
-    }
-  }, [viewer?.id])
+    setForm(loaded)
+  }, [loaded])
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (actor == null) return
+    // Sending a field the viewer never touched is how an empty input overwrites
+    // a stored contact number with nothing. Only what changed goes.
+    const changes = Object.fromEntries(
+      Object.entries(form).filter(([k, v]) => v !== loaded[k as keyof typeof loaded]),
+    )
+    if (Object.keys(changes).length === 0) {
+      toast({ title: 'Nothing to save' })
+      return
+    }
     setBusy(true)
     try {
-      await profile.update(form)
+      await profile.update(changes)
       toast({ title: 'Profile updated', tone: 'ok' })
     } catch (cause) {
       toast({
@@ -1668,7 +1640,23 @@ export function Profile() {
           </div>
         </div>
         <form className="mt-8 space-y-4" onSubmit={save}>
-          <Field label="Display name">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="First name">
+              <Input
+                value={form.firstName}
+                autoComplete="given-name"
+                onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+              />
+            </Field>
+            <Field label="Last name">
+              <Input
+                value={form.lastName}
+                autoComplete="family-name"
+                onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+              />
+            </Field>
+          </div>
+          <Field label="Display name" hint="What others see">
             <Input
               value={form.displayName}
               onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
@@ -1681,13 +1669,13 @@ export function Profile() {
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             />
           </Field>
-          <Field label="Contact number" hint="Optional">
+          <Field label="Contact number" hint="Leave blank to keep what is stored">
             <Input
               value={form.contactNo}
               onChange={(e) => setForm((f) => ({ ...f, contactNo: e.target.value }))}
             />
           </Field>
-          <Field label="About you" hint="Shown beside your comments">
+          <Field label="About you" hint="Leave blank to keep what is stored">
             <Textarea
               value={form.bio}
               maxLength={300}
@@ -1701,9 +1689,7 @@ export function Profile() {
             <Button
               variant="quiet"
               type="button"
-              onClick={() =>
-                viewer && setForm({ displayName: viewer.name, email: viewer.email, bio: '', contactNo: '' })
-              }
+              onClick={() => setForm(loaded)}
             >
               Discard
             </Button>

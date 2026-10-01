@@ -5,6 +5,8 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.gp14.skopia.model.user.User;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
@@ -18,7 +20,6 @@ import java.time.LocalDate;
  */
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AdAnalyticsController {
 
     private final AdAnalyticsService analytics;
@@ -29,38 +30,38 @@ public class AdAnalyticsController {
 
     @GetMapping("/ad-campaigns/{id}/metrics")
     public MetricsResponse campaignMetrics(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return analytics.forCampaign(actorId, id, from, to);
+        return analytics.forCampaign(AdvertisingAccess.idOf(principal), id, from, to);
     }
 
     @GetMapping("/advertisements/{id}/metrics")
     public MetricsResponse adMetrics(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return analytics.forAdvertisement(actorId, id, from, to);
+        return analytics.forAdvertisement(AdvertisingAccess.idOf(principal), id, from, to);
     }
 
     @GetMapping("/ad-campaigns/{id}/metrics.csv")
     public ResponseEntity<byte[]> campaignCsv(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return csv(analytics.csvForCampaign(actorId, id, from, to), "campaign-" + id + "-performance.csv");
+        return csv(analytics.csvForCampaign(AdvertisingAccess.idOf(principal), id, from, to), "campaign-" + id + "-performance.csv");
     }
 
     @GetMapping("/advertisements/{id}/metrics.csv")
     public ResponseEntity<byte[]> adCsv(
-            @RequestHeader(value = AdvertisingAccess.ACTOR_HEADER, required = false) Long actorId,
+            @AuthenticationPrincipal User principal,
             @PathVariable Long id,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return csv(analytics.csvForAdvertisement(actorId, id, from, to), "advertisement-" + id + "-performance.csv");
+        return csv(analytics.csvForAdvertisement(AdvertisingAccess.idOf(principal), id, from, to), "advertisement-" + id + "-performance.csv");
     }
 
     private ResponseEntity<byte[]> csv(String body, String filename) {

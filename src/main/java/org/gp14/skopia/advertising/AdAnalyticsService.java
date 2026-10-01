@@ -165,13 +165,34 @@ public class AdAnalyticsService {
     }
 
     /** Quote a CSV field only when it would otherwise break the row. */
+    /**
+     * One field, safe to put in a spreadsheet.
+     *
+     * <p>Two separate problems. Quoting keeps a comma or a newline inside its own
+     * field — that one is about the file parsing correctly.
+     *
+     * <p>The other is that Excel, Numbers and Sheets all treat a cell beginning
+     * {@code =}, {@code +}, {@code -} or {@code @} as a formula and evaluate it on
+     * open. These exports carry campaign names, advertiser names and video titles,
+     * all of them typed by people, and a title like
+     * {@code =HYPERLINK("http://example.invalid","Results")} becomes a live link in
+     * the officer's spreadsheet rather than the name of a video. Prefixing a quote
+     * makes the cell read as text; the leading quote is not shown by any of the
+     * three.
+     */
     private static String escape(String value) {
         if (value == null) return "";
-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            return '"' + value.replace("\"", "\"\"") + '"';
+        String safe = FORMULA_STARTERS.indexOf(value.isEmpty() ? ' ' : value.charAt(0)) >= 0
+                ? "'" + value
+                : value;
+        if (safe.contains(",") || safe.contains("\"") || safe.contains("\n") || safe.contains("\r")) {
+            return '"' + safe.replace("\"", "\"\"") + '"';
         }
-        return value;
+        return safe;
     }
+
+    /** Characters a spreadsheet reads as "this cell is a formula". */
+    private static final String FORMULA_STARTERS = "=+-@\t\r";
 
     /**
      * An inclusive date range, held as the half-open instant range the queries use.
