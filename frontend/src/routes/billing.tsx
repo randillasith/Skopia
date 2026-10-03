@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import { Button, Field, Input } from '@/components/primitives'
-import { billing, validateDemoPayment, type DemoPayment, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
+import { billing, DEMO_TEST_CARD, validateDemoPayment, type DemoPayment, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
 import { actorId as actorIdOf } from '@/lib/session'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
@@ -94,13 +94,17 @@ export function Checkout() {
         <h2 className="text-xl font-bold">{plan.planName}</h2>
         <p className="mt-2">{plan.durationDays} days · Demo price {plan.price} (currency not specified)</p>
         <div className="mt-5 rounded border border-gold-400/40 bg-gold-400/8 p-4 text-sm text-ink-100">
-          <strong className="text-gold-300">Synthetic test data only.</strong> Use exactly 16 digits beginning <code>4216</code>. The example <code>4216 0000 0000 0002</code> passes the test checksum. Use a future MM/YY expiry. Never enter a real card.
+          <strong className="text-gold-300">Synthetic test data only.</strong> Use the exact demo card <code>{DEMO_TEST_CARD}</code>. Other numbers beginning 4216 may fail the checksum. Use a future MM/YY expiry. Never enter a real card.
         </div>
         {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to activate</Link>
           : <form className="mt-5 grid gap-4 sm:grid-cols-2" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void submit() }}>
             <div className="sm:col-span-2"><Field label="TEST card number" required error={fieldErrors.cardNumber}>
               <Input name="demo-card" inputMode="numeric" maxLength={19} value={payment.cardNumber} invalid={!!fieldErrors.cardNumber}
-                onChange={(event) => setPayment((p) => ({ ...p, cardNumber: event.target.value }))} placeholder="4216 0000 0000 0002" />
+                onChange={(event) => setPayment((p) => ({ ...p, cardNumber: event.target.value }))} placeholder={DEMO_TEST_CARD} />
+              <Button type="button" size="sm" className="mt-2" onClick={() => {
+                setPayment((p) => ({ ...p, cardNumber: DEMO_TEST_CARD }))
+                setFieldErrors((errors) => ({ ...errors, cardNumber: undefined }))
+              }}>Use test card</Button>
             </Field></div>
             <Field label="Future expiry (MM/YY)" required error={fieldErrors.expiry}>
               <Input name="demo-expiry" inputMode="numeric" maxLength={5} value={payment.expiry} invalid={!!fieldErrors.expiry}

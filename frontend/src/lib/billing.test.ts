@@ -44,8 +44,8 @@ describe('demo billing client', () => {
 
   it('validates the designated test data locally', () => {
     expect(validateDemoPayment({ cardNumber: '4216 0000 0000 0002', expiry: '12/99', cardholderName: 'Demo Viewer' })).toEqual({})
-    expect(validateDemoPayment({ cardNumber: '4111111111111111', expiry: '12/99', cardholderName: 'Demo Viewer' }).cardNumber).toBeTruthy()
-    expect(validateDemoPayment({ cardNumber: '4216000000000003', expiry: '12/99', cardholderName: 'Demo Viewer' }).cardNumber).toBeTruthy()
+    expect(validateDemoPayment({ cardNumber: '4111111111111111', expiry: '12/99', cardholderName: 'Demo Viewer' }).cardNumber).toContain('4216 0000 0000 0002')
+    expect(validateDemoPayment({ cardNumber: '4216000000000003', expiry: '12/99', cardholderName: 'Demo Viewer' }).cardNumber).toContain('checksum')
     expect(validateDemoPayment({ cardNumber: '4216000000000002', expiry: '01/20', cardholderName: 'Demo Viewer' }).expiry).toBeTruthy()
   })
 

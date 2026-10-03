@@ -27,6 +27,7 @@ export type DemoPayment = {
 export type PlanChoice = 'MONTHLY' | 'YEARLY'
 export type DemoPaymentInput = { cardNumber: string; expiry: string; cardholderName: string }
 export type AdminSubscription = { userId: number; username: string; displayName: string; planName: string | null; status: string; startDate: string | null; endDate: string | null }
+export const DEMO_TEST_CARD = '4216 0000 0000 0002'
 
 const luhn = (value: string) => {
   let sum = 0; let doubleDigit = false
@@ -41,7 +42,7 @@ const luhn = (value: string) => {
 export function validateDemoPayment(input: DemoPaymentInput) {
   const errors: Partial<Record<keyof DemoPaymentInput, string>> = {}
   const card = input.cardNumber.replace(/[ -]/g, '')
-  if (!/^4216\d{12}$/.test(card) || !luhn(card)) errors.cardNumber = 'Use the 16-digit Skopia test card beginning 4216.'
+  if (!/^4216\d{12}$/.test(card) || !luhn(card)) errors.cardNumber = `Use the exact demo card ${DEMO_TEST_CARD}; other 4216 numbers may fail the checksum.`
   const match = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(input.expiry)
   if (!match) errors.expiry = 'Use MM/YY.'
   else {
