@@ -150,7 +150,7 @@ export function ChannelPage() {
             <Avatar name={channel.name} size={84} />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="font-marquee text-[clamp(1.6rem,4vw,2.4rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white">
+            <h1 className="font-marquee text-[clamp(1.6rem,4vw,2.4rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-fg">
               {channel.name}
             </h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-300">
@@ -219,7 +219,7 @@ export function ChannelPage() {
                   <div className="self-center">
                     <Letterboard tone="live">Latest release</Letterboard>
                     <Link to={`/watch/${featured.id}`}>
-                      <h2 className="font-marquee mt-2.5 text-[clamp(1.5rem,3vw,2.1rem)] font-bold leading-[1.05] tracking-[-0.03em] text-white hover:text-violet-200">
+                      <h2 className="font-marquee mt-2.5 text-[clamp(1.5rem,3vw,2.1rem)] font-bold leading-[1.05] tracking-[-0.03em] text-fg hover:text-tone-violet-200">
                         {featured.title}
                       </h2>
                     </Link>
@@ -270,13 +270,13 @@ export function ChannelPage() {
             <dl className="space-y-4 self-start border-l border-ink-800 pl-6">
               <div>
                 <dt className="letterboard text-ink-300">Following</dt>
-                <dd className="font-marquee mt-1 text-[24px] font-bold tabular-nums text-white">
+                <dd className="font-marquee mt-1 text-[24px] font-bold tabular-nums text-fg">
                   {fmt(channel.subscribers)}
                 </dd>
               </div>
               <div>
                 <dt className="letterboard text-ink-300">Total views</dt>
-                <dd className="font-marquee mt-1 text-[24px] font-bold tabular-nums text-white">
+                <dd className="font-marquee mt-1 text-[24px] font-bold tabular-nums text-fg">
                   {fmt(totalViews)}
                 </dd>
               </div>
@@ -293,7 +293,7 @@ export function ChannelPage() {
                 <dd className="mt-1 text-[13px] text-ink-150">{channel.location}</dd>
               </div>
               {isSubscribed(channel.handle) && (
-                <p className="flex items-center gap-1.5 pt-1 text-[13px] text-cyan-300">
+                <p className="flex items-center gap-1.5 pt-1 text-[13px] text-tone-cyan-300">
                   <Users className="size-3.5" /> You follow this channel
                 </p>
               )}
@@ -324,7 +324,7 @@ export function Subscriptions() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="font-marquee text-[clamp(1.7rem,4vw,2.4rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.7rem,4vw,2.4rem)] font-extrabold leading-tight tracking-[-0.03em] text-fg">
           Following
         </h1>
 
@@ -353,7 +353,7 @@ export function Subscriptions() {
                   <Link to={`/channel/${c.handle}`} className="flex items-center gap-2.5 group">
                     <Avatar name={c.name} size={36} />
                     <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-medium text-white group-hover:text-violet-200">
+                      <span className="block truncate text-[13px] font-medium text-fg group-hover:text-tone-violet-200">
                         {c.name}
                       </span>
                       <span className="block truncate font-mono text-[11px] text-ink-300">

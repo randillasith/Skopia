@@ -144,7 +144,7 @@ export function SearchBox({
           <button
             onClick={() => { setQ(''); setOpen(true) }}
             aria-label="Clear search"
-            className="rounded-sm p-0.5 text-ink-300 hover:text-white"
+            className="rounded-sm p-0.5 text-ink-300 hover:text-fg"
           >
             <X className="size-3.5" />
           </button>
@@ -168,7 +168,7 @@ export function SearchBox({
                   onMouseEnter={() => setActive(i)}
                   className={cn(
                     'flex w-full items-center gap-2.5 px-3 py-2 text-[13px]',
-                    i === active ? 'bg-ink-800 text-white' : 'text-ink-100',
+                    i === active ? 'bg-ink-800 text-fg' : 'text-ink-100',
                   )}
                 >
                   <button onClick={() => go(s)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
@@ -186,7 +186,7 @@ export function SearchBox({
                     <button
                       onClick={() => forgetSearch(s.text)}
                       aria-label={`Forget “${s.text}”`}
-                      className="shrink-0 rounded-sm p-1 text-ink-300 hover:text-white"
+                      className="shrink-0 rounded-sm p-1 text-ink-300 hover:text-fg"
                     >
                       <X className="size-3" />
                     </button>

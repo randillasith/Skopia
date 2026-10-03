@@ -101,9 +101,9 @@ export function SupportQueue() {
     <BackOfHouse title="Complaint queue">
       {urgent.length > 0 && (
         <div className="mb-6 flex flex-col gap-3 rounded-sm border sm:flex-row sm:items-center border-danger-500/35 bg-danger-500/8 px-4 py-3">
-          <AlertTriangle className="size-4 shrink-0 text-danger-400" />
+          <AlertTriangle className="size-4 shrink-0 text-tone-danger-400" />
           <p className="min-w-0 flex-1 text-[13.5px] text-ink-200">
-            <span className="font-medium text-danger-400">
+            <span className="font-medium text-tone-danger-400">
               {urgent.length} urgent complaint{urgent.length > 1 ? 's' : ''} open.
             </span>{' '}
             Urgent items are worked before anything else in the queue.
@@ -154,7 +154,7 @@ export function SupportQueue() {
               {list.map(({ complaint, report }) => (
                 <Tr key={complaint.id} onClick={() => nav(`/queue/${complaint.id}`)}>
                   <Td><span className="font-mono tabular-nums text-ink-100">{referenceOf(complaint)}</span></Td>
-                  <Td><span className="font-medium text-white">{subjectOf({ complaint, report })}</span></Td>
+                  <Td><span className="font-medium text-fg">{subjectOf({ complaint, report })}</span></Td>
                   <Td className="text-ink-300">{report ? REPORT_TYPE_LABEL[report.type] : '—'}</Td>
                   <Td>
                     <Letterboard tone={COMPLAINT_STATUS_TONE[complaint.status]}>
@@ -304,7 +304,7 @@ export function ComplaintDetail() {
         ) : null
       }
     >
-      <Link to="/queue" className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-white">
+      <Link to="/queue" className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-fg">
         <ArrowLeft className="size-4" /> Back to the queue
       </Link>
 
@@ -320,7 +320,7 @@ export function ComplaintDetail() {
             {report && <Letterboard>{REPORT_TYPE_LABEL[report.type]}</Letterboard>}
           </div>
 
-          <h2 className="font-marquee mt-3 text-[clamp(1.4rem,3vw,1.9rem)] font-extrabold tracking-[-0.025em] text-white">
+          <h2 className="font-marquee mt-3 text-[clamp(1.4rem,3vw,1.9rem)] font-extrabold tracking-[-0.025em] text-fg">
             {subjectOf(item)}
           </h2>
 
@@ -472,7 +472,7 @@ export function ComplaintDetail() {
 
           {report?.type === 'INAPPROPRIATE_CONTENT' && (
             <div className="rounded-lg border border-warning-500/30 bg-warning-500/6 p-4">
-              <p className="font-marquee text-[15px] font-bold text-warning-400">
+              <p className="font-marquee text-[15px] font-bold text-tone-warning-400">
                 Moderation may be needed
               </p>
               <p className="mt-1.5 text-[13px] leading-relaxed text-ink-300">
@@ -555,7 +555,7 @@ export function ComplaintHistory() {
               {list.map(({ complaint, report }) => (
                 <Tr key={complaint.id} onClick={() => nav(`/queue/${complaint.id}`)}>
                   <Td><span className="font-mono tabular-nums text-ink-100">{referenceOf(complaint)}</span></Td>
-                  <Td><span className="font-medium text-white">{subjectOf({ complaint, report })}</span></Td>
+                  <Td><span className="font-medium text-fg">{subjectOf({ complaint, report })}</span></Td>
                   <Td className="text-ink-300">{report ? REPORT_TYPE_LABEL[report.type] : '—'}</Td>
                   <Td>
                     <Letterboard tone={COMPLAINT_STATUS_TONE[complaint.status]}>

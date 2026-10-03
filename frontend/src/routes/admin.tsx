@@ -85,7 +85,7 @@ export function AdminDashboard() {
         ].map(([l, v, sub]) => (
           <div key={l} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{l}</p>
-            <p className="font-marquee mt-1 text-[32px] font-bold leading-none tabular-nums text-white">{v}</p>
+            <p className="font-marquee mt-1 text-[32px] font-bold leading-none tabular-nums text-fg">{v}</p>
             <p className="mt-1.5 text-[12.5px] text-ink-300">{sub}</p>
           </div>
         ))}
@@ -104,7 +104,7 @@ export function AdminDashboard() {
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
         <Section
           title="Needs attention"
-          action={<Link to="/admin/moderation" className="text-[13px] text-cyan-300 hover:underline">Moderation</Link>}
+          action={<Link to="/admin/moderation" className="text-[13px] text-tone-cyan-300 hover:underline">Moderation</Link>}
         >
           <ul className="divide-y divide-ink-800 rounded-lg border border-ink-700 bg-ink-850">
             {[
@@ -121,7 +121,7 @@ export function AdminDashboard() {
                 <Link to={row.to} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-ink-800/60">
                   <Letterboard tone={row.board === 'URGENT' ? 'bad' : 'review'}>{row.board}</Letterboard>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-medium text-white">{row.title}</span>
+                    <span className="block truncate text-[14px] font-medium text-fg">{row.title}</span>
                     <span className="block truncate text-[12px] text-ink-300">{row.sub}</span>
                   </span>
                 </Link>
@@ -132,14 +132,14 @@ export function AdminDashboard() {
 
         <Section
           title="Recent activity"
-          action={<Link to="/admin/logs" className="text-[13px] text-cyan-300 hover:underline">Full log</Link>}
+          action={<Link to="/admin/logs" className="text-[13px] text-tone-cyan-300 hover:underline">Full log</Link>}
         >
           <ul className="divide-y divide-ink-800 rounded-lg border border-ink-700 bg-ink-850">
             {logs.map((l) => (
               <li key={l.logId} className="flex items-center gap-3 px-4 py-2.5">
                 <span className="size-1.5 shrink-0 rounded-full bg-success-500" />
                 <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-200">
-                  <span className="text-cyan-300">@{l.actorUsername ?? 'system'}</span>{' '}
+                  <span className="text-tone-cyan-300">@{l.actorUsername ?? 'system'}</span>{' '}
                   {l.actionType} {l.targetUsername ? `@${l.targetUsername}` : ''}
                 </span>
                 <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-300">
@@ -338,7 +338,7 @@ export function AdminAccounts() {
                     <span className="flex items-center gap-3">
                       <Avatar name={a.name} size={30} />
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-white">{a.name}</span>
+                        <span className="block truncate font-medium text-fg">{a.name}</span>
                         <span className="block truncate font-mono text-[11px] text-ink-300">
                           @{a.handle} · #{a.id}
                         </span>
@@ -493,7 +493,7 @@ export function AdminRoles() {
   return (
     <BackOfHouse title="Roles &amp; permissions" actions={<Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>Create staff</Button>}>
       <div className="flex items-start gap-2.5 rounded-sm border border-warning-500/35 bg-warning-500/8 px-4 py-3">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-400" />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tone-warning-400" />
         <p className="text-[13.5px] leading-relaxed text-ink-200">
           The detailed permission set is an open decision in the project documentation. What follows
           is a working draft, not a confirmed specification.
@@ -515,7 +515,7 @@ export function AdminRoles() {
             <tbody>
               {GRANTS.map((g) => (
                 <Tr key={g.what}>
-                  <Td className="font-medium text-white">{g.what}</Td>
+                  <Td className="font-medium text-fg">{g.what}</Td>
                   <Td>
                     <Letterboard
                       tone={
@@ -540,10 +540,10 @@ export function AdminRoles() {
           {staffCounts.map(({ role, holders }) => (
             <div key={role} className="rounded-lg border border-ink-700 bg-ink-850 p-4">
               <p className="letterboard text-ink-300">{STAFF_ROLES[role].console}</p>
-              <p className="font-marquee mt-1 text-[15px] font-bold text-white">
+              <p className="font-marquee mt-1 text-[15px] font-bold text-fg">
                 {STAFF_ROLES[role].label}
               </p>
-              <p className="font-marquee mt-3 text-[30px] font-bold tabular-nums leading-none text-white">
+              <p className="font-marquee mt-3 text-[30px] font-bold tabular-nums leading-none text-fg">
                 {holders.length}
               </p>
               <ul className="mt-3 space-y-1 border-t border-ink-800 pt-3">
@@ -715,14 +715,14 @@ export function AdminModeration() {
                         </Letterboard>
                         {v && <BillingBoard billing={v.billing} />}
                       </div>
-                      <p className="mt-2 text-[15px] font-medium text-white">Inappropriate content</p>
+                      <p className="mt-2 text-[15px] font-medium text-fg">Inappropriate content</p>
                       <p className="mt-1 text-[13.5px] leading-relaxed text-ink-300">
                         {report?.details ?? 'The report behind this complaint could not be read.'}
                       </p>
                       {v ? (
                         <p className="mt-2 text-[12.5px] text-ink-300">
                           On{' '}
-                          <Link to={`/watch/${v.id}`} className="text-cyan-300 hover:underline">
+                          <Link to={`/watch/${v.id}`} className="text-tone-cyan-300 hover:underline">
                             {v.title}
                           </Link>{' '}
                           by {v.creator}
@@ -775,7 +775,7 @@ export function AdminModeration() {
             <tbody>
               {videos.map((v) => (
                 <Tr key={v.id}>
-                  <Td><span className="font-medium text-white">{v.title}</span></Td>
+                  <Td><span className="font-medium text-fg">{v.title}</span></Td>
                   <Td className="text-ink-300">{v.creator}</Td>
                   <Td><BillingBoard billing={v.billing} /></Td>
                   <Td numeric>{v.views.toLocaleString()}</Td>
@@ -944,7 +944,7 @@ export function AdminLogs() {
               {list.map((l) => (
                 <Tr key={l.logId}>
                   <Td><span className="font-mono tabular-nums text-ink-300">{l.actionTime}</span></Td>
-                  <Td><span className="font-mono text-cyan-300">@{l.actorUsername ?? 'system'}</span></Td>
+                  <Td><span className="font-mono text-tone-cyan-300">@{l.actorUsername ?? 'system'}</span></Td>
                   <Td><span className="font-mono text-ink-100">{l.actionType}</span></Td>
                   <Td><span className="font-mono text-ink-300">{l.targetUsername ? `@${l.targetUsername}` : '—'}</span></Td>
                   <Td><span className="text-ink-300">{l.detail ?? '—'}</span></Td>

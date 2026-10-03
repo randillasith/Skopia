@@ -23,15 +23,26 @@ Marketing, Support and Admin work back of house. The two share one language and 
 A Figma file mirrors the token layer one to one: collections `Skopia · Primitives` (49
 variables), `Skopia · Semantic` (33) and `Skopia · Scale` (20), plus 17 text styles and 7 effect
 styles. That file is on a Figma Starter plan, which caps a collection at one mode — so the
-semantic collection carries **Dark only**. Dark is the canonical theme. Light-mode values are
-not built, in Figma or in CSS, and `:root` declares `color-scheme: dark` outright.
+semantic collection carries **Dark only**. The implementation now supports **System** (the
+default), **Light**, and **Dark** through the Appearance selector. `index.css` owns both
+appearance palettes; the legacy ink utility scale adapts for UI surfaces and text, while
+`.lightbox` and `.theme-media` retain dark media controls and artwork overlays. Primary
+copy uses `text-fg`, status/accent copy uses `text-tone-*`, and solid brand actions retain
+white lettering. The original brand fills and poster artwork stay fixed.
+
+The preference is stored per browser under `skopia.theme`, synchronizes across tabs, and
+follows live OS changes in System mode. The startup script in `frontend/index.html` sets
+the appearance before first paint; `frontend/src/lib/theme.ts` maintains it during use.
+Browser controls and the theme-color meta tag follow the resolved appearance. Storage
+failures fall back to an in-memory preference without interrupting the app.
 
 ## Colour
 
 Four colours were fixed by the client and are not negotiable: `#7559FF` violet, `#25C7F7` cyan,
 `#5B3FE6` deep violet, `#080D1C` ink. Everything else is a ramp derived from them.
 
-**The palette is locked.** `@theme` in `index.css` is the only place a colour may be declared.
+**The palette is centralized.** `@theme` and the appearance mode blocks in `index.css` own
+UI colors.
 No component introduces a hex value of its own; the two places a raw `rgb()` appears are the
 `--sign-violet` / `--sign-cyan` channel pairs used for alpha tinting, and they resolve to the
 same two brand colours.

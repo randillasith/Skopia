@@ -71,7 +71,7 @@ export function MyReports() {
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+            <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
               My reports
             </h1>
             <p className="mt-2 text-[15px] text-ink-300">
@@ -127,7 +127,7 @@ export function MyReports() {
                         {REPORT_STATUS_LABEL[r.status].toUpperCase()}
                       </Letterboard>
                     </div>
-                    <p className="mt-1.5 line-clamp-2 text-[15px] font-medium text-white">
+                    <p className="mt-1.5 line-clamp-2 text-[15px] font-medium text-fg">
                       {r.details}
                     </p>
                     <p className="mt-0.5 text-[13px] text-ink-300">

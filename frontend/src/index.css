@@ -95,6 +95,18 @@
   --color-brand-lo: var(--color-violet-700);
   --color-accent: var(--color-cyan-400);
 
+  --color-tone-cyan-200: var(--color-cyan-200);
+  --color-tone-cyan-300: var(--color-cyan-300);
+  --color-tone-cyan-400: var(--color-cyan-400);
+  --color-tone-danger-300: var(--color-danger-400);
+  --color-tone-danger-400: var(--color-danger-400);
+  --color-tone-gold-400: var(--color-gold-400);
+  --color-tone-success-400: var(--color-success-400);
+  --color-tone-violet-100: var(--color-violet-100);
+  --color-tone-violet-200: var(--color-violet-200);
+  --color-tone-violet-300: var(--color-violet-300);
+  --color-tone-warning-400: var(--color-warning-400);
+
   /* --- type ------------------------------------------------- */
   /*
    * Archivo carries the marquee voice — a grotesque with a real width axis, so
@@ -161,7 +173,7 @@
   /* text selection — the house colours, not the browser's blue */
   ::selection {
     background-color: rgb(var(--sign-violet) / 0.32);
-    color: var(--color-ink-0);
+    color: var(--color-fg);
   }
 
   /* caret */
@@ -421,4 +433,97 @@
   .skopia-table td:empty {
     display: none;
   }
+}
+
+/* Appearance modes: ink is the legacy UI neutral scale; artwork uses fixed colors. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-ink-0: #172137;
+  --color-ink-50: #202c43;
+  --color-ink-100: #2c3951;
+  --color-ink-150: #3c4a63;
+  --color-ink-200: #4c5b73;
+  --color-ink-300: #586880;
+  --color-ink-400: #65758a;
+  --color-ink-500: #9ba8ba;
+  --color-ink-600: #bac5d4;
+  --color-ink-700: #d4dce7;
+  --color-ink-750: #e4eaf2;
+  --color-ink-800: #edf1f7;
+  --color-ink-850: #f7f9fc;
+  --color-ink-900: #ffffff;
+  --color-ink-950: #f0f3f8;
+  --color-tone-cyan-200: #086982;
+  --color-tone-cyan-300: #086982;
+  --color-tone-cyan-400: #086982;
+  --color-tone-danger-300: #be2449;
+  --color-tone-danger-400: #be2449;
+  --color-tone-gold-400: #865209;
+  --color-tone-success-400: #08764f;
+  --color-tone-violet-100: #593acb;
+  --color-tone-violet-200: #593acb;
+  --color-tone-violet-300: #593acb;
+  --color-tone-warning-400: #885309;
+  --color-brand-hi: #6544f0;
+  --color-accent: #0b7194;
+  --shadow-e1: 0 1px 3px rgb(8 13 28 / 0.08);
+  --shadow-e2: 0 4px 8px -2px rgb(8 13 28 / 0.10);
+  --shadow-e3: 0 12px 24px -6px rgb(8 13 28 / 0.14);
+  --shadow-e4: 0 24px 48px -12px rgb(8 13 28 / 0.18);
+  --color-canvas: var(--color-ink-900);
+  --color-surface: var(--color-ink-850);
+  --color-raised: var(--color-ink-800);
+  --color-overlay: var(--color-ink-750);
+  --color-inset: var(--color-ink-950);
+  --color-fg: var(--color-ink-0);
+  --color-fg-muted: var(--color-ink-200);
+  --color-fg-subtle: var(--color-ink-300);
+  --color-fg-disabled: var(--color-ink-400);
+  --color-rule: var(--color-ink-700);
+  --color-rule-strong: var(--color-ink-600);
+}
+
+/* Media and poster overlays remain dark in either appearance. */
+.theme-media, .lightbox {
+  color-scheme: dark;
+  --color-ink-0: #ffffff;
+  --color-ink-50: #eef2f8;
+  --color-ink-100: #d4dcea;
+  --color-ink-150: #b6c1d6;
+  --color-ink-200: #94a2be;
+  --color-ink-300: #7a8aa9;
+  --color-ink-400: #4b5b7c;
+  --color-ink-500: #32405f;
+  --color-ink-600: #242e4c;
+  --color-ink-700: #1a233d;
+  --color-ink-750: #141c32;
+  --color-ink-800: #0f1628;
+  --color-ink-850: #0b1122;
+  --color-ink-900: #080d1c;
+  --color-ink-950: #060a16;
+  --color-canvas: var(--color-ink-900);
+  --color-surface: var(--color-ink-850);
+  --color-raised: var(--color-ink-800);
+  --color-overlay: var(--color-ink-750);
+  --color-inset: var(--color-ink-950);
+  --color-fg: var(--color-ink-0);
+  --color-fg-muted: var(--color-ink-200);
+  --color-fg-subtle: var(--color-ink-300);
+  --color-fg-disabled: var(--color-ink-400);
+  --color-rule: var(--color-ink-700);
+  --color-rule-strong: var(--color-ink-600);
+  --color-tone-cyan-200: var(--color-cyan-200);
+  --color-tone-cyan-300: var(--color-cyan-300);
+  --color-tone-cyan-400: var(--color-cyan-400);
+  --color-tone-danger-300: var(--color-danger-400);
+  --color-tone-danger-400: var(--color-danger-400);
+  --color-tone-gold-400: var(--color-gold-400);
+  --color-tone-success-400: var(--color-success-400);
+  --color-tone-violet-100: var(--color-violet-100);
+  --color-tone-violet-200: var(--color-violet-200);
+  --color-tone-violet-300: var(--color-violet-300);
+  --color-tone-warning-400: var(--color-warning-400);
+  --color-brand-hi: #8b6fff;
+  --color-accent: #25c7f7;
+  color: var(--color-fg);
 }

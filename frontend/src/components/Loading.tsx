@@ -41,7 +41,7 @@ export function Failed({
 }) {
   return (
     <EmptyState
-      icon={<AlertTriangle className="size-7 text-warning-400" />}
+      icon={<AlertTriangle className="size-7 text-tone-warning-400" />}
       title={title}
       body={message}
       action={
