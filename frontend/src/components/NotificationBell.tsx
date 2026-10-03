@@ -189,7 +189,7 @@ export function NotificationBell() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start gap-2">
-                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-neutral-100">{item.title}</span>
+                      <span className="min-w-0 flex-1 break-words text-sm font-bold leading-snug text-neutral-100">{item.title}</span>
                       {item.unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}
                     </span>
                     <span className="mt-1 block truncate text-xs text-neutral-500">{item.body}</span>
