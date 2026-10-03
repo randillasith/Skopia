@@ -1,17 +1,16 @@
 package org.gp14.skopia.video;
 
-import org.gp14.skopia.model.user.RegisteredViewer;
+import org.gp14.skopia.billing.BillingService;
 import org.gp14.skopia.model.video.Video;
-import org.gp14.skopia.repository.RegisteredViewerRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 @Service
 public class VideoAccessService {
-    private final RegisteredViewerRepository viewers;
+    private final BillingService billing;
 
-    public VideoAccessService(RegisteredViewerRepository viewers) {
-        this.viewers = viewers;
+    public VideoAccessService(BillingService billing) {
+        this.billing = billing;
     }
 
     public boolean isOwner(Video video, Long userId) {
@@ -31,8 +30,8 @@ public class VideoAccessService {
         if (isOwner(video, userId)) return true;
         if (!isPublished(video)) return false;
         if (video.getAccessTier() == null || !"PREMIUM".equalsIgnoreCase(video.getAccessTier().getTierName())) return true;
-        // Entitlement seam: replace this one lookup with the billing subscription check.
-        return userId != null && viewers.findById(userId).map(RegisteredViewer::getIsPremium).orElse(false);
+        // BillingService checks an active, unexpired subscription and account status.
+        return userId != null && billing.hasActivePremium(userId);
     }
 
     public void requireVisible(Video video, Long userId) {

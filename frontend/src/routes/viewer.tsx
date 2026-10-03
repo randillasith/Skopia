@@ -646,10 +646,10 @@ export function Watch() {
   // both are recorded here rather than on any click that happened to lead here.
   // The count is deliberately not awaited: a failed count must not stop playback.
   useEffect(() => {
-    if (!v) return
+    if (!v || (v.premium && !v.mediaUrl)) return
     recordWatch(v.id)
     if (numericId != null) catalogue.countView(numericId).catch(() => {})
-  }, [v?.id, numericId])
+  }, [v?.id, v?.mediaUrl, numericId])
 
   // Where you stopped is written back as you watch, so picking the title up on
   // another device lands in the right place — and because that write is what
@@ -740,7 +740,13 @@ export function Watch() {
         <div className={cn('grid gap-8', !theater && 'lg:grid-cols-[1fr_360px]')}>
           <div className="min-w-0">
             <div className={cn(theater && 'mx-auto max-w-[1700px]')}>
-              {adShowing ? (
+              {v.premium && !v.mediaUrl ? (
+                <div className="flex aspect-video flex-col items-center justify-center gap-4 bg-ink-950 px-6 text-center">
+                  <h2 className="font-marquee text-xl font-bold text-white">Season Pass required</h2>
+                  <p className="max-w-md text-sm text-ink-300">This premium title requires an active subscription. Playback is not available on this account.</p>
+                  <Button variant="primary" onClick={() => nav('/plans')}>View plans</Button>
+                </div>
+              ) : adShowing ? (
                 /* ---- pre-roll, served by FR5 and always labelled as advertising ---- */
                 <AdSlot
                   videoId={backendVideoId}

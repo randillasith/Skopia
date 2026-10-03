@@ -1,6 +1,7 @@
 package org.gp14.skopia.video;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.gp14.skopia.billing.BillingService;
 import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.model.video.*;
 import org.gp14.skopia.repository.*;
@@ -11,6 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import java.nio.file.*;
@@ -22,6 +24,7 @@ import static org.assertj.core.api.Assertions.*;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@TestPropertySource(properties = "skopia.billing.demo-enabled=true")
 @Transactional
 class VideoSecurityIntegrationTest {
     @Autowired MockMvc mvc;
@@ -30,6 +33,7 @@ class VideoSecurityIntegrationTest {
     @Autowired RegisteredViewerRepository viewers;
     @Autowired AccessTierRepository tiers;
     @Autowired TokenService tokens;
+    @Autowired BillingService billing;
     ObjectMapper json = new ObjectMapper();
 
     @Test void publicFreePlaybackPremiumAndDraftAreGuardedEvenForRangeRequests() throws Exception {
@@ -63,6 +67,10 @@ class VideoSecurityIntegrationTest {
                 mvc.perform(get("/api/videos/" + protectedVideo.getId())
                         .header("Authorization", "Bearer " + tokens.issue(unpaid.getId())))
                         .andExpect(jsonPath("$.videoUrl").value(org.hamcrest.Matchers.nullValue()));
+                mvc.perform(post("/api/billing/checkout")
+                        .header("Authorization", "Bearer " + tokens.issue(paid.getId()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\"}"))
+                        .andExpect(status().isCreated());
                 String response = mvc.perform(get("/api/videos/" + protectedVideo.getId())
                         .header("Authorization", "Bearer " + tokens.issue(paid.getId())))
                         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
@@ -70,7 +78,9 @@ class VideoSecurityIntegrationTest {
                 assertThat(signedUrl).startsWith("/uploads/" + paidFile + "?access=");
                 mvc.perform(get(signedUrl).header("Range", "bytes=1-3"))
                         .andExpect(status().isPartialContent()).andExpect(content().bytes(new byte[]{1,2,3}));
-                paid.setIsPremium(false); viewers.saveAndFlush(paid);
+                mvc.perform(post("/api/billing/cancel")
+                        .header("Authorization", "Bearer " + tokens.issue(paid.getId())))
+                        .andExpect(status().isOk());
                 mvc.perform(get(signedUrl).header("Range", "bytes=1-3")).andExpect(status().isForbidden());
                 Video draft = video(creator, free, "DRAFT", "https://example.test/draft.mp4");
                 mvc.perform(get("/api/videos/" + draft.getId())).andExpect(status().isUnauthorized());

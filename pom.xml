@@ -22,6 +22,7 @@
     <properties>
         <java.version>17</java.version>
         <lombok.version>1.18.42</lombok.version>
+        <skipFrontend>false</skipFrontend>
     </properties>
 
     <dependencies>
@@ -104,6 +105,56 @@
                     </annotationProcessorPaths>
 
                 </configuration>
+            </plugin>
+            <!-- Keep the Spring Boot jar in sync with the React frontend. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>frontend-npm-ci</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <skip>${skipFrontend}</skip>
+                            <workingDirectory>${project.basedir}/frontend</workingDirectory>
+                            <executable>npm</executable>
+                            <arguments><argument>ci</argument></arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>frontend-build</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <skip>${skipFrontend}</skip>
+                            <workingDirectory>${project.basedir}/frontend</workingDirectory>
+                            <executable>npm</executable>
+                            <arguments><argument>run</argument><argument>build</argument></arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-current-react-ui</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <skip>${skipFrontend}</skip>
+                            <overwrite>true</overwrite>
+                            <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+                            <resources><resource>
+                                <directory>${project.basedir}/frontend/dist</directory>
+                                <filtering>false</filtering>
+                            </resource></resources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
         </plugins>

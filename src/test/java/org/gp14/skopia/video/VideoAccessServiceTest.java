@@ -2,24 +2,24 @@ package org.gp14.skopia.video;
 
 import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.model.video.*;
-import org.gp14.skopia.repository.RegisteredViewerRepository;
+import org.gp14.skopia.billing.BillingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
-import java.util.Optional;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class VideoAccessServiceTest {
-    private final RegisteredViewerRepository viewers = mock(RegisteredViewerRepository.class);
-    private final VideoAccessService access = new VideoAccessService(viewers);
+    private final BillingService billing = mock(BillingService.class);
+    private final VideoAccessService access = new VideoAccessService(billing);
 
     @Test void premiumRequiresEntitlementOrOwner() {
         Video video = new Video();
         video.setVideoStatus("PUBLISHED");
         AccessTier tier = new AccessTier(); tier.setTierName("PREMIUM"); video.setAccessTier(tier);
         ContentCreator owner = new ContentCreator(); owner.setId(4L); video.setCreator(owner);
-        RegisteredViewer paid = new RegisteredViewer(); paid.setIsPremium(true);
-        when(viewers.findById(5L)).thenReturn(Optional.of(paid));
+        // A stale legacy isPremium flag alone must not grant protected playback.
+        assertThat(access.canPlay(video, 5L)).isFalse();
+        when(billing.hasActivePremium(5L)).thenReturn(true);
         assertThat(access.canPlay(video, null)).isFalse();
         assertThat(access.canPlay(video, 6L)).isFalse();
         assertThat(access.canPlay(video, 5L)).isTrue();
