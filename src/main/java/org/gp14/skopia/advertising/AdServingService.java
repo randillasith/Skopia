@@ -1,6 +1,8 @@
 package org.gp14.skopia.advertising;
 
 import org.gp14.skopia.advertising.dto.ServedAdResponse;
+import org.gp14.skopia.billing.BillingService;
+import org.gp14.skopia.video.VideoAccessService;
 import org.gp14.skopia.model.advertisement.AdImpression;
 import org.gp14.skopia.model.advertisement.AdPlacement;
 import org.gp14.skopia.model.advertisement.Advertisement;
@@ -44,15 +46,20 @@ public class AdServingService {
     private final AdImpressionRepository impressions;
     private final VideoRepository videos;
     private final RegisteredViewerRepository viewers;
+    private final BillingService billing;
+    private final VideoAccessService access;
 
     public AdServingService(AdPlacementRepository placements,
                             AdImpressionRepository impressions,
                             VideoRepository videos,
-                            RegisteredViewerRepository viewers) {
+                            RegisteredViewerRepository viewers,
+                            BillingService billing, VideoAccessService access) {
         this.placements = placements;
         this.impressions = impressions;
         this.videos = videos;
         this.viewers = viewers;
+        this.billing = billing;
+        this.access = access;
     }
 
     /**
@@ -77,6 +84,9 @@ public class AdServingService {
 
         Video video = videos.findById(videoId)
                 .orElseThrow(() -> AdvertisingException.notFound("Video", videoId));
+        if (!access.canPlay(video, viewerId) || billing.hasAdFreeSubscription(viewerId)) {
+            return List.of();
+        }
         Long categoryId = video.getCategory() == null ? null : video.getCategory().getId();
 
         LocalDateTime now = LocalDateTime.now();
@@ -138,15 +148,25 @@ public class AdServingService {
     @Transactional
     public AdImpression recordImpression(Long placementId, Long videoId, Long viewerId,
                                          String deviceType) {
+        if (billing.hasAdFreeSubscription(viewerId)) {
+            throw AdvertisingException.forbidden("This subscription is ad-free.");
+        }
         AdPlacement placement = placements.findById(placementId)
                 .orElseThrow(() -> AdvertisingException.notFound("Placement", placementId));
         // Falls back to the placement's own title, which is right for a
         // title-targeted placement and null for a category one — the same answer
         // the caller would have given.
-        Video shownAgainst = videoId == null
-                ? placement.getVideo()
-                : videos.findById(videoId).orElse(placement.getVideo());
-        return record(placement, shownAgainst, viewerId, deviceType, LocalDateTime.now());
+        Video shownAgainst = videoId == null ? placement.getVideo()
+                : videos.findById(videoId).orElseThrow(() -> AdvertisingException.notFound("Video", videoId));
+        if (shownAgainst == null || !access.canPlay(shownAgainst, viewerId)) {
+            throw AdvertisingException.forbidden("A playable video is required for this advertisement.");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        Long categoryId = shownAgainst.getCategory() == null ? null : shownAgainst.getCategory().getId();
+        boolean eligible = placements.findEligible(shownAgainst.getId(), categoryId,
+                placement.getSlotPosition(), now).stream().anyMatch(p -> p.getId().equals(placementId));
+        if (!eligible) throw AdvertisingException.forbidden("This advertisement is no longer eligible for this video.");
+        return record(placement, shownAgainst, viewerId, deviceType, now);
     }
 
     /**

@@ -108,6 +108,7 @@ class BillingApiTest {
         mvc.perform(checkout(creator, validCheckout("YEARLY"))).andExpect(status().isCreated());
         mvc.perform(get("/api/billing/status").header("Authorization", bearer(creator)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.adFree").value(true))
                 .andExpect(jsonPath("$.startDate").exists());
         mvc.perform(post("/api/billing/cancel").header("Authorization", bearer(creator)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
@@ -122,10 +123,13 @@ class BillingApiTest {
         var sub = subscriptions.findByViewerId(v.getId()).get(0);
         sub.setEndDate(LocalDateTime.now().minusMinutes(1)); subscriptions.saveAndFlush(sub);
         assertThat(billing.hasActivePremium(v.getId())).isFalse();
+        assertThat(billing.hasAdFreeSubscription(v.getId())).isFalse();
         mvc.perform(get("/api/billing/status").header("Authorization", bearer(v)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXPIRED"));
         v.setAccountStatus("SUSPENDED"); viewers.saveAndFlush(v);
         assertThat(billing.hasActivePremium(v.getId())).isFalse();
+        sub.setEndDate(LocalDateTime.now().plusDays(1)); subscriptions.saveAndFlush(sub);
+        assertThat(billing.hasAdFreeSubscription(v.getId())).isFalse();
     }
 
     @Test void paymentCannotBeChangedOrDeletedInPersistenceLayer() throws Exception {

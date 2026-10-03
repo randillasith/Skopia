@@ -20,7 +20,7 @@ beforeEach(() => {
 
 describe('demo billing client', () => {
   it('does not enable demo checkout from an unmarked plans array', () => {
-    expect(normalizePlans([{ id: 1, planName: 'MONTHLY', durationDays: 30, price: 0, benefit: 'Preview' }]).demoEnabled).toBe(false)
+    expect(normalizePlans([{ id: 1, planName: 'MONTHLY', durationDays: 30, price: 0, adFree: true, benefit: 'Preview' }]).demoEnabled).toBe(false)
     expect(normalizePlans({ demoEnabled: true, plans: [] }).demoEnabled).toBe(true)
   })
 

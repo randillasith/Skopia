@@ -6,10 +6,12 @@ export type DemoPlan = {
   planName: string
   durationDays: number
   price: number
+  adFree: boolean
   benefit: string | null
 }
 export type PlansResponse = { demoEnabled: boolean; plans: DemoPlan[] }
 export type SubscriptionStatus = {
+  adFree: boolean
   premium: boolean
   planName: string | null
   startDate: string | null

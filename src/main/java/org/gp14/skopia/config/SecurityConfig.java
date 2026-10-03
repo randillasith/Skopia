@@ -45,7 +45,7 @@ public class SecurityConfig {
                         // below, so a forged X-User-Id header was the whole of the
                         // protection on them.
                         .requestMatchers(HttpMethod.GET, "/api/ads/active", "/api/ads/click/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/ads/impressions").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/ads/impressions", "/api/ads/click/**").permitAll()
                         .requestMatchers("/api/ad-campaigns/**", "/api/advertisements/**",
                                 "/api/advertising/**", "/api/ads/**")
                                 .hasAnyRole("MARKETING_OFFICER", "ADMINISTRATOR")

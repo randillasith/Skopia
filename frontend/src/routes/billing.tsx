@@ -6,21 +6,21 @@ import { billing, DEMO_TEST_CARD, validateDemoPayment, validateRefundReason, typ
 import { actorId as actorIdOf } from '@/lib/session'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
-const link = 'text-cyan-300 underline hover:text-cyan-200'
+const link = 'text-tone-cyan-300 underline hover:text-tone-cyan-200'
 const message = (error: unknown) => error instanceof Error ? error.message : 'Please try again.'
 const date = (value: string | null) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : 'Not provided'
 
 function Page({ title, children }: { title: string; children: React.ReactNode }) {
   return <FrontOfHouse><main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-    <p className="letterboard text-gold-400">Demo only · No real payments</p>
-    <h1 className="font-marquee mt-2 text-3xl font-extrabold text-white">{title}</h1>
+    <p className="letterboard text-tone-gold-400">Demo only · No real payments</p>
+    <h1 className="font-marquee mt-2 text-3xl font-extrabold text-fg">{title}</h1>
     <p className="mt-2 text-sm text-ink-300">TEST MODE only. No money is charged, no processor is called, and test card data is validated in memory but never stored.</p>
     <div className="mt-7">{children}</div>
   </main></FrontOfHouse>
 }
 
 function Feedback({ error, retry }: { error: string | null; retry?: () => void }) {
-  return error ? <div role="alert" className="mt-4 rounded border border-danger-500/40 p-4 text-danger-400">{error} {retry && <Button size="sm" onClick={retry}>Retry</Button>}</div> : null
+  return error ? <div role="alert" className="mt-4 rounded border border-danger-500/40 p-4 text-tone-danger-400">{error} {retry && <Button size="sm" onClick={retry}>Retry</Button>}</div> : null
 }
 
 function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
@@ -44,13 +44,15 @@ function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
 export function Plans() {
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'plans')
   return <Page title="Demo passes">
+    <p className="mb-5 text-ink-200">Free viewing includes advertisements. Monthly and yearly passes remove advertisements while the subscription is active.</p>
     {loading && <p role="status">Loading plans…</p>}
     <Feedback error={error} retry={retry} />
     {value && <>
-      {!value.demoEnabled && <p role="status" className="mb-5 text-gold-400">Demo checkout is not enabled. No pass can be activated here.</p>}
+      {!value.demoEnabled && <p role="status" className="mb-5 text-tone-gold-400">Demo checkout is not enabled. No pass can be activated here.</p>}
       {value.plans.length ? <div className="grid gap-4 sm:grid-cols-2">{value.plans.map((plan) => <article key={plan.id} className={box}>
-        <h2 className="font-marquee text-xl font-bold text-white">{plan.planName}</h2>
+        <h2 className="font-marquee text-xl font-bold text-fg">{plan.planName}</h2>
         <p className="mt-2 text-ink-200">{plan.durationDays} days · Demo price: {plan.price} (currency not specified)</p>
+        <p className="mt-3 font-semibold">{plan.adFree ? "Ad-free viewing" : "Includes advertisements"}</p>
         {plan.benefit && <p className="mt-3 text-sm text-ink-300">{plan.benefit}</p>}
         {value.demoEnabled && (plan.planName === 'MONTHLY' || plan.planName === 'YEARLY') && <Link to={`/checkout?plan=${encodeURIComponent(plan.planName)}`} className={`${link} mt-5 inline-block`}>Choose demo pass</Link>}
       </article>)}</div> : <p>No plans are available.</p>}
@@ -94,7 +96,7 @@ export function Checkout() {
         <h2 className="text-xl font-bold">{plan.planName}</h2>
         <p className="mt-2">{plan.durationDays} days · Demo price {plan.price} (currency not specified)</p>
         <div className="mt-5 rounded border border-gold-400/40 bg-gold-400/8 p-4 text-sm text-ink-100">
-          <strong className="text-gold-300">Synthetic test data only.</strong> Use the exact demo card <code>{DEMO_TEST_CARD}</code>. Other numbers beginning 4216 may fail the checksum. Use a future MM/YY expiry. Never enter a real card.
+          <strong className="text-tone-gold-300">Synthetic test data only.</strong> Use the exact demo card <code>{DEMO_TEST_CARD}</code>. Other numbers beginning 4216 may fail the checksum. Use a future MM/YY expiry. Never enter a real card.
         </div>
         {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to activate</Link>
           : <form className="mt-5 grid gap-4 sm:grid-cols-2" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void submit() }}>
@@ -153,13 +155,14 @@ export function Subscription() {
     <Feedback error={error} retry={retry} />
     {value && <div className={box}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div><p className="letterboard text-ink-300">Access</p><p className="mt-1 text-lg font-semibold text-white">{value.premium ? 'Premium access active' : 'No active premium pass'}</p></div>
-        <div><p className="letterboard text-ink-300">Current plan</p><p className="mt-1 text-lg font-semibold text-white">{value.planName ?? 'None'}</p></div>
+        <div><p className="letterboard text-ink-300">Access</p><p className="mt-1 text-lg font-semibold text-fg">{value.premium ? 'Premium access active' : 'No active premium pass'}</p></div>
+        <div><p className="letterboard text-ink-300">Current plan</p><p className="mt-1 text-lg font-semibold text-fg">{value.planName ?? 'None'}</p></div>
         <div><p className="letterboard text-ink-300">Status</p><p className="mt-1">{value.status ?? 'Not provided'}</p></div>
         <div><p className="letterboard text-ink-300">Term</p><p className="mt-1">{date(value.startDate)}<br />through {date(value.endDate)}</p></div>
       </div>
+      <p className="mt-5 text-ink-200">{value.adFree ? "Ad-free viewing is active until this pass ends." : "Viewing includes advertisements. An active monthly or yearly pass removes them."}</p>
       {value.premium && <div className="mt-6 border-t border-ink-700 pt-5">
-        <h2 className="font-marquee text-lg font-bold text-white">Manage this pass</h2>
+        <h2 className="font-marquee text-lg font-bold text-fg">Manage this pass</h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-300">Plan changes take effect immediately. The current term is replaced with a new term for the selected plan; unused demo time is not prorated or carried over.</p>
         <div className="mt-4 flex flex-wrap gap-3">
           {alternative && <Button loading={busy === alternative} disabled={busy != null} onClick={() => void changePlan(alternative)}>Change to {alternative.toLowerCase()}</Button>}
@@ -229,12 +232,12 @@ export function BillingHistory() {
       return <li key={payment.id} className={box}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="font-semibold text-white">{payment.planName ?? 'Demo pass'} · {payment.payStatus ?? 'Status unknown'}</p>
+            <p className="font-semibold text-fg">{payment.planName ?? 'Demo pass'} · {payment.payStatus ?? 'Status unknown'}</p>
             <p className="mt-2 text-sm text-ink-300">Demo amount: {payment.amount} (currency not specified)</p>
             <p className="text-sm text-ink-300">{date(payment.paidDatetime)} · {payment.payMethod ?? 'Method not specified'}</p>
             {(payment.cardBrand || payment.cardLast4) && <p className="text-sm text-ink-300">Synthetic {payment.cardBrand ?? 'card'} ending {payment.cardLast4 ?? '—'}</p>}
           </div>
-          {request ? <span className="letterboard rounded border border-gold-400/40 px-2 py-1 text-gold-300">Refund {request.status}</span>
+          {request ? <span className="letterboard rounded border border-gold-400/40 px-2 py-1 text-tone-gold-300">Refund {request.status}</span>
             : <Button size="sm" disabled={!refundable} title={!refundable ? 'Only settled demo payments can be refunded.' : undefined} onClick={() => openRefund(payment)}>Request refund</Button>}
         </div>
         {request && <div className="mt-4 border-t border-ink-700 pt-3 text-sm text-ink-300">

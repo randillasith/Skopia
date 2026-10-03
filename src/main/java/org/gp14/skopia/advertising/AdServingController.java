@@ -84,4 +84,11 @@ public class AdServingController {
         String destination = serving.recordClick(impressionId, AdvertisingAccess.idOf(principal));
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(destination)).build();
     }
+
+    /** Bearer-authenticated browser clicks cannot attach a token to a normal link. */
+    @PostMapping("/click/{impressionId}")
+    public Map<String, String> authenticatedClick(@AuthenticationPrincipal User principal,
+                                                  @PathVariable Long impressionId) {
+        return Map.of("destination", serving.recordClick(impressionId, AdvertisingAccess.idOf(principal)));
+    }
 }

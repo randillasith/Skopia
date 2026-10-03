@@ -39,13 +39,13 @@ export function Button({
         size === 'md' && 'h-10 px-4 text-[14px]',
         size === 'lg' && 'h-12 px-6 text-[15px]',
         variant === 'primary' &&
-          'bg-violet-500 text-white hover:bg-violet-400 active:bg-violet-700 shadow-e2',
+          'bg-violet-500 text-white hover:bg-brand-hi active:bg-violet-700 shadow-e2',
         variant === 'secondary' &&
           'border border-ink-600 bg-ink-800 text-ink-50 hover:border-ink-500 hover:bg-ink-750',
-        variant === 'ghost' && 'text-ink-200 hover:bg-ink-800 hover:text-white',
-        variant === 'quiet' && 'text-ink-300 hover:text-white',
+        variant === 'ghost' && 'text-ink-200 hover:bg-ink-800 hover:text-fg',
+        variant === 'quiet' && 'text-ink-300 hover:text-fg',
         variant === 'danger' &&
-          'border border-danger-500/40 bg-danger-500/10 text-danger-400 hover:bg-danger-500/18',
+          'border border-danger-500/40 bg-danger-500/10 text-tone-danger-400 hover:bg-danger-500/18',
         className,
       )}
     >
@@ -80,19 +80,19 @@ export function Field({
     <label className={cn('block', className)}>
       <span className="mb-1.5 flex items-baseline gap-1.5 text-[13px] font-medium text-ink-150">
         {label}
-        {required && <span className="text-danger-400">*</span>}
+        {required && <span className="text-tone-danger-400">*</span>}
         {hint && <span className="ml-auto text-[12px] font-normal text-ink-300">{hint}</span>}
       </span>
       {children}
       {error && (
-        <span className="mt-1.5 block text-[12px] text-danger-400">{error}</span>
+        <span className="mt-1.5 block text-[12px] text-tone-danger-400">{error}</span>
       )}
     </label>
   )
 }
 
 const controlBase =
-  'w-full rounded-sm border bg-ink-950 px-3 text-[14px] text-white transition-colors placeholder:text-ink-300 hover:border-ink-500 focus:border-violet-400 focus:outline-none disabled:opacity-50'
+  'w-full rounded-sm border bg-ink-950 px-3 text-[14px] text-fg transition-colors placeholder:text-ink-300 hover:border-ink-500 focus:border-violet-400 focus:outline-none disabled:opacity-50'
 
 export function Input({
   className,
@@ -164,7 +164,7 @@ export function Toggle({
   return (
     <div className="flex items-start justify-between gap-6 py-3.5">
       <div className="min-w-0">
-        <label htmlFor={id} className="block text-[14px] font-medium text-white">
+        <label htmlFor={id} className="block text-[14px] font-medium text-fg">
           {label}
         </label>
         {description && <p className="mt-0.5 text-[13px] text-ink-300">{description}</p>}
@@ -207,7 +207,7 @@ export function Checkbox({
       role="checkbox"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex items-center gap-2.5 text-left text-[14px] text-ink-100 hover:text-white"
+      className="flex items-center gap-2.5 text-left text-[14px] text-ink-100 hover:text-fg"
     >
       <span
         className={cn(
@@ -340,7 +340,7 @@ export function Tabs({
             onClick={() => onChange(t.id)}
             className={cn(
               'relative shrink-0 whitespace-nowrap px-3.5 py-2.5 text-[13px] font-medium transition-colors',
-              on ? 'text-white' : 'text-ink-300 hover:text-ink-100',
+              on ? 'text-fg' : 'text-ink-300 hover:text-ink-100',
             )}
           >
             {t.label}
@@ -403,7 +403,7 @@ export function Modal({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
             onClick={onClose}
-            className="absolute inset-0 bg-ink-950/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           />
           <motion.div
             role="dialog"
@@ -422,13 +422,13 @@ export function Modal({
           >
             <div className="flex items-start gap-4 border-b border-ink-700 px-5 py-4">
               <div className="min-w-0 flex-1">
-                <h2 className="font-marquee text-[19px] font-bold text-white">{title}</h2>
+                <h2 className="font-marquee text-[19px] font-bold text-fg">{title}</h2>
                 {description && <p className="mt-1 text-[13px] text-ink-300">{description}</p>}
               </div>
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="-m-1 rounded-sm p-1 text-ink-300 transition-colors hover:bg-ink-800 hover:text-white"
+                className="-m-1 rounded-sm p-1 text-ink-300 transition-colors hover:bg-ink-800 hover:text-fg"
               >
                 <X className="size-4.5" />
               </button>
@@ -473,8 +473,8 @@ export function ToastHost({ children }: { children: React.ReactNode }) {
               transition={{ duration: 0.32, ease: EASE }}
               className={cn(
                 'pointer-events-auto rounded-sm border px-3.5 py-3 text-[13px] shadow-e3 backdrop-blur',
-                t.tone === 'ok' && 'border-success-500/40 bg-ink-850/95 text-success-400',
-                t.tone === 'bad' && 'border-danger-500/40 bg-ink-850/95 text-danger-400',
+                t.tone === 'ok' && 'border-success-500/40 bg-ink-850/95 text-tone-success-400',
+                t.tone === 'bad' && 'border-danger-500/40 bg-ink-850/95 text-tone-danger-400',
                 (!t.tone || t.tone === 'info') && 'border-ink-600 bg-ink-850/95 text-ink-100',
               )}
             >
@@ -584,7 +584,7 @@ export function Section({
   return (
     <section className={cn('min-w-0', className)}>
       <div className="mb-4 flex items-end justify-between gap-4">
-        <h2 className="font-marquee text-[20px] font-bold tracking-tight text-white">{title}</h2>
+        <h2 className="font-marquee text-[20px] font-bold tracking-tight text-fg">{title}</h2>
         {action}
       </div>
       {children}
@@ -622,7 +622,7 @@ export function NotAvailableYet({
       <div className="flex flex-col items-center px-6 py-14 text-center">
         <div className="mb-3 text-ink-300">{icon ?? <Construction className="size-7" />}</div>
         <p className="letterboard mb-2 text-ink-400">Not available yet</p>
-        <h3 className="font-marquee text-[18px] font-bold text-white">{what}</h3>
+        <h3 className="font-marquee text-[18px] font-bold text-fg">{what}</h3>
         <p className="mt-2 max-w-md text-[13.5px] leading-relaxed text-ink-300">{body}</p>
         {action && <div className="mt-5">{action}</div>}
       </div>

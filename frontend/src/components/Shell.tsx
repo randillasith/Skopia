@@ -1,3 +1,4 @@
+import { ThemeSelect } from './ThemeSelect'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
@@ -36,8 +37,8 @@ function GrantChip({ children, tone }: { children: React.ReactNode; tone: 'staff
     <span
       className={cn(
         'letterboard rounded-[3px] border px-1.5 py-0.5',
-        tone === 'staff' && 'border-violet-500/45 bg-violet-500/12 text-violet-200',
-        tone === 'channel' && 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
+        tone === 'staff' && 'border-violet-500/45 bg-violet-500/12 text-tone-violet-200',
+        tone === 'channel' && 'border-cyan-400/40 bg-cyan-400/10 text-tone-cyan-200',
         tone === 'mod' && 'border-ink-500 bg-ink-800 text-ink-150',
       )}
     >
@@ -71,7 +72,7 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
       <div className={cn('flex items-center gap-2', compact && 'w-full')}>
         <Link
           to="/login"
-          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-sm border border-ink-600 px-3 text-[13px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-white"
+          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-sm border border-ink-600 px-3 text-[13px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-fg"
         >
           <LogIn className="size-3.5" />
           Sign in
@@ -93,7 +94,7 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
       >
         <Avatar name={viewer.name} size={compact ? 32 : 28} />
         <span className={cn('min-w-0', !compact && 'hidden xl:block')}>
-          <span className="block truncate text-[13px] font-medium leading-tight text-white">
+          <span className="block truncate text-[13px] font-medium leading-tight text-fg">
             {viewer.name}
           </span>
           <span className="block truncate font-mono text-[11px] leading-tight text-ink-300">
@@ -119,7 +120,7 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
             >
               {/* who you are */}
               <div className="border-b border-ink-700 px-3.5 py-3">
-                <p className="truncate text-[14px] font-medium text-white">{viewer.name}</p>
+                <p className="truncate text-[14px] font-medium text-fg">{viewer.name}</p>
                 <p className="truncate font-mono text-[11px] text-ink-300">{viewer.email}</p>
                 {(viewer.staff.length > 0 || own || mod.length > 0) && (
                   <div className="mt-2.5 flex flex-wrap gap-1">
@@ -191,7 +192,7 @@ function MenuItem({
     <button
       role="menuitem"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] text-ink-100 transition-colors hover:bg-ink-800 hover:text-white"
+      className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] text-ink-100 transition-colors hover:bg-ink-800 hover:text-fg"
     >
       <Icon className="size-4 shrink-0 text-ink-300" />
       <span className="truncate">{children}</span>
@@ -201,7 +202,7 @@ function MenuItem({
 
 /* ------------------------------------------------------------------- brand */
 
-export function Wordmark({ to = '/' }: { to?: string }) {
+export function Wordmark({ to = '/', compact = false }: { to?: string; compact?: boolean }) {
   return (
     <Link to={to} className="group flex items-center gap-2.5" aria-label="Skopia — home">
       <img
@@ -209,7 +210,7 @@ export function Wordmark({ to = '/' }: { to?: string }) {
         alt=""
         className="size-8 rounded-[7px] object-cover ring-1 ring-violet-500/40"
       />
-      <span className="font-marquee text-[19px] font-extrabold tracking-tight text-white">
+      <span className={cn("font-marquee text-[19px] font-extrabold tracking-tight text-fg", compact && "hidden sm:inline")}>
         SKOPIA
       </span>
     </Link>
@@ -265,7 +266,7 @@ function RailLink({
         cn(
           'group/link relative flex items-center gap-3 rounded-sm px-2.5 py-2 text-[13.5px] transition-colors',
           collapsed && 'justify-center px-0',
-          isActive ? 'bg-ink-800 text-white' : 'text-ink-200 hover:bg-ink-850 hover:text-white',
+          isActive ? 'bg-ink-800 text-fg' : 'text-ink-200 hover:bg-ink-850 hover:text-fg',
         )
       }
     >
@@ -359,7 +360,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
                       cn(
                         'flex items-center gap-3 rounded-sm px-2.5 py-1.5 text-[13.5px] transition-colors',
                         c && 'justify-center px-0',
-                        isActive ? 'bg-ink-800 text-white' : 'text-ink-200 hover:bg-ink-850 hover:text-white',
+                        isActive ? 'bg-ink-800 text-fg' : 'text-ink-200 hover:bg-ink-850 hover:text-fg',
                       )
                     }
                   >
@@ -394,14 +395,14 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => (window.innerWidth >= 1024 ? setCollapsed((v) => !v) : setDrawer(true))}
             aria-label="Toggle navigation"
-            className="rounded-sm p-2 text-ink-200 transition-colors hover:bg-ink-850 hover:text-white"
+            className="rounded-sm p-2 text-ink-200 transition-colors hover:bg-ink-850 hover:text-fg"
           >
             <Menu className="size-5" />
           </button>
-          <Wordmark to="/browse" />
+          <Wordmark to="/browse" compact />
           <Link to={viewer ? '/subscription' : '/plans'} aria-label={`Account access: ${premium ? 'Premium' : 'Free'}`}
             className={cn('letterboard rounded-full border px-2 py-1 text-[10px] font-bold', premium
-              ? 'border-gold-400/50 bg-gold-400/10 text-gold-300'
+              ? 'border-gold-400/50 bg-gold-400/10 text-tone-gold-300'
               : 'border-ink-600 bg-ink-850 text-ink-200')}>
             {premium ? 'PREMIUM' : 'FREE'}
           </Link>
@@ -413,7 +414,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
           <Link
             to="/search"
             aria-label="Search"
-            className="ml-auto rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-white sm:hidden"
+            className="ml-auto rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-fg sm:hidden"
           >
             <Search className="size-5" />
           </Link>
@@ -421,7 +422,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
           {canUpload && (
             <button
               onClick={() => nav('/studio/upload')}
-              className="hidden h-9 items-center gap-2 rounded-sm border border-ink-600 px-3 text-[13px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-white sm:flex"
+              className="hidden h-9 items-center gap-2 rounded-sm border border-ink-600 px-3 text-[13px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-fg sm:flex"
             >
               <Upload className="size-4" />
               Upload
@@ -430,6 +431,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
 
           {viewer && <NotificationBell />}
 
+          <ThemeSelect />
           <div className="hidden sm:block"><AccountMenu /></div>
         </div>
         <MarqueeRule />
@@ -453,7 +455,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => setDrawer(false)}
-                className="fixed inset-0 z-50 bg-ink-950/70 backdrop-blur-sm lg:hidden"
+                className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm lg:hidden"
               />
               <motion.aside
                 initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
@@ -461,7 +463,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
                 className="fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r border-ink-800 bg-ink-900 lg:hidden"
               >
                 <div className="flex h-16 shrink-0 items-center justify-between px-3">
-                  <Wordmark to="/browse" />
+                  <Wordmark to="/browse" compact />
                   <button onClick={() => setDrawer(false)} aria-label="Close navigation" className="p-2">
                     <X className="size-5 text-ink-200" />
                   </button>
@@ -599,11 +601,11 @@ export function BackOfHouse({
   const rail = (
     <div className="flex h-full flex-col">
       <div className="px-4 py-4">
-        <Wordmark to="/browse" />
+        <Wordmark to="/browse" compact />
       </div>
       <div className="px-4 pb-3">
         <p className="letterboard text-ink-300">Console</p>
-        <p className="font-marquee text-[17px] font-bold text-white">{console_.name}</p>
+        <p className="font-marquee text-[17px] font-bold text-fg">{console_.name}</p>
       </div>
       <div className="mx-4 mb-3 h-px bg-ink-800" />
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
@@ -620,7 +622,7 @@ export function BackOfHouse({
                   cn(
                     'relative flex items-center gap-2.5 rounded-sm px-2 py-2 text-[13.5px] transition-colors',
                     isActive
-                      ? 'bg-ink-800 text-white'
+                      ? 'bg-ink-800 text-fg'
                       : 'text-ink-300 hover:bg-ink-850 hover:text-ink-100',
                   )
                 }
@@ -665,7 +667,7 @@ export function BackOfHouse({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-40 bg-ink-950/75 lg:hidden"
+              className="fixed inset-0 z-40 bg-black/75 lg:hidden"
             />
             <motion.aside
               initial={{ x: -260 }}
@@ -689,10 +691,10 @@ export function BackOfHouse({
           >
             <Menu className="size-5" />
           </button>
-          <h1 className="font-marquee truncate text-[17px] font-bold text-white">{title}</h1>
+          <h1 className="font-marquee truncate text-[17px] font-bold text-fg">{title}</h1>
           <div className="ml-auto flex items-center gap-2">
             <NotificationBell />
-            {actions}
+            {actions}<ThemeSelect />
           </div>
         </header>
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
@@ -721,12 +723,13 @@ function Denied({
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="mx-auto flex h-20 w-full max-w-[1500px] items-center px-4 sm:px-6 lg:px-8">
-        <Wordmark to="/browse" />
+        <Wordmark to="/browse" compact />
+        <div className="ml-auto"><ThemeSelect /></div>
       </header>
       <MarqueeRule />
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-4 py-16">
         <p className="letterboard text-ink-300">Access</p>
-        <h1 className="font-marquee mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white">
+        <h1 className="font-marquee mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-fg">
           {heading}
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-ink-200">{explain}</p>
@@ -738,7 +741,7 @@ function Denied({
           {action}
           <Link
             to="/browse"
-            className="inline-flex h-10 items-center rounded-sm border border-ink-600 px-4 text-[14px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-white"
+            className="inline-flex h-10 items-center rounded-sm border border-ink-600 px-4 text-[14px] font-medium text-ink-100 transition-colors hover:border-ink-500 hover:text-fg"
           >
             Back to the programme
           </Link>
@@ -749,7 +752,7 @@ function Denied({
 }
 
 const primaryAction =
-  'inline-flex h-10 items-center rounded-sm bg-violet-500 px-4 text-[14px] font-medium text-white transition-colors hover:bg-violet-400'
+  'inline-flex h-10 items-center rounded-sm bg-violet-500 px-4 text-[14px] font-medium text-fg transition-colors hover:bg-brand-hi'
 
 /** Anything tied to an account: watchlist, pass, reports, notifications. */
 export function RequireAuth({ what, children }: { what: string; children: React.ReactNode }) {
@@ -814,7 +817,7 @@ export function RequireStaff({
       explain={
         <>
           This console needs the{' '}
-          <span className="text-white">{STAFF_ROLES[role].label}</span> role, which only an
+          <span className="text-fg">{STAFF_ROLES[role].label}</span> role, which only an
           administrator can grant. It is not something an account can take for itself, and owning
           a channel does not confer it.
         </>

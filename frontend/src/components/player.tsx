@@ -6,7 +6,7 @@ import {
   AlertTriangle, Flag, Keyboard,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { Letterboard, PosterPlate } from './world'
+import { PosterPlate } from './world'
 import { Button, Toggle, Placeholder } from './primitives'
 import { SPEEDS, chaptersFor, clock, seconds, type Video } from '@/lib/data'
 
@@ -29,8 +29,6 @@ const EASE = [0.16, 1, 0.3, 1] as const
 
 export type PlayerProps = {
   video: Video
-  /** Pre-roll is shown until skipped. A pass removes it entirely. */
-  withAd?: boolean
   theater: boolean
   onTheater: (v: boolean) => void
   autoplay: boolean
@@ -63,7 +61,7 @@ function IconBtn({
       disabled={disabled}
       className={cn(
         'rounded-sm p-1.5 transition-colors hover:bg-white/12 disabled:opacity-40',
-        active ? 'text-cyan-300' : 'text-ink-100 hover:text-white',
+        active ? 'text-tone-cyan-300' : 'text-ink-100 hover:text-fg',
       )}
     >
       {children}
@@ -73,7 +71,6 @@ function IconBtn({
 
 export function Player({
   video,
-  withAd = true,
   theater,
   onTheater,
   autoplay,
@@ -97,7 +94,6 @@ export function Player({
   const [track, setTrack] = useState(video.captions[0] ?? '')
   const [menu, setMenu] = useState<null | 'settings' | 'speed' | 'quality' | 'captions' | 'keys'>(null)
   const [full, setFull] = useState(false)
-  const [ad, setAd] = useState(withAd)
   const [failed, setFailed] = useState(false)
   const [scrub, setScrub] = useState<number | null>(null)
 
@@ -144,11 +140,6 @@ export function Player({
     }
   }, [])
 
-  // An advertisement stops the feature; nothing else here drives the element.
-  useEffect(() => {
-    if (ad) media.current?.pause()
-  }, [ad])
-
   useEffect(() => {
     const el = media.current
     if (!el) return
@@ -161,7 +152,7 @@ export function Player({
   // Skipped entirely when a file is playing — there the file keeps the time.
   useEffect(() => {
     if (hasMedia) return
-    if (!playing || ad || failed) return
+    if (!playing || failed) return
     const id = window.setInterval(() => {
       setTime((t) => {
         if (t + speed >= total) {
@@ -174,7 +165,7 @@ export function Player({
       })
     }, 1000)
     return () => window.clearInterval(id)
-  }, [playing, speed, total, ad, failed, onEnded])
+  }, [playing, speed, total, failed, onEnded])
 
   // A seek moves the element when there is one, and the element's timeupdate
   // brings the state back. Setting both keeps the bar responsive while the
@@ -300,8 +291,8 @@ export function Player({
 
       {failed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <AlertTriangle className="size-8 text-danger-400" />
-          <p className="font-marquee text-[20px] font-bold text-white">Playback could not start</p>
+          <AlertTriangle className="size-8 text-tone-danger-400" />
+          <p className="font-marquee text-[20px] font-bold text-fg">Playback could not start</p>
           <p className="max-w-sm text-[14px] leading-relaxed text-ink-300">
             The stream did not respond. Your connection may have dropped, or this title may be
             temporarily unavailable.
@@ -310,18 +301,6 @@ export function Player({
             <Button variant="primary" onClick={() => setFailed(false)}>Try again</Button>
             <Button onClick={onReport} icon={<Flag className="size-4" />}>Report this</Button>
           </div>
-        </div>
-      ) : ad ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-950/70 px-6 text-center">
-          <Letterboard tone="held">Advertisement</Letterboard>
-          <p className="font-marquee text-[22px] font-bold text-white">Autumn Season Launch</p>
-          <p className="text-[13px] text-ink-300">Meridian Films · CMP-410</p>
-          <Button size="sm" variant="primary" className="mt-2" onClick={() => setAd(false)}>
-            Skip advertisement
-          </Button>
-          <p className="absolute bottom-3 left-4 font-mono text-[11px] text-ink-300">
-            Pre-roll · your Season Pass removes advertising
-          </p>
         </div>
       ) : (
         <button
@@ -340,15 +319,15 @@ export function Player({
         </button>
       )}
 
-      {captions && playing && !ad && !failed && (
-        <p className="pointer-events-none absolute inset-x-0 bottom-24 mx-auto max-w-lg rounded-xs bg-ink-950/85 px-3 py-1.5 text-center text-[14px] text-white">
+      {captions && playing && !failed && (
+        <p className="pointer-events-none absolute inset-x-0 bottom-24 mx-auto max-w-lg rounded-xs bg-ink-950/85 px-3 py-1.5 text-center text-[14px] text-fg">
           {current ? `${current.title} —` : ''} placeholder caption line, {track || 'English'} track.
         </p>
       )}
 
       {/* ---------------------------------------------------------- menus -- */}
       <AnimatePresence>
-        {menu && !ad && !failed && (
+        {menu && !failed && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -411,7 +390,7 @@ export function Player({
                       onClick={() => { setSpeed(s); setMenu('settings') }}
                       className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8"
                     >
-                      <span className="w-4">{s === speed && <Check className="size-3.5 text-cyan-300" />}</span>
+                      <span className="w-4">{s === speed && <Check className="size-3.5 text-tone-cyan-300" />}</span>
                       {s === 1 ? 'Normal' : `${s}×`}
                     </button>
                   </li>
@@ -445,7 +424,7 @@ export function Player({
                 </li>
                 <li>
                   <button onClick={() => { setCaptions(false); setMenu('settings') }} className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8">
-                    <span className="w-4">{!captions && <Check className="size-3.5 text-cyan-300" />}</span>
+                    <span className="w-4">{!captions && <Check className="size-3.5 text-tone-cyan-300" />}</span>
                     Off
                   </button>
                 </li>
@@ -460,7 +439,7 @@ export function Player({
                         onClick={() => { setTrack(c); setCaptions(true); setMenu('settings') }}
                         className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8"
                       >
-                        <span className="w-4">{captions && track === c && <Check className="size-3.5 text-cyan-300" />}</span>
+                        <span className="w-4">{captions && track === c && <Check className="size-3.5 text-tone-cyan-300" />}</span>
                         {c}
                       </button>
                     </li>
@@ -501,7 +480,7 @@ export function Player({
       {menu && <div className="absolute inset-0 z-10" onClick={() => setMenu(null)} />}
 
       {/* ------------------------------------------------------ transport -- */}
-      {!ad && !failed && (
+      {!failed && (
         <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-ink-950/95 to-transparent px-3 pb-2.5 pt-10">
           {/* scrubber, segmented by chapter when the creator wrote them */}
           <div
@@ -520,7 +499,7 @@ export function Player({
           >
             {scrub !== null && (
               <span
-                className="pointer-events-none absolute -top-7 -translate-x-1/2 rounded-xs bg-ink-950/95 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-white"
+                className="pointer-events-none absolute -top-7 -translate-x-1/2 rounded-xs bg-ink-950/95 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-fg"
                 style={{ left: `${pct(scrub)}%` }}
               >
                 {clock(scrub)}
@@ -579,7 +558,7 @@ export function Player({
 
             <span className="ml-auto flex items-center gap-0.5">
               {speed !== 1 && (
-                <span className="mr-1 font-mono text-[11px] text-cyan-300">{speed}×</span>
+                <span className="mr-1 font-mono text-[11px] text-tone-cyan-300">{speed}×</span>
               )}
               <IconBtn
                 label={captions ? 'Turn captions off' : 'Turn captions on'}
@@ -618,7 +597,7 @@ export function ChapterList({ video }: { video: Video }) {
         {chapters.map((c) => (
           <li key={c.at}>
             <div className="flex items-baseline gap-3 py-2">
-              <span className="font-mono text-[12px] tabular-nums text-cyan-300">{clock(c.at)}</span>
+              <span className="font-mono text-[12px] tabular-nums text-tone-cyan-300">{clock(c.at)}</span>
               <span className="text-[14px] text-ink-100">{c.title}</span>
             </div>
           </li>

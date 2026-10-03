@@ -43,6 +43,7 @@ export function AdSlot({
 }) {
   const [ad, setAd] = useState<ServedAd | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [clickError, setClickError] = useState(false)
 
   // Held in a ref so the effects below do not re-run when the parent re-renders
   // with a new closure, which would ask for a second advertisement and record a
@@ -101,7 +102,7 @@ export function AdSlot({
   const remaining = Math.max(0, runsFor - elapsed)
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-ink-950">
+    <div className="theme-media relative aspect-video overflow-hidden bg-ink-950">
       {ad.adType === 'VIDEO' ? (
         <video
           src={ad.mediaUrl}
@@ -109,6 +110,7 @@ export function AdSlot({
           muted
           playsInline
           onEnded={() => finish.current()}
+          onError={() => finish.current()}
           className="size-full object-contain"
         />
       ) : (
@@ -125,18 +127,29 @@ export function AdSlot({
 
       <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-gradient-to-t from-ink-950/90 to-transparent p-4">
         <div className="min-w-0">
-          <p className="font-marquee truncate text-[17px] font-bold text-white">{ad.adTitle}</p>
+          <p className="font-marquee truncate text-[17px] font-bold text-fg">{ad.adTitle}</p>
           {ad.advertiser && <p className="text-[12.5px] text-ink-300">{ad.advertiser}</p>}
           {ad.clickUrl && (
             <a
               href={ad.clickUrl}
               target="_blank"
               rel="noreferrer noopener sponsored"
-              className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-cyan-300 underline hover:text-cyan-200"
+              onClick={(event) => {
+                event.preventDefault()
+                const tab = window.open('about:blank', '_blank')
+                if (!tab) { setClickError(true); return }
+                tab.opener = null
+                setClickError(false)
+                ads.serving.click(ad.impressionId).then(({ destination }) => {
+                  tab.location.replace(destination)
+                }).catch(() => { tab.close(); setClickError(true) })
+              }}
+              className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-tone-cyan-300 underline hover:text-tone-cyan-200"
             >
               <Link2 className="size-3.5" /> Find out more
             </a>
           )}
+          {clickError && <p role="alert" className="mt-1 text-sm text-tone-danger-400">The promotional link could not open. Please try again.</p>}
         </div>
 
         <Button
@@ -159,4 +172,3 @@ export function AdSlot({
     </div>
   )
 }
-

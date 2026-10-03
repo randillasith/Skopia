@@ -33,15 +33,15 @@ function LiveCard({ l }: { l: (typeof LIVE)[number] }) {
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-white opacity-75 motion-reduce:animate-none" />
               <span className="relative inline-flex size-1.5 rounded-full bg-white" />
             </span>
-            <span className="letterboard text-white">Live</span>
+            <span className="letterboard text-fg">Live</span>
           </span>
-          <span className="absolute bottom-1.5 right-1.5 rounded-xs bg-ink-950/85 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-white backdrop-blur-[2px]">
+          <span className="absolute bottom-1.5 right-1.5 rounded-xs bg-ink-950/85 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-fg backdrop-blur-[2px]">
             {fmt(l.watching)} watching
           </span>
         </span>
       </Lightbox>
       <div className="mt-2.5 min-w-0">
-        <h3 className="font-marquee truncate text-[15px] font-bold tracking-tight text-white group-hover:text-violet-200">
+        <h3 className="font-marquee truncate text-[15px] font-bold tracking-tight text-fg group-hover:text-tone-violet-200">
           {l.title}
         </h3>
         <p className="mt-0.5 truncate text-[12.5px] text-ink-300">
@@ -80,7 +80,7 @@ export function Explore() {
     <FrontOfHouse>
       <div className="mx-auto max-w-[1600px] px-4 py-8 sm:px-6 lg:px-8">
         <p className="letterboard text-ink-300">Discover</p>
-        <h1 className="font-marquee mt-1 text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee mt-1 text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           Explore
         </h1>
 
@@ -117,7 +117,7 @@ export function Explore() {
                 >
                   <Avatar name={c.name} size={42} />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-white group-hover:text-violet-200">
+                    <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg group-hover:text-tone-violet-200">
                       {c.name}
                       {isVerified(c.name) && <VerifiedMark />}
                     </span>
@@ -166,14 +166,14 @@ function cnChip(active: boolean) {
   return [
     'rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors',
     active
-      ? 'border-violet-400 bg-violet-500/16 text-violet-100'
-      : 'border-ink-700 text-ink-300 hover:border-ink-600 hover:text-white',
+      ? 'border-violet-400 bg-violet-500/16 text-tone-violet-100'
+      : 'border-ink-700 text-ink-300 hover:border-ink-600 hover:text-fg',
   ].join(' ')
 }
 
 export function VerifiedMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-label="Verified channel" role="img" className="size-3.5 shrink-0 text-cyan-300">
+    <svg viewBox="0 0 24 24" aria-label="Verified channel" role="img" className="size-3.5 shrink-0 text-tone-cyan-300">
       <path
         fill="currentColor"
         d="M12 1.5 14.6 4l3.5-.4 1 3.4 3 1.8-1.5 3.2 1.5 3.2-3 1.8-1 3.4-3.5-.4L12 22.5 9.4 20l-3.5.4-1-3.4-3-1.8L3.4 12 1.9 8.8l3-1.8 1-3.4 3.5.4L12 1.5Z"
@@ -217,8 +217,8 @@ export function Trending() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="letterboard text-ink-300">Discover</p>
-            <h1 className="font-marquee mt-1 flex items-center gap-3 text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
-              <Flame className="size-7 text-gold-400" />
+            <h1 className="font-marquee mt-1 flex items-center gap-3 text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
+              <Flame className="size-7 text-tone-gold-400" />
               Trending
             </h1>
           </div>
@@ -261,7 +261,7 @@ export function Trending() {
                 </Link>
                 <div className="min-w-0 flex-1">
                   <Link to={`/watch/${v.id}`}>
-                    <p className="font-marquee truncate text-[16px] font-bold text-white group-hover:text-violet-200 sm:text-[18px]">
+                    <p className="font-marquee truncate text-[16px] font-bold text-fg group-hover:text-tone-violet-200 sm:text-[18px]">
                       {v.title}
                     </p>
                   </Link>
@@ -303,7 +303,7 @@ export function Queue() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="letterboard text-ink-300">Library</p>
-            <h1 className="font-marquee mt-1 text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+            <h1 className="font-marquee mt-1 text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
               Queue
             </h1>
             <p className="mt-2 text-[15px] text-ink-300">
@@ -352,7 +352,7 @@ export function Queue() {
                   </Link>
                   <div className="min-w-0 flex-1">
                     <Link to={`/watch/${v.id}`}>
-                      <p className="font-marquee truncate text-[15px] font-bold text-white hover:text-violet-200">
+                      <p className="font-marquee truncate text-[15px] font-bold text-fg hover:text-tone-violet-200">
                         {v.title}
                       </p>
                     </Link>
@@ -364,7 +364,7 @@ export function Queue() {
                   <button
                     aria-label={`Take ${v.title} out of the queue`}
                     onClick={() => { dequeue(v.id); toast({ title: 'Removed from queue' }) }}
-                    className="shrink-0 rounded-sm p-2 text-ink-300 opacity-0 transition-opacity hover:bg-ink-800 hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+                    className="shrink-0 rounded-sm p-2 text-ink-300 opacity-0 transition-opacity hover:bg-ink-800 hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
                   >
                     <X className="size-4" />
                   </button>

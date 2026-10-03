@@ -19,13 +19,13 @@ import { BILLING_TONE, type Billing } from '@/lib/data'
 /* ------------------------------------------------------------- letterboard */
 
 const TONE: Record<string, string> = {
-  live: 'text-cyan-300 border-cyan-400/40 bg-cyan-400/8',
-  soon: 'text-violet-200 border-violet-400/40 bg-violet-400/8',
-  held: 'text-gold-400 border-gold-500/35 bg-gold-500/8',
+  live: 'text-tone-cyan-300 border-cyan-400/40 bg-cyan-400/8',
+  soon: 'text-tone-violet-200 border-violet-400/40 bg-violet-400/8',
+  held: 'text-tone-gold-400 border-gold-500/35 bg-gold-500/8',
   dead: 'text-ink-300 border-ink-600 bg-ink-800',
-  review: 'text-warning-400 border-warning-500/35 bg-warning-500/8',
-  ok: 'text-success-400 border-success-500/35 bg-success-500/8',
-  bad: 'text-danger-400 border-danger-500/35 bg-danger-500/8',
+  review: 'text-tone-warning-400 border-warning-500/35 bg-warning-500/8',
+  ok: 'text-tone-success-400 border-success-500/35 bg-success-500/8',
+  bad: 'text-tone-danger-400 border-danger-500/35 bg-danger-500/8',
   neutral: 'text-ink-200 border-ink-600 bg-ink-800',
 }
 
@@ -483,7 +483,7 @@ export function Stations({
             <div
               className={cn(
                 'letterboard flex items-center gap-2 rounded-xs border px-2.5 py-1.5 transition-colors',
-                now && 'border-cyan-400/50 bg-cyan-400/10 text-cyan-200',
+                now && 'border-cyan-400/50 bg-cyan-400/10 text-tone-cyan-200',
                 done && !now && 'border-ink-600 bg-ink-800 text-ink-200',
                 !done && !now && 'border-ink-700 bg-transparent text-ink-300',
               )}

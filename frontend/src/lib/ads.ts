@@ -280,6 +280,8 @@ export const ads = {
 
   /** What the player calls. No actor: viewers, including guests, hit these. */
   serving: {
+    click: (impressionId: number) =>
+      request<{ destination: string }>(`/api/ads/click/${impressionId}`, { method: 'POST' }),
     // No viewer is passed: the server takes it from the bearer token, because a
     // delivery record naming a viewer the caller chose is not a record of
     // anything. A guest simply has no token and counts as a guest.
