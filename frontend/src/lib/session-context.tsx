@@ -30,6 +30,8 @@ type SessionValue = {
   signIn: (identifier: string, password: string) => Promise<Account>
   signUp: (input: SignUpInput) => Promise<Account>
   signOut: () => void
+  /** Refresh server-derived account flags after a subscription changes. */
+  refreshAccount: () => Promise<Account>
   /**
    * Switch to one of the prototype identities. They have no server account, so a
    * screen backed by the API will find nothing for them. Kept because several
@@ -47,6 +49,9 @@ const SessionCtx = createContext<SessionValue>({
     throw new Error('No session provider')
   },
   signOut: () => {},
+  refreshAccount: async () => {
+    throw new Error('No session provider')
+  },
 })
 
 export const useSession = () => useContext(SessionCtx)
@@ -117,6 +122,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       },
       signUp: async (input) => {
         const server = await accounts.signUp(input)
+        const account = toAccount(server)
+        if (account.userId != null && server.token) writeSession({ userId: account.userId, token: server.token })
+        setViewer(account)
+        return account
+      },
+      refreshAccount: async () => {
+        const server = await accounts.me()
         const account = toAccount(server)
         if (account.userId != null && server.token) writeSession({ userId: account.userId, token: server.token })
         setViewer(account)

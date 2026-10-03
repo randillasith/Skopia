@@ -59,7 +59,7 @@ export function Plans() {
 }
 
 export function Checkout() {
-  const { viewer } = useSession()
+  const { viewer, refreshAccount } = useSession()
   const actor = actorIdOf(viewer)
   const [params] = useSearchParams()
   const selected = params.get('plan')
@@ -75,6 +75,7 @@ export function Checkout() {
       const latest = await billing.plans()
       if (!latest.demoEnabled || !latest.plans.some((p) => p.planName === plan.planName)) throw new Error('Demo checkout is no longer available.')
       await billing.checkout(plan.planName as PlanChoice, actor)
+      await refreshAccount().catch(() => undefined)
       nav('/checkout/result', { replace: true, state: { completed: true } })
     } catch (cause) { setSubmitError(message(cause)) }
     finally { setSaving(false) }
@@ -105,7 +106,7 @@ export function CheckoutResult() {
 }
 
 export function Subscription() {
-  const { viewer } = useSession()
+  const { viewer, refreshAccount } = useSession()
   const actor = actorIdOf(viewer)
   const load = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.status(actor, signal), [actor])
   const { value, loading, error, retry } = useLoad<SubscriptionStatus>(load, String(actor))
@@ -122,7 +123,7 @@ export function Subscription() {
       {value.premium && <Button className="mt-5" variant="danger" loading={canceling} onClick={async () => {
         if (actor == null || canceling || !window.confirm('Cancel this demo subscription?')) return
         setCanceling(true); setActionError(null)
-        try { await billing.cancel(actor); retry() }
+        try { await billing.cancel(actor); await refreshAccount().catch(() => undefined); retry() }
         catch (cause) { setActionError(message(cause)) }
         finally { setCanceling(false) }
       }}>Cancel demo subscription</Button>}

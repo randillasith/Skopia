@@ -56,6 +56,8 @@ class BillingApiTest {
                 .andExpect(jsonPath("$.payment.amount").value(0.0))
                 .andExpect(jsonPath("$.payment.payMethod").value("DEMO_NO_CHARGE"));
         assertThat(billing.hasActivePremium(owner.getId())).isTrue();
+        mvc.perform(get("/api/auth/me").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.isPremium").value(true));
         Long id = payments.findAll().get(0).getId();
         mvc.perform(get("/api/billing/payments").header("Authorization", bearer(other)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
@@ -73,6 +75,8 @@ class BillingApiTest {
         mvc.perform(post("/api/billing/cancel").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.premium").value(false));
         assertThat(billing.hasActivePremium(owner.getId())).isFalse();
+        mvc.perform(get("/api/auth/me").header("Authorization", bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.isPremium").value(false));
         assertThat(payments.count()).isEqualTo(1);
     }
 
@@ -94,6 +98,8 @@ class BillingApiTest {
         var sub = subscriptions.findByViewerId(v.getId()).get(0);
         sub.setEndDate(LocalDateTime.now().minusMinutes(1)); subscriptions.saveAndFlush(sub);
         assertThat(billing.hasActivePremium(v.getId())).isFalse();
+        mvc.perform(get("/api/auth/me").header("Authorization", bearer(v)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.isPremium").value(false));
         v.setAccountStatus("SUSPENDED"); viewers.saveAndFlush(v);
         assertThat(billing.hasActivePremium(v.getId())).isFalse();
     }

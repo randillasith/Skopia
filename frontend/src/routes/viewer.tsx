@@ -17,6 +17,7 @@ import {
 } from '@/lib/data'
 import { useCatalogue, useVideo, useVideoSearch, useComments } from '@/lib/useCatalogue'
 import { catalogue, videoIdOf } from '@/lib/catalogue'
+import { filterByAccess, type AccessFilter } from '@/lib/access-filter'
 import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import {
@@ -159,16 +160,17 @@ export function Browse() {
   const { isSaved, toggleWatchLater } = useLibrary()
   const { videos, categories, loading, error, refresh } = useCatalogue()
   const [cat, setCat] = useState<string>('All')
+  const [accessFilter, setAccessFilter] = useState<AccessFilter>('all')
   const [sort, setSort] = useState('popular')
 
   const list = useMemo(() => {
-    let l = videos.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW')
+    let l = filterByAccess(videos.filter((v) => v.billing !== 'PULLED' && v.billing !== 'IN REVIEW'), accessFilter)
     if (cat !== 'All') l = l.filter((v) => v.category === cat)
     if (sort === 'popular') l = [...l].sort((a, b) => b.views - a.views)
     if (sort === 'newest') l = [...l].sort((a, b) => b.published.localeCompare(a.published))
     if (sort === 'title') l = [...l].sort((a, b) => a.title.localeCompare(b.title))
     return l
-  }, [videos, cat, sort])
+  }, [videos, cat, sort, accessFilter])
 
   const [lead, ...rest] = list
   const featured = rest.slice(0, 3)
@@ -198,7 +200,16 @@ export function Browse() {
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2" aria-label="Access tier">
+          {([['all', 'All titles'], ['free', 'Free videos'], ['premium', 'Premium videos']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setAccessFilter(key)} aria-pressed={accessFilter === key}
+              className={cn('rounded-sm border px-3 py-1.5 text-[13px] font-medium transition-colors',
+                accessFilter === key ? 'border-gold-400 bg-gold-400/10 text-gold-200' : 'border-ink-700 text-ink-300 hover:text-white')}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
           {['All', ...categories.map((c) => c.name)].map((c) => (
             <button
               key={c}
@@ -226,13 +237,13 @@ export function Browse() {
           <div className="mt-10">
             <EmptyState
               icon={<SearchX className="size-7" />}
-              title={cat === 'All' ? 'Nothing is booked yet' : 'Nothing in that category yet'}
-              body={
-                cat === 'All'
+              title={accessFilter !== 'all' ? `No ${accessFilter} videos yet` : cat === 'All' ? 'Nothing is booked yet' : 'Nothing in that category yet'}
+              body={accessFilter !== 'all'
+                ? `There are no published ${accessFilter} videos in this selection. Try all titles.`
+                : cat === 'All'
                   ? 'The catalogue is empty. Once a creator publishes something it appears here.'
-                  : 'No titles are currently billed under this category. Try another, or see the whole programme.'
-              }
-              action={cat !== 'All' && <Button onClick={() => setCat('All')}>Show everything</Button>}
+                  : 'No titles are currently billed under this category. Try another, or see the whole programme.'}
+              action={(cat !== 'All' || accessFilter !== 'all') && <Button onClick={() => { setCat('All'); setAccessFilter('all') }}>Show everything</Button>}
             />
           </div>
         ) : (
@@ -649,7 +660,7 @@ export function Watch() {
     if (!v || (v.premium && !v.mediaUrl)) return
     recordWatch(v.id)
     if (numericId != null) catalogue.countView(numericId).catch(() => {})
-  }, [v?.id, v?.mediaUrl, numericId])
+  }, [v?.id, v?.premium, v?.mediaUrl, numericId])
 
   // Where you stopped is written back as you watch, so picking the title up on
   // another device lands in the right place — and because that write is what
