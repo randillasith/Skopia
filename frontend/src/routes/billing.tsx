@@ -44,6 +44,7 @@ function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
 export function Plans() {
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'plans')
   return <Page title="Demo passes">
+    <p className="mb-5 text-ink-200">Free viewing includes advertisements. Monthly and yearly passes remove advertisements while the subscription is active.</p>
     {loading && <p role="status">Loading plans…</p>}
     <Feedback error={error} retry={retry} />
     {value && <>
@@ -51,6 +52,7 @@ export function Plans() {
       {value.plans.length ? <div className="grid gap-4 sm:grid-cols-2">{value.plans.map((plan) => <article key={plan.id} className={box}>
         <h2 className="font-marquee text-xl font-bold text-fg">{plan.planName}</h2>
         <p className="mt-2 text-ink-200">{plan.durationDays} days · Demo price: {plan.price} (currency not specified)</p>
+        <p className="mt-3 font-semibold">{plan.adFree ? "Ad-free viewing" : "Includes advertisements"}</p>
         {plan.benefit && <p className="mt-3 text-sm text-ink-300">{plan.benefit}</p>}
         {value.demoEnabled && (plan.planName === 'MONTHLY' || plan.planName === 'YEARLY') && <Link to={`/checkout?plan=${encodeURIComponent(plan.planName)}`} className={`${link} mt-5 inline-block`}>Choose demo pass</Link>}
       </article>)}</div> : <p>No plans are available.</p>}
@@ -158,6 +160,7 @@ export function Subscription() {
         <div><p className="letterboard text-ink-300">Status</p><p className="mt-1">{value.status ?? 'Not provided'}</p></div>
         <div><p className="letterboard text-ink-300">Term</p><p className="mt-1">{date(value.startDate)}<br />through {date(value.endDate)}</p></div>
       </div>
+      <p className="mt-5 text-ink-200">{value.adFree ? "Ad-free viewing is active until this pass ends." : "Viewing includes advertisements. An active monthly or yearly pass removes them."}</p>
       {value.premium && <div className="mt-6 border-t border-ink-700 pt-5">
         <h2 className="font-marquee text-lg font-bold text-fg">Manage this pass</h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-300">Plan changes take effect immediately. The current term is replaced with a new term for the selected plan; unused demo time is not prorated or carried over.</p>

@@ -38,6 +38,8 @@ class AdServingServiceTest {
     @Autowired AdPlacementService placements;
     @Autowired AdImpressionRepository impressions;
     @Autowired AdvertisingFixture fixture;
+    @Autowired org.gp14.skopia.repository.SubscriptionRepository subscriptions;
+    @Autowired org.gp14.skopia.repository.SubscriptionPlanRepository plans;
 
     private Long actor;
     private Category documentary;
@@ -256,6 +258,70 @@ class AdServingServiceTest {
     }
 
     /* ------------------------------------------------------------ plumbing */
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"MONTHLY", "YEARLY"})
+    void activePassSuppressesEverySlotAndDirectImpressions(String plan) {
+        Long adId = live("Pass exclusion", t -> t.category(documentary));
+        var viewer = fixture.viewer();
+        subscribe(viewer, plan, "ACTIVE", LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(1));
+        for (SlotPosition slot : SlotPosition.values()) {
+            assertThat(serving.serve(longExposure.getId(), slot, viewer.getId(), "desktop", 1)).isEmpty();
+        }
+        Long placementId = placements.forAdvertisement(actor, adId).get(0).id();
+        assertThatThrownBy(() -> serving.recordImpression(placementId, longExposure.getId(), viewer.getId(), "desktop"))
+                .isInstanceOf(AdvertisingException.class).hasMessageContaining("ad-free");
+        assertThat(impressions.count()).isZero();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"EXPIRED", "CANCELLED", "PENDING", "FUTURE", "PAST", "UNKNOWN"})
+    void invalidTermsAndUnknownPlansRemainAdSupported(String scenario) {
+        live("Supported viewing", t -> t.category(documentary));
+        var viewer = fixture.viewer();
+        viewer.setIsPremium(true); // A stale profile flag is never an entitlement.
+        LocalDateTime now = LocalDateTime.now();
+        subscribe(viewer, scenario.equals("UNKNOWN") ? "BASIC" : "MONTHLY",
+                java.util.Set.of("FUTURE", "PAST", "UNKNOWN").contains(scenario) ? "ACTIVE" : scenario,
+                scenario.equals("FUTURE") ? now.plusDays(1) : now.minusDays(2),
+                scenario.equals("PAST") ? now.minusSeconds(1) : now.plusDays(2));
+        assertThat(serving.serve(longExposure.getId(), SlotPosition.PREROLL, viewer.getId(), "desktop", 1)).hasSize(1);
+        assertThat(impressions.count()).isEqualTo(1);
+    }
+
+    @Test void lockedOrUnpublishedVideosDoNotGenerateAds() {
+        live("Unavailable title", t -> t.category(documentary));
+        longExposure.setVideoStatus("DRAFT");
+        assertThat(serve(longExposure)).isEmpty();
+        longExposure.setVideoStatus("PUBLIC");
+        longExposure.getAccessTier().setTierName("PREMIUM");
+        assertThat(serve(longExposure)).isEmpty();
+        assertThat(impressions.count()).isZero();
+    }
+
+    @Test void staleAndMismatchedPlacementsCannotRecordImpressions() {
+        Long adId = live("Placement validation", t -> t.video(longExposure));
+        Long placementId = placements.forAdvertisement(actor, adId).get(0).id();
+        assertThatThrownBy(() -> serving.recordImpression(placementId, cadenceHall.getId(), null, "desktop"))
+                .isInstanceOf(AdvertisingException.class);
+        advertisements.deactivate(actor, adId);
+        assertThatThrownBy(() -> serving.recordImpression(placementId, longExposure.getId(), null, "desktop"))
+                .isInstanceOf(AdvertisingException.class);
+        assertThat(impressions.count()).isZero();
+    }
+
+    private void subscribe(org.gp14.skopia.model.user.RegisteredViewer viewer, String planName,
+                           String status, LocalDateTime start, LocalDateTime end) {
+        var plan = plans.findByPlanName(planName).orElseGet(() -> {
+            var p = new org.gp14.skopia.model.subscription.SubscriptionPlan();
+            p.setPlanName(planName); p.setPrice(BigDecimal.ZERO); p.setDurationDays(30);
+            return plans.save(p);
+        });
+        var sub = new org.gp14.skopia.model.subscription.Subscription();
+        sub.setViewer(viewer); sub.setPlan(plan); sub.setSubStatus(status);
+        sub.setStartDate(start); sub.setEndDate(end); sub.setAutoRenew(false);
+        subscriptions.saveAndFlush(sub);
+    }
 
 
     /* ------------------------------------------------- delivery integrity */

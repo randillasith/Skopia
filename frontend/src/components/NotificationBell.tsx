@@ -137,7 +137,7 @@ export function NotificationBell() {
         onClick={toggle}
         aria-label={hasAttention ? `Notifications, ${attentionCount} new` : 'Notifications'}
         aria-expanded={open}
-        className={`relative grid h-10 w-10 place-items-center rounded-full border transition-colors ${open || hasAttention ? 'border-red-500/40 bg-red-500/10 text-red-500' : 'border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-white'}`}
+        className={`relative grid h-10 w-10 place-items-center rounded-full border transition-colors ${open || hasAttention ? 'border-red-500/40 bg-red-500/10 text-tone-danger-500' : 'border-ink-800 text-ink-400 hover:border-ink-700 hover:text-fg'}`}
       >
         {hasAttention && <span className="absolute inset-0 animate-ping rounded-full border border-red-500/35" aria-hidden="true" />}
         <motion.span
@@ -161,12 +161,12 @@ export function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="absolute right-0 top-12 z-[80] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl shadow-black/70"
+            className="absolute right-0 top-12 z-[80] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-ink-800 bg-ink-950 shadow-2xl shadow-black/70"
           >
-            <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-ink-800 px-4 py-3">
               <div>
-                <p className="text-sm font-black text-white">Notifications</p>
-                <p className="text-[11px] text-neutral-500">Announcements and newly published videos</p>
+                <p className="text-sm font-black text-fg">Notifications</p>
+                <p className="text-[11px] text-ink-500">Announcements and newly published videos</p>
               </div>
               {hasAttention && <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" aria-label="New activity" />}
             </div>
@@ -174,26 +174,26 @@ export function NotificationBell() {
             <div className="max-h-[26rem] overflow-y-auto">
               {feed.length === 0 ? (
                 <div className="px-5 py-10 text-center">
-                  <Bell size={24} className="mx-auto mb-3 text-neutral-700" />
-                  <p className="text-sm font-semibold text-neutral-400">No notifications yet</p>
+                  <Bell size={24} className="mx-auto mb-3 text-ink-700" />
+                  <p className="text-sm font-semibold text-ink-400">No notifications yet</p>
                 </div>
               ) : feed.map((item) => (
                 <Link
                   key={item.id}
                   to={item.link}
                   onClick={() => openItem(item.kind, item.sourceId, item.unread)}
-                  className={`flex gap-3 border-b border-neutral-900 px-4 py-3 transition-colors last:border-b-0 hover:bg-neutral-900/80 ${item.unread ? 'bg-red-500/[0.055]' : ''}`}
+                  className={`flex gap-3 border-b border-ink-900 px-4 py-3 transition-colors last:border-b-0 hover:bg-ink-900/80 ${item.unread ? 'bg-red-500/[0.055]' : ''}`}
                 >
-                  <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${item.kind === 'ANNOUNCEMENT' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}`}>
+                  <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${item.kind === 'ANNOUNCEMENT' ? 'bg-amber-500/10 text-tone-amber-400' : 'bg-red-500/10 text-tone-danger-400'}`}>
                     {item.kind === 'ANNOUNCEMENT' ? <Megaphone size={17} /> : <PlayCircle size={17} />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start gap-2">
-                      <span className="min-w-0 flex-1 break-words text-sm font-bold leading-snug text-neutral-100">{item.title}</span>
+                      <span className="min-w-0 flex-1 break-words text-sm font-bold leading-snug text-ink-100">{item.title}</span>
                       {item.unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}
                     </span>
-                    <span className="mt-1 block truncate text-xs text-neutral-500">{item.body}</span>
-                    <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-600">
+                    <span className="mt-1 block truncate text-xs text-ink-500">{item.body}</span>
+                    <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-ink-600">
                       {item.kind === 'ANNOUNCEMENT' ? 'Announcement' : 'New video'} · {relativeTime(item.occurredAt)}
                     </span>
                   </span>
@@ -204,7 +204,7 @@ export function NotificationBell() {
             <Link
               to="/notifications"
               onClick={() => setOpen(false)}
-              className="block border-t border-neutral-800 px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-red-400 transition-colors hover:bg-neutral-900 hover:text-red-300"
+              className="block border-t border-ink-800 px-4 py-3 text-center text-xs font-black uppercase tracking-wider text-tone-danger-400 transition-colors hover:bg-ink-900 hover:text-tone-danger-300"
             >
               View all notifications
             </Link>

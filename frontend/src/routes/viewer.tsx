@@ -607,7 +607,7 @@ export function Watch() {
   const { video: v, loading, error, reload, setVideo } = useVideo(id)
   const { videos } = useCatalogue()
   const toast = useToast()
-  const { viewer } = useSession()
+  const { viewer, resolving } = useSession()
   const actor = actorIdOf(viewer)
   const numericId = id ? videoIdOf(id) : null
   const {
@@ -629,7 +629,9 @@ export function Watch() {
   // catalogue already gave us — this used to search the API by title to find it
   // back, from when the page rendered placeholder titles that had no id of their
   // own.
-  const [adShowing, setAdShowing] = useState(true)
+  const [finishedBreak, setFinishedBreak] = useState<string | null>(null)
+  const breakKey = `${numericId}:${actor ?? "guest"}`
+  const adShowing = finishedBreak !== breakKey
   const backendVideoId = numericId
   const [comment, setComment] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
@@ -760,9 +762,10 @@ export function Watch() {
               ) : adShowing ? (
                 /* ---- pre-roll, served by FR5 and always labelled as advertising ---- */
                 <AdSlot
-                  videoId={backendVideoId}
+                  key={breakKey}
+                  videoId={resolving ? undefined : backendVideoId}
                   slot="PREROLL"
-                  onFinished={() => setAdShowing(false)}
+                  onFinished={() => setFinishedBreak(breakKey)}
                 />
               ) : (
               <Player

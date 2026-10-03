@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearSession, readSession, writeSession } from './auth-storage'
 import { request, submitForm, upload } from './api'
+import { ads } from './ads'
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
@@ -26,6 +27,20 @@ describe('authenticated API requests', () => {
     expect(readSession()).toEqual({ token: 'signed-token', userId: 42 })
     clearSession()
     expect(readSession()).toBeNull()
+  })
+
+  it('authenticates ad delivery and tracked clicks without exposing the token in URLs', async () => {
+    writeSession({ token: 'signed-token', userId: 42 })
+    await ads.serving.active(7, 'PREROLL')
+    await ads.serving.click(9)
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/ads/active?videoId=7&slot=PREROLL')
+    expect(vi.mocked(fetch).mock.calls[1][0]).toBe('/api/ads/click/9')
+    expect(vi.mocked(fetch).mock.calls[1][1]?.method).toBe('POST')
+    for (const [path, init] of vi.mocked(fetch).mock.calls) {
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer signed-token' })
+      expect(String(path)).not.toContain('signed-token')
+      expect(String(path)).not.toContain('viewerId')
+    }
   })
 
   it('adds bearer and legacy actor headers to JSON requests', async () => {

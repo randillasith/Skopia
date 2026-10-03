@@ -26,12 +26,20 @@ public class BillingService {
             @Value("${skopia.billing.demo-enabled:false}") boolean demoEnabled) {
         this.users=users; this.subscriptions=subscriptions; this.plans=plans; this.payments=payments; this.refunds=refunds; this.logs=logs; this.entityManager=entityManager; this.demoEnabled=demoEnabled;
     }
-    @Transactional(readOnly=true) public BillingDtos.Catalog plans(){return new BillingDtos.Catalog(demoEnabled,plans.findAll().stream().filter(p->List.of("MONTHLY","YEARLY").contains(p.getPlanName())).map(p->new BillingDtos.Plan(p.getId(),p.getPlanName(),p.getDurationDays(),p.getPrice(),p.getBenefit())).sorted(Comparator.comparing(BillingDtos.Plan::durationDays)).toList());}
+    @Transactional(readOnly=true) public BillingDtos.Catalog plans(){return new BillingDtos.Catalog(demoEnabled,plans.findAll().stream().filter(p->List.of("MONTHLY","YEARLY").contains(p.getPlanName())).map(p->new BillingDtos.Plan(p.getId(),p.getPlanName(),p.getDurationDays(),p.getPrice(),p.getBenefit(),SubscriptionBenefits.isAdFree(p.getPlanName()))).sorted(Comparator.comparing(BillingDtos.Plan::durationDays)).toList());}
     @Transactional(readOnly=true) public boolean hasActivePremium(Long id){return id!=null&&users.findById(id).filter(u->u instanceof Viewer&&"ACTIVE".equals(u.getAccountStatus())).isPresent()&&!active(id).isEmpty();}
+    /** Re-evaluated for every delivery; legacy profile flags do not grant benefits. */
+    @Transactional(readOnly = true)
+    public boolean hasAdFreeSubscription(Long id) {
+        if (id == null || users.findById(id)
+                .filter(u -> u instanceof Viewer && "ACTIVE".equals(u.getAccountStatus())).isEmpty()) return false;
+        return active(id).stream().anyMatch(s -> s.getPlan() != null
+                && SubscriptionBenefits.isAdFree(s.getPlan().getPlanName()));
+    }
     private List<Subscription> active(Long id){LocalDateTime now=LocalDateTime.now();return subscriptions.findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(id,"ACTIVE",now).stream().filter(s->!s.getStartDate().isAfter(now)).toList();}
     @Transactional(readOnly=true) public BillingDtos.Status status(Long id){requireViewer(id);return statusFor(id);}
-    private BillingDtos.Status statusFor(Long id){var cur=active(id).stream().findFirst();if(cur.isPresent())return statusOf(cur.get(),"ACTIVE",true);var latest=subscriptions.findByViewerIdOrderByEndDateDescIdDesc(id).stream().findFirst();if(latest.isEmpty())return new BillingDtos.Status(false,null,null,null,null,"FREE");Subscription s=latest.get();String state="CANCELLED".equalsIgnoreCase(s.getSubStatus())?"CANCELLED":!s.getEndDate().isAfter(LocalDateTime.now())?"EXPIRED":s.getSubStatus().toUpperCase();return statusOf(s,state,false);}
-    private BillingDtos.Status statusOf(Subscription s,String state,boolean premium){return new BillingDtos.Status(premium,s.getId(),s.getPlan().getPlanName(),s.getStartDate(),s.getEndDate(),state);}
+    private BillingDtos.Status statusFor(Long id){var cur=active(id).stream().findFirst();if(cur.isPresent())return statusOf(cur.get(),"ACTIVE",true);var latest=subscriptions.findByViewerIdOrderByEndDateDescIdDesc(id).stream().findFirst();if(latest.isEmpty())return new BillingDtos.Status(false,null,null,null,null,"FREE",false);Subscription s=latest.get();String state="CANCELLED".equalsIgnoreCase(s.getSubStatus())?"CANCELLED":!s.getEndDate().isAfter(LocalDateTime.now())?"EXPIRED":s.getSubStatus().toUpperCase();return statusOf(s,state,false);}
+    private BillingDtos.Status statusOf(Subscription s,String state,boolean premium){return new BillingDtos.Status(premium,s.getId(),s.getPlan().getPlanName(),s.getStartDate(),s.getEndDate(),state,premium && hasAdFreeSubscription(s.getViewer().getId()));}
     @Transactional(readOnly=true) public List<BillingDtos.PaymentView> payments(Long id){requireViewer(id);return payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(id).stream().map(this::paymentView).toList();}
     @Transactional(readOnly=true) public BillingDtos.PaymentView payment(Long id,Long paymentId){requireViewer(id);return payments.findByIdAndSubscriptionViewerId(paymentId,id).map(this::paymentView).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));}
     private BillingDtos.PaymentView paymentView(Payment p){
