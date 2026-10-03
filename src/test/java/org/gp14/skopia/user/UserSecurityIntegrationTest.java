@@ -69,6 +69,11 @@ class UserSecurityIntegrationTest {
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/admin/users").header("Authorization", "Bearer " + tokens.issue(admin.getId())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].passwordHash").doesNotExist());
+        mvc.perform(get("/api/billing/admin/users")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/billing/admin/users").header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/billing/admin/users").header("Authorization", "Bearer " + tokens.issue(admin.getId())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.username == 'security_viewer')].status").value("FREE"));
     }
 
     @Test

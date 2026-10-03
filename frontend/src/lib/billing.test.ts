@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { billing, normalizePlans } from './billing'
+import { billing, normalizePlans, validateDemoPayment } from './billing'
 import { catalogue } from './catalogue'
 import { writeSession } from './auth-storage'
 
@@ -34,16 +34,23 @@ describe('demo billing client', () => {
     expect(calls[1][1]?.headers).toMatchObject({ Authorization: 'Bearer signed', 'X-User-Id': '7' })
   })
 
-  it('sends only the selected plan to demo checkout and no payment information', async () => {
-    await billing.checkout('YEARLY', 7)
+  it('sends only the strict transient demo payment contract', async () => {
+    await billing.checkout('YEARLY', { cardNumber: '4216000000000002', expiry: '12/99', cardholderName: 'Demo Viewer' }, 7)
     const [path, init] = vi.mocked(fetch).mock.calls[0]
     expect(path).toBe('/api/billing/checkout')
     expect(init?.method).toBe('POST')
-    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'YEARLY' })
+    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'YEARLY', cardNumber: '4216000000000002', expiry: '12/99', cardholderName: 'Demo Viewer' })
+  })
+
+  it('validates the designated test data locally', () => {
+    expect(validateDemoPayment({ cardNumber: '4216 0000 0000 0002', expiry: '12/99', cardholderName: 'Demo Viewer' })).toEqual({})
+    expect(validateDemoPayment({ cardNumber: '4111111111111111', expiry: '12/99', cardholderName: 'Demo Viewer' }).cardNumber).toBeTruthy()
+    expect(validateDemoPayment({ cardNumber: '4216000000000003', expiry: '12/99', cardholderName: 'Demo Viewer' }).cardNumber).toBeTruthy()
+    expect(validateDemoPayment({ cardNumber: '4216000000000002', expiry: '01/20', cardholderName: 'Demo Viewer' }).expiry).toBeTruthy()
   })
 
   it('rejects unsupported plans before sending a request', async () => {
-    await expect(billing.checkout('FREE' as 'MONTHLY', 7)).rejects.toThrow('Unknown plan')
+    await expect(billing.checkout('FREE' as 'MONTHLY', { cardNumber: '4216000000000002', expiry: '12/99', cardholderName: 'Demo Viewer' }, 7)).rejects.toThrow('Unknown plan')
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -58,7 +65,7 @@ describe('demo billing client', () => {
 
   it('does not convert a declined checkout into success', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Demo checkout disabled' }), { status: 409 })))
-    await expect(billing.checkout('MONTHLY', 7)).rejects.toThrow('Demo checkout disabled')
+    await expect(billing.checkout('MONTHLY', { cardNumber: '4216000000000002', expiry: '12/99', cardholderName: 'Demo Viewer' }, 7)).rejects.toThrow('Demo checkout disabled')
   })
 
   it('does not enable checkout if the gate is missing', () => {

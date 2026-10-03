@@ -35,7 +35,7 @@ class BillingDisabledTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.demoEnabled").value(false));
         mvc.perform(post("/api/billing/checkout")
                 .header("Authorization", "Bearer " + tokens.issue(v.getId()))
-                .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\"}"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\",\"cardNumber\":\"4216000000000002\",\"expiry\":\"12/99\",\"cardholderName\":\"Demo Viewer\"}"))
                 .andExpect(status().isServiceUnavailable());
         assertThat(payments.count()).isZero();
     }

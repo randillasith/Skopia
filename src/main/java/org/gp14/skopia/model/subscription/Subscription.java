@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.gp14.skopia.model.user.RegisteredViewer;
+import org.gp14.skopia.model.user.Viewer;
 
 import java.time.LocalDateTime;
 
@@ -22,7 +22,7 @@ public class Subscription {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "viewer_id", nullable = false)
-    private RegisteredViewer viewer;
+    private Viewer viewer;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "plan_id", nullable = false)

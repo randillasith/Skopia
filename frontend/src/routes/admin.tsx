@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate} from 'react-router-dom'
 import {
   Users, AlertTriangle, Ban, ShieldCheck, Plus, Megaphone, Eye,
-  Download, ScrollText, CreditCard, Receipt,
+  Download, ScrollText, Receipt,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Table, Th, Td, Tr, Tabs, Modal,
@@ -24,6 +24,7 @@ import {
   type QueueItem, type ServerComplaint,
 } from '@/lib/reports'
 import { videoIdOf } from '@/lib/catalogue'
+import { billing, type AdminSubscription } from '@/lib/billing'
 
 import { ads, type Campaign as AdCampaign } from '@/lib/ads'
 import {
@@ -47,6 +48,7 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<PlatformUserStats | null>(null)
   const [logs, setLogs] = useState<ActivityLogRow[]>([])
   const [campaigns, setCampaigns] = useState<AdCampaign[] | null>(null)
+  const [subscriptionRows, setSubscriptionRows] = useState<AdminSubscription[] | null>(null)
 
   useEffect(() => {
     const abort = new AbortController()
@@ -57,6 +59,7 @@ export function AdminDashboard() {
     // An administrator may read advertising, so the campaign figure is the real
     // one rather than a count of fixtures.
     ads.campaigns.list(null).then(setCampaigns).catch(() => setCampaigns(null))
+    billing.adminUsers(abort.signal).then(setSubscriptionRows).catch(() => setSubscriptionRows(null))
     return () => abort.abort()
   }, [])
 
@@ -78,6 +81,7 @@ export function AdminDashboard() {
               ? `${campaigns.filter((c) => c.status === 'SCHEDULED').length} scheduled`
               : 'could not be read',
           ],
+          ['Premium passes', count(subscriptionRows?.filter((row) => row.status === 'ACTIVE').length), subscriptionRows ? `${subscriptionRows.filter((row) => row.status !== 'FREE').length} pass records` : 'could not be read'],
         ].map(([l, v, sub]) => (
           <div key={l} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{l}</p>
@@ -86,6 +90,16 @@ export function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      <Section title="Subscribed users" action={<Link to="/admin/plans" className="text-[13px] text-cyan-300 hover:underline">All access states</Link>} className="mt-10">
+        {subscriptionRows == null ? <p className="text-sm text-ink-300">Subscription data could not be read.</p>
+          : subscriptionRows.filter((row) => row.status === 'ACTIVE').length === 0 ? <p className="text-sm text-ink-300">No active subscriptions.</p>
+          : <div className="overflow-x-auto rounded-lg border border-ink-700"><Table><thead><Tr><Th>User</Th><Th>Plan</Th><Th>State</Th><Th>Start</Th><Th>End</Th></Tr></thead>
+            <tbody>{subscriptionRows.filter((row) => row.status === 'ACTIVE').map((row) => <Tr key={row.userId}>
+              <Td>@{row.username}</Td><Td>{row.planName}</Td><Td><Letterboard tone="ok">ACTIVE</Letterboard></Td>
+              <Td>{row.startDate ? new Date(row.startDate).toLocaleDateString() : '—'}</Td><Td>{row.endDate ? new Date(row.endDate).toLocaleDateString() : '—'}</Td>
+            </Tr>)}</tbody></Table></div>}
+      </Section>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
         <Section
@@ -794,15 +808,30 @@ export function AdminModeration() {
 /* ================================================================= plans */
 
 export function AdminPlans() {
+  const [rows, setRows] = useState<AdminSubscription[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    const abort = new AbortController()
+    billing.adminUsers(abort.signal).then(setRows).catch((cause) => setError(cause instanceof Error ? cause.message : 'Could not load subscriptions.')).finally(() => setLoading(false))
+    return () => abort.abort()
+  }, [])
+  const fmtDate = (value: string | null) => value ? new Date(value).toLocaleDateString() : '—'
   return (
     <BackOfHouse title="Subscription plans">
-      <NotAvailableYet
-        what="Subscription plans"
-        icon={<CreditCard className="size-7" />}
-        body="This is where plans are created and priced, and where what each one unlocks is
-          decided. Nothing on the server stores a plan yet, so there is nothing to list — and
-          rather than show invented ones, this screen waits for the subscription module."
-      />
+      <p className="mb-5 max-w-3xl text-sm text-ink-300">Current server-derived access state. Free means no pass; expired and cancelled passes remain visible for audit. No card data is available here.</p>
+      {loading ? <p role="status">Loading subscriptions…</p> : error ? <p role="alert" className="text-danger-400">{error}</p> : (
+        <div className="overflow-x-auto rounded-lg border border-ink-700">
+          <Table><thead><Tr><Th>User</Th><Th>Plan</Th><Th>State</Th><Th>Start</Th><Th>End</Th></Tr></thead>
+            <tbody>{rows.map((row) => <Tr key={row.userId}>
+              <Td><span className="font-medium text-white">{row.displayName}</span><span className="block text-xs text-ink-300">@{row.username}</span></Td>
+              <Td>{row.planName ?? '—'}</Td>
+              <Td><Letterboard tone={row.status === 'ACTIVE' ? 'ok' : row.status === 'FREE' ? 'soon' : row.status === 'CANCELLED' ? 'bad' : 'review'}>{row.status}</Letterboard></Td>
+              <Td>{fmtDate(row.startDate)}</Td><Td>{fmtDate(row.endDate)}</Td>
+            </Tr>)}</tbody>
+          </Table>
+        </div>
+      )}
     </BackOfHouse>
   )
 }

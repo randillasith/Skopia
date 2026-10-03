@@ -36,12 +36,16 @@ public class BillingController {
     @ResponseStatus(HttpStatus.CREATED)
     public BillingDtos.CheckoutResult checkout(@AuthenticationPrincipal User user, @RequestBody JsonNode request) {
         Long actor = id(user);
-        // No payment credentials, prices or client-provided owner IDs can enter this API.
-        if (!request.isObject() || request.size() != 1 || !request.has("planName")
-                || !request.get("planName").isTextual())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only planName is accepted");
-        return billing.checkout(actor, request.get("planName").asText());
+        var allowed = java.util.Set.of("planName", "cardNumber", "expiry", "cardholderName");
+        if (!request.isObject() || request.size() != allowed.size()
+                || !allowed.stream().allMatch(name -> request.has(name) && request.get(name).isTextual()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid demo payment fields");
+        return billing.checkout(actor, request.get("planName").asText(), request.get("cardNumber").asText(),
+                request.get("expiry").asText(), request.get("cardholderName").asText());
     }
+
+    @GetMapping("/admin/users")
+    public List<BillingDtos.AdminUserSubscription> adminUsers() { return billing.adminUsers(); }
 
     @PostMapping("/cancel")
     public BillingDtos.Status cancel(@AuthenticationPrincipal User user) { return billing.cancel(id(user)); }

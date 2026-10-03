@@ -2,6 +2,7 @@ package org.gp14.skopia.video;
 
 import org.gp14.skopia.model.user.ContentCreator;
 import org.gp14.skopia.model.video.Video;
+import org.gp14.skopia.model.video.AccessTier;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.video.dto.UpdateVideoRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ class VideoServiceOwnershipTest {
     @Mock WatchlistItemRepository watchlistItems;
     @Mock VideoAccessService access;
     @Mock org.gp14.skopia.security.TokenService tokens;
+    @Mock org.gp14.skopia.billing.BillingService billing;
 
     VideoService service;
     Video video;
@@ -40,7 +42,7 @@ class VideoServiceOwnershipTest {
     @BeforeEach
     void setUp() {
         service = new VideoService(videos, categories, tiers, creators, users, viewers,
-                likes, comments, history, watchlists, watchlistItems, access, tokens);
+                likes, comments, history, watchlists, watchlistItems, access, tokens, billing);
         ContentCreator owner = new ContentCreator();
         owner.setId(41L);
         video = new Video();
@@ -64,6 +66,22 @@ class VideoServiceOwnershipTest {
         assertThatThrownBy(() -> service.deleteVideo(9L, 42L))
                 .isInstanceOf(AccessDeniedException.class);
         verify(videos, never()).delete(video);
+    }
+
+    @Test
+    void creatorNeedsActivePassToSelectPremiumAndSelectionPersists() {
+        UpdateVideoRequest request = new UpdateVideoRequest();
+        request.setAccessType("PREMIUM");
+        AccessTier premium = new AccessTier(); premium.setTierName("PREMIUM");
+        when(billing.hasActivePremium(41L)).thenReturn(false);
+        assertThatThrownBy(() -> service.updateVideo(9L, request, 41L)).isInstanceOf(AccessDeniedException.class);
+        verify(videos, never()).save(video);
+
+        when(billing.hasActivePremium(41L)).thenReturn(true);
+        when(tiers.findByTierNameIgnoreCase("PREMIUM")).thenReturn(Optional.of(premium));
+        when(videos.save(video)).thenReturn(video);
+        org.assertj.core.api.Assertions.assertThat(service.updateVideo(9L, request, 41L).getAccessType()).isEqualTo("PREMIUM");
+        org.assertj.core.api.Assertions.assertThat(video.getAccessTier()).isSameAs(premium);
     }
 
     @Test

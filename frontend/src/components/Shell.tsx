@@ -19,6 +19,8 @@ import { useSession } from '@/lib/session-context'
 import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
 import { SearchBox } from './search'
+import { billing } from '@/lib/billing'
+import { actorId as actorIdOf } from '@/lib/session'
 
 /* ---------------------------------------------------------------- session */
 
@@ -294,6 +296,15 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
   const nav = useNavigate()
   const followed = CHANNELS.filter((c) => subscriptions.includes(c.handle))
   const canUpload = isCreator(viewer)
+  const { pathname } = useLocation()
+  const [premium, setPremium] = useState(false)
+  useEffect(() => {
+    const actor = actorIdOf(viewer)
+    if (actor == null) { setPremium(false); return }
+    const abort = new AbortController()
+    billing.status(actor, abort.signal).then((status) => setPremium(status.premium)).catch(() => setPremium(false))
+    return () => abort.abort()
+  }, [viewer, pathname])
 
   // "/" and Cmd-K reach the search box, the way every catalogue of this size
   // does. Ignored while the caret is already in a field.
@@ -387,6 +398,12 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
             <Menu className="size-5" />
           </button>
           <Wordmark to="/browse" />
+          <Link to={viewer ? '/subscription' : '/plans'} aria-label={`Account access: ${premium ? 'Premium' : 'Free'}`}
+            className={cn('letterboard rounded-full border px-2 py-1 text-[10px] font-bold', premium
+              ? 'border-gold-400/50 bg-gold-400/10 text-gold-300'
+              : 'border-ink-600 bg-ink-850 text-ink-200')}>
+            {premium ? 'PREMIUM' : 'FREE'}
+          </Link>
 
           <div className="ml-auto hidden min-w-0 flex-1 justify-center px-4 sm:flex lg:ml-0">
             <SearchBox />

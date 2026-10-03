@@ -9,6 +9,7 @@ import org.gp14.skopia.model.video.Category;
 import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.video.dto.*;
+import org.gp14.skopia.billing.BillingService;
 import org.springframework.stereotype.Service;
 import org.gp14.skopia.security.TokenService;
 import org.springframework.web.server.ResponseStatusException;
@@ -45,6 +46,7 @@ public class VideoService {
     private final WatchHistoryRepository watchHistoryRepository;
     private final WatchlistRepository watchlistRepository;
     private final WatchlistItemRepository watchlistItemRepository;
+    private final BillingService billing;
 
     public VideoService(
             VideoRepository videoRepository,
@@ -57,7 +59,7 @@ public class VideoService {
             CommentRepository commentRepository,
             WatchHistoryRepository watchHistoryRepository,
             WatchlistRepository watchlistRepository,
-            WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens) {
+            WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens, BillingService billing) {
         this.access = access;
         this.tokens = tokens;
         this.videoRepository = videoRepository;
@@ -71,6 +73,7 @@ public class VideoService {
         this.watchHistoryRepository = watchHistoryRepository;
         this.watchlistRepository = watchlistRepository;
         this.watchlistItemRepository = watchlistItemRepository;
+        this.billing = billing;
     }
 
     public List<CategoryResponse> getCategories() {
@@ -140,13 +143,9 @@ public class VideoService {
                     return categoryRepository.save(newCat);
                 });
 
-        String requestedTier = request.getAccessType() != null ? request.getAccessType() : "FREE";
-        AccessTier tier = accessTierRepository.findByTierNameIgnoreCase(requestedTier)
-                .orElseGet(() -> {
-                    AccessTier newTier = new AccessTier();
-                    newTier.setTierName(requestedTier.toUpperCase());
-                    return accessTierRepository.save(newTier);
-                });
+        String requestedTier = normalizedTier(request.getAccessType());
+        requirePremiumPass(requestedTier, creatorId);
+        AccessTier tier = resolveTier(requestedTier);
 
         String finalVideoUrl = checkedExternalUrl(request.getVideoUrl());
         if (videoFile != null && !videoFile.isEmpty()) {
@@ -200,8 +199,9 @@ public class VideoService {
             categoryRepository.findById(request.getCategoryId()).ifPresent(video::setCategory);
         }
         if (request.getAccessType() != null && !request.getAccessType().isBlank()) {
-            accessTierRepository.findByTierNameIgnoreCase(request.getAccessType())
-                    .ifPresent(video::setAccessTier);
+            String requestedTier = normalizedTier(request.getAccessType());
+            requirePremiumPass(requestedTier, creatorId);
+            video.setAccessTier(resolveTier(requestedTier));
         }
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
             video.setVideoStatus(request.getStatus().toUpperCase());
@@ -640,6 +640,26 @@ public class VideoService {
             return url + "?access=" + tokens.issueMedia(video.getId(), filename, viewerId);
         }
         return url;
+    }
+
+    private String normalizedTier(String requested) {
+        String tier = requested == null || requested.isBlank() ? "FREE" : requested.trim().toUpperCase(Locale.ROOT);
+        if (!"FREE".equals(tier) && !"PREMIUM".equals(tier))
+            throw new IllegalArgumentException("Access type must be FREE or PREMIUM");
+        return tier;
+    }
+
+    private void requirePremiumPass(String tier, Long creatorId) {
+        if ("PREMIUM".equals(tier) && !billing.hasActivePremium(creatorId))
+            throw new AccessDeniedException("An active premium pass is required to publish premium video");
+    }
+
+    private AccessTier resolveTier(String tierName) {
+        return accessTierRepository.findByTierNameIgnoreCase(tierName).orElseGet(() -> {
+            AccessTier tier = new AccessTier();
+            tier.setTierName(tierName);
+            return accessTierRepository.save(tier);
+        });
     }
 
     private String checkedExternalUrl(String url) {

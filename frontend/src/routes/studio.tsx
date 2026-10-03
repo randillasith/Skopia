@@ -17,6 +17,7 @@ import { studio, videoIdOf } from '@/lib/catalogue'
 import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import { Resolve } from '@/components/Loading'
+import { billing } from '@/lib/billing'
 import { ACCOUNTS, CHANNELS, accountById, ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
@@ -202,6 +203,14 @@ export function StudioUpload() {
   const [synopsis, setSynopsis] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [publishing, setPublishing] = useState(false)
+  const [premium, setPremium] = useState(false)
+  const [hasPass, setHasPass] = useState(false)
+  useEffect(() => {
+    if (actor == null) { setHasPass(false); return }
+    const abort = new AbortController()
+    billing.status(actor, abort.signal).then((status) => setHasPass(status.premium)).catch(() => setHasPass(false))
+    return () => abort.abort()
+  }, [actor])
 
   // The chosen file and what the browser can tell us about it. The duration is
   // read from the file itself rather than asked for, because the person
@@ -243,7 +252,7 @@ export function StudioUpload() {
           title: title.trim(),
           description: synopsis.trim(),
           categoryId: categories.find((c) => c.name === category)?.id ?? null,
-          accessType: 'FREE',
+          accessType: premium ? 'PREMIUM' : 'FREE',
           status,
           durationSeconds: duration,
           videoFile: file,
@@ -443,8 +452,9 @@ export function StudioUpload() {
                 <div className="mt-3 space-y-3">
                   <Checkbox checked onChange={() => {}} label="Allow comments" />
                   <Checkbox checked onChange={() => {}} label="Allow this video to be shared" />
-                  <Checkbox checked={false} onChange={() => {}} label="Premium — requires an active pass" />
+                  <Checkbox checked={premium} onChange={(checked) => { if (hasPass || !checked) setPremium(checked) }} label="Premium — requires an active pass" />
                 </div>
+                {!hasPass && <p className="mt-3 text-[12.5px] text-gold-300">Your account is Free. <Link className="underline" to="/plans">Activate a TEST pass</Link> to select Premium.</p>}
                 <p className="mt-3 text-[12.5px] text-ink-300">
                   Initial playback quality levels are not yet specified: <Placeholder>{UNDECIDED}</Placeholder>
                 </p>
@@ -476,6 +486,7 @@ export function StudioUpload() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Letterboard tone="ok">CC English</Letterboard>
                       <Letterboard>Comments on</Letterboard>
+                      <Letterboard tone={premium ? 'review' : 'ok'}>{premium ? 'Premium' : 'Free'}</Letterboard>
                     </div>
                   </div>
                 </div>

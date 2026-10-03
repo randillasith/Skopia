@@ -6,10 +6,12 @@ import org.gp14.skopia.model.subscription.Payment;
 import org.gp14.skopia.model.subscription.Subscription;
 import org.gp14.skopia.model.subscription.SubscriptionPlan;
 import org.gp14.skopia.model.user.RegisteredViewer;
+import org.gp14.skopia.model.user.User;
+import org.gp14.skopia.model.user.Viewer;
 import org.gp14.skopia.repository.PaymentRepository;
-import org.gp14.skopia.repository.RegisteredViewerRepository;
 import org.gp14.skopia.repository.SubscriptionPlanRepository;
 import org.gp14.skopia.repository.SubscriptionRepository;
+import org.gp14.skopia.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,26 +20,23 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
 public class BillingService {
-    private final RegisteredViewerRepository viewers;
+    private final UserRepository users;
     private final SubscriptionRepository subscriptions;
     private final SubscriptionPlanRepository plans;
     private final PaymentRepository payments;
     private final EntityManager entityManager;
     private final boolean demoEnabled;
 
-    public BillingService(RegisteredViewerRepository viewers, SubscriptionRepository subscriptions,
+    public BillingService(UserRepository users, SubscriptionRepository subscriptions,
                           SubscriptionPlanRepository plans, PaymentRepository payments, EntityManager entityManager,
                           @Value("${skopia.billing.demo-enabled:false}") boolean demoEnabled) {
-        this.viewers = viewers;
-        this.subscriptions = subscriptions;
-        this.plans = plans;
-        this.payments = payments;
-        this.entityManager = entityManager;
-        this.demoEnabled = demoEnabled;
+        this.users = users; this.subscriptions = subscriptions; this.plans = plans;
+        this.payments = payments; this.entityManager = entityManager; this.demoEnabled = demoEnabled;
     }
 
     @Transactional(readOnly = true)
@@ -45,40 +44,45 @@ public class BillingService {
         return new BillingDtos.Catalog(demoEnabled, plans.findAll().stream()
                 .filter(p -> "MONTHLY".equals(p.getPlanName()) || "YEARLY".equals(p.getPlanName()))
                 .map(p -> new BillingDtos.Plan(p.getId(), p.getPlanName(), p.getDurationDays(), p.getPrice(), p.getBenefit()))
-                .sorted(java.util.Comparator.comparing(BillingDtos.Plan::durationDays)).toList());
+                .sorted(Comparator.comparing(BillingDtos.Plan::durationDays)).toList());
     }
 
-    /** A live subscription is the authority; the legacy isPremium flag alone never grants access. */
     @Transactional(readOnly = true)
     public boolean hasActivePremium(Long userId) {
         if (userId == null) return false;
-        return viewers.findById(userId).filter(v -> "ACTIVE".equals(v.getAccountStatus()))
+        return users.findById(userId).filter(u -> u instanceof Viewer && "ACTIVE".equals(u.getAccountStatus()))
                 .isPresent() && !active(userId).isEmpty();
     }
 
     private List<Subscription> active(Long userId) {
-        return subscriptions.findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(
-                userId, "ACTIVE", LocalDateTime.now()).stream()
-                .filter(s -> !s.getStartDate().isAfter(LocalDateTime.now())).toList();
+        LocalDateTime now = LocalDateTime.now();
+        return subscriptions.findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(userId, "ACTIVE", now)
+                .stream().filter(s -> !s.getStartDate().isAfter(now)).toList();
     }
 
     @Transactional(readOnly = true)
-    public BillingDtos.Status status(Long userId) {
-        requireViewer(userId);
-        return statusFor(userId);
-    }
+    public BillingDtos.Status status(Long userId) { requireViewer(userId); return statusFor(userId); }
 
     private BillingDtos.Status statusFor(Long userId) {
         var current = active(userId).stream().findFirst();
-        return current.map(s -> new BillingDtos.Status(true, s.getPlan().getPlanName(), s.getEndDate(), "ACTIVE"))
-                .orElseGet(() -> new BillingDtos.Status(false, null, null, "INACTIVE"));
+        if (current.isPresent()) return statusOf(current.get(), "ACTIVE", true);
+        var latest = subscriptions.findByViewerIdOrderByEndDateDescIdDesc(userId).stream().findFirst();
+        if (latest.isEmpty()) return new BillingDtos.Status(false, null, null, null, "FREE");
+        Subscription sub = latest.get();
+        String state = "CANCELLED".equalsIgnoreCase(sub.getSubStatus()) ? "CANCELLED"
+                : sub.getEndDate().isBefore(LocalDateTime.now()) || sub.getEndDate().isEqual(LocalDateTime.now()) ? "EXPIRED"
+                : sub.getSubStatus().toUpperCase();
+        return statusOf(sub, state, false);
+    }
+
+    private BillingDtos.Status statusOf(Subscription sub, String state, boolean premium) {
+        return new BillingDtos.Status(premium, sub.getPlan().getPlanName(), sub.getStartDate(), sub.getEndDate(), state);
     }
 
     @Transactional(readOnly = true)
     public List<BillingDtos.PaymentView> payments(Long userId) {
         requireViewer(userId);
-        return payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(userId)
-                .stream().map(this::paymentView).toList();
+        return payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(userId).stream().map(this::paymentView).toList();
     }
 
     @Transactional(readOnly = true)
@@ -94,56 +98,57 @@ public class BillingService {
     }
 
     @Transactional
-    public BillingDtos.CheckoutResult checkout(Long userId, String planName) {
+    public BillingDtos.CheckoutResult checkout(Long userId, String planName, String cardNumber, String expiry, String cardholderName) {
         if (!demoEnabled) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Demo checkout disabled");
         if (!"MONTHLY".equals(planName) && !"YEARLY".equals(planName))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported plan");
-        RegisteredViewer viewer = lockedViewer(userId);
+        DemoPaymentValidator.Validated testPayment = DemoPaymentValidator.validate(cardNumber, expiry, cardholderName);
+        Viewer viewer = lockedViewer(userId);
         if (!active(userId).isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Active subscription exists");
         SubscriptionPlan plan = plans.findByPlanName(planName)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Demo plan unavailable"));
-        // A pre-existing paid catalog entry must not be mistaken for a charged checkout.
         if (plan.getPrice().compareTo(BigDecimal.ZERO) != 0 || plan.getDurationDays() <= 0)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Not a demo plan");
         LocalDateTime now = LocalDateTime.now();
         Subscription sub = new Subscription();
-        sub.setViewer(viewer); sub.setPlan(plan); sub.setStartDate(now);
-        sub.setEndDate(now.plusDays(plan.getDurationDays()));
-        sub.setSubStatus("ACTIVE"); sub.setAutoRenew(false);
-        sub = subscriptions.saveAndFlush(sub);
+        sub.setViewer(viewer); sub.setPlan(plan); sub.setStartDate(now); sub.setEndDate(now.plusDays(plan.getDurationDays()));
+        sub.setSubStatus("ACTIVE"); sub.setAutoRenew(false); sub = subscriptions.saveAndFlush(sub);
         Payment payment = new Payment();
-        payment.setSubscription(sub); payment.setAmount(BigDecimal.ZERO.setScale(2));
-        payment.setPaidDatetime(now); payment.setPayMethod("DEMO_NO_CHARGE");
-        payment.setPayStatus("SIMULATED");
-        payment = payments.saveAndFlush(payment);
-        viewer.setIsPremium(true);
+        payment.setSubscription(sub); payment.setAmount(BigDecimal.ZERO.setScale(2)); payment.setPaidDatetime(now);
+        payment.setPayMethod("DEMO_TEST_VISA_" + testPayment.last4()); payment.setPayStatus("SIMULATED");
+        payment.setGatewayRef("TEST-" + java.util.UUID.randomUUID()); payment = payments.saveAndFlush(payment);
+        if (viewer instanceof RegisteredViewer registered) registered.setIsPremium(true);
         return new BillingDtos.CheckoutResult(statusFor(userId), paymentView(payment),
                 new BillingDtos.SubscriptionView(sub.getId(), planName, now, sub.getEndDate(), sub.getSubStatus()));
     }
 
     @Transactional
     public BillingDtos.Status cancel(Long userId) {
-        RegisteredViewer viewer = lockedViewer(userId);
+        Viewer viewer = lockedViewer(userId);
         List<Subscription> current = active(userId);
         if (current.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "No active subscription");
-        for (Subscription sub : current) {
-            sub.setSubStatus("CANCELLED"); sub.setAutoRenew(false);
-        }
-        viewer.setIsPremium(false);
+        current.forEach(sub -> { sub.setSubStatus("CANCELLED"); sub.setAutoRenew(false); });
+        if (viewer instanceof RegisteredViewer registered) registered.setIsPremium(false);
         return statusFor(userId);
     }
 
-    private RegisteredViewer requireViewer(Long userId) {
-        if (userId == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        RegisteredViewer v = viewers.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Registered viewer required"));
-        if (!"ACTIVE".equals(v.getAccountStatus())) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        return v;
+    @Transactional(readOnly = true)
+    public List<BillingDtos.AdminUserSubscription> adminUsers() {
+        return users.findAll().stream().filter(Viewer.class::isInstance).map(user -> {
+            var status = statusFor(user.getId());
+            String display = user.getFirstName() == null ? user.getUsername() :
+                    (user.getFirstName() + " " + (user.getLastName() == null ? "" : user.getLastName())).trim();
+            return new BillingDtos.AdminUserSubscription(user.getId(), user.getUsername(), display,
+                    status.planName(), status.status(), status.startDate(), status.endDate());
+        }).sorted(Comparator.comparing(BillingDtos.AdminUserSubscription::username)).toList();
     }
 
-    private RegisteredViewer lockedViewer(Long userId) {
-        RegisteredViewer v = requireViewer(userId);
-        entityManager.lock(v, LockModeType.PESSIMISTIC_WRITE);
-        return v;
+    private Viewer requireViewer(Long userId) {
+        if (userId == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        User user = users.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Viewer required"));
+        if (!(user instanceof Viewer viewer)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Viewer required");
+        if (!"ACTIVE".equals(viewer.getAccountStatus())) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return viewer;
     }
+    private Viewer lockedViewer(Long userId) { Viewer viewer = requireViewer(userId); entityManager.lock(viewer, LockModeType.PESSIMISTIC_WRITE); return viewer; }
 }

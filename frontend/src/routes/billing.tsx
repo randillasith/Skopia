@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { Button } from '@/components/primitives'
-import { billing, type DemoPayment, type PlansResponse, type SubscriptionStatus, type PlanChoice } from '@/lib/billing'
+import { Button, Field, Input } from '@/components/primitives'
+import { billing, validateDemoPayment, type DemoPayment, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
 import { actorId as actorIdOf } from '@/lib/session'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
@@ -14,7 +14,7 @@ function Page({ title, children }: { title: string; children: React.ReactNode })
   return <FrontOfHouse><main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
     <p className="letterboard text-gold-400">Demo only · No real payments</p>
     <h1 className="font-marquee mt-2 text-3xl font-extrabold text-white">{title}</h1>
-    <p className="mt-2 text-sm text-ink-300">This is a demonstration subscription. No money is charged and no card details are collected.</p>
+    <p className="mt-2 text-sm text-ink-300">TEST MODE only. No money is charged, no processor is called, and test card data is validated in memory but never stored.</p>
     <div className="mt-7">{children}</div>
   </main></FrontOfHouse>
 }
@@ -67,14 +67,19 @@ export function Checkout() {
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'checkout')
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [payment, setPayment] = useState<DemoPaymentInput>({ cardNumber: '', expiry: '', cardholderName: '' })
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof DemoPaymentInput, string>>>({})
   const plan = value?.plans.find((p) => p.planName === selected && (p.planName === 'MONTHLY' || p.planName === 'YEARLY'))
   const submit = async () => {
     if (actor == null || !plan || !value?.demoEnabled || saving) return
+    const validation = validateDemoPayment(payment)
+    setFieldErrors(validation)
+    if (Object.keys(validation).length) return
     setSaving(true); setSubmitError(null)
     try {
       const latest = await billing.plans()
       if (!latest.demoEnabled || !latest.plans.some((p) => p.planName === plan.planName)) throw new Error('Demo checkout is no longer available.')
-      await billing.checkout(plan.planName as PlanChoice, actor)
+      await billing.checkout(plan.planName as PlanChoice, payment, actor)
       await refreshAccount().catch(() => undefined)
       nav('/checkout/result', { replace: true, state: { completed: true } })
     } catch (cause) { setSubmitError(message(cause)) }
@@ -88,9 +93,25 @@ export function Checkout() {
       : <div className={box}>
         <h2 className="text-xl font-bold">{plan.planName}</h2>
         <p className="mt-2">{plan.durationDays} days · Demo price {plan.price} (currency not specified)</p>
-        <p className="mt-4 text-sm text-ink-300">Activating creates a demo record only. No payment method is requested.</p>
+        <div className="mt-5 rounded border border-gold-400/40 bg-gold-400/8 p-4 text-sm text-ink-100">
+          <strong className="text-gold-300">Synthetic test data only.</strong> Use exactly 16 digits beginning <code>4216</code>. The example <code>4216 0000 0000 0002</code> passes the test checksum. Use a future MM/YY expiry. Never enter a real card.
+        </div>
         {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to activate</Link>
-          : <Button className="mt-5" variant="primary" loading={saving} disabled={saving} onClick={submit}>Activate demo pass</Button>}
+          : <form className="mt-5 grid gap-4 sm:grid-cols-2" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void submit() }}>
+            <div className="sm:col-span-2"><Field label="TEST card number" required error={fieldErrors.cardNumber}>
+              <Input name="demo-card" inputMode="numeric" maxLength={19} value={payment.cardNumber} invalid={!!fieldErrors.cardNumber}
+                onChange={(event) => setPayment((p) => ({ ...p, cardNumber: event.target.value }))} placeholder="4216 0000 0000 0002" />
+            </Field></div>
+            <Field label="Future expiry (MM/YY)" required error={fieldErrors.expiry}>
+              <Input name="demo-expiry" inputMode="numeric" maxLength={5} value={payment.expiry} invalid={!!fieldErrors.expiry}
+                onChange={(event) => setPayment((p) => ({ ...p, expiry: event.target.value }))} placeholder="12/99" />
+            </Field>
+            <Field label="Test cardholder name" required error={fieldErrors.cardholderName}>
+              <Input name="demo-name" maxLength={80} value={payment.cardholderName} invalid={!!fieldErrors.cardholderName}
+                onChange={(event) => setPayment((p) => ({ ...p, cardholderName: event.target.value }))} placeholder="Demo Viewer" />
+            </Field>
+            <div className="sm:col-span-2"><Button type="submit" variant="primary" loading={saving} disabled={saving}>Validate test payment & activate</Button></div>
+          </form>}
       </div>)}
     <Feedback error={submitError} />
   </Page>
@@ -119,6 +140,7 @@ export function Subscription() {
       <p>{value.premium ? 'Premium access active' : 'No active premium pass'}</p>
       <p className="mt-2">Plan: {value.planName ?? 'None'}</p>
       <p>Status: {value.status ?? 'Not provided'}</p>
+      <p>Start date: {date(value.startDate)}</p>
       <p>End date: {date(value.endDate)}</p>
       {value.premium && <Button className="mt-5" variant="danger" loading={canceling} onClick={async () => {
         if (actor == null || canceling || !window.confirm('Cancel this demo subscription?')) return
