@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  Bell, Search, Menu, X, LayoutGrid, Clapperboard, Bookmark,
+  Search, Menu, X, LayoutGrid, Clapperboard, Bookmark,
   History, Sparkles, CreditCard, Flag, LifeBuoy, User, Upload, BarChart3,
   Megaphone, Inbox, Users, ShieldCheck, ScrollText, Settings, Gauge, Receipt,
   MessageSquareWarning, Tv, LogOut, LogIn, ShieldHalf, ListVideo,
@@ -19,8 +19,8 @@ import { useSession } from '@/lib/session-context'
 import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
 import { SearchBox } from './search'
+import { NotificationBell } from './NotificationBell'
 import { billing } from '@/lib/billing'
-import { notifications } from '@/lib/notifications'
 import { actorId as actorIdOf } from '@/lib/session'
 
 /* ---------------------------------------------------------------- session */
@@ -299,24 +299,12 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
   const canUpload = isCreator(viewer)
   const { pathname } = useLocation()
   const [premium, setPremium] = useState(false)
-  const [unread, setUnread] = useState(0)
   useEffect(() => {
     const actor = actorIdOf(viewer)
     if (actor == null) { setPremium(false); return }
     const abort = new AbortController()
     billing.status(actor, abort.signal).then((status) => setPremium(status.premium)).catch(() => setPremium(false))
     return () => abort.abort()
-  }, [viewer, pathname])
-  useEffect(() => {
-    if (!viewer) { setUnread(0); return }
-    let abort = new AbortController()
-    const load = () => {
-      abort.abort(); abort = new AbortController()
-      notifications.unreadCount(abort.signal).then(setUnread).catch(() => setUnread(0))
-    }
-    load()
-    window.addEventListener('skopia:notifications-changed', load)
-    return () => { abort.abort(); window.removeEventListener('skopia:notifications-changed', load) }
   }, [viewer, pathname])
 
   // "/" and Cmd-K reach the search box, the way every catalogue of this size
@@ -440,14 +428,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
             </button>
           )}
 
-          <Link
-            to="/notifications"
-            aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-            className="relative rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-white"
-          >
-            <Bell className="size-5" />
-            {unread > 0 && <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-danger-500 px-1 text-center font-mono text-[9px] font-bold leading-4 text-white">{unread > 99 ? '99+' : unread}</span>}
-          </Link>
+          {viewer && <NotificationBell />}
 
           <div className="hidden sm:block"><AccountMenu /></div>
         </div>
@@ -709,7 +690,10 @@ export function BackOfHouse({
             <Menu className="size-5" />
           </button>
           <h1 className="font-marquee truncate text-[17px] font-bold text-white">{title}</h1>
-          <div className="ml-auto flex items-center gap-2">{actions}</div>
+          <div className="ml-auto flex items-center gap-2">
+            <NotificationBell />
+            {actions}
+          </div>
         </header>
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>

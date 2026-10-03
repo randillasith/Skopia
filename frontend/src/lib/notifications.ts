@@ -26,6 +26,17 @@ export type Announcement = {
   publisherUsername?: string | null
 }
 
+export type NotificationFeedItem = {
+  id: string
+  sourceId: number
+  kind: 'NOTIFICATION' | 'ANNOUNCEMENT'
+  title: string
+  body: string
+  link: string
+  occurredAt: string
+  unread: boolean
+}
+
 export type AnnouncementInput = {
   title: string
   body: string
@@ -48,6 +59,35 @@ export function normalizeUnreadCount(payload: unknown) {
     return Math.max(0, Math.floor((payload as { count: number }).count))
   }
   return 0
+}
+
+export function buildNotificationFeed(items: DurableNotification[], itemsAnnouncements: Announcement[]): NotificationFeedItem[] {
+  return [
+    ...items.map((item) => ({
+      id: `notification-${item.id}`,
+      sourceId: item.id,
+      kind: 'NOTIFICATION' as const,
+      title: item.title,
+      body: item.body,
+      link: item.link || '/notifications',
+      occurredAt: item.createdAt,
+      unread: item.readAt === null,
+    })),
+    ...itemsAnnouncements.map((item) => ({
+      id: `announcement-${item.id}`,
+      sourceId: item.id,
+      kind: 'ANNOUNCEMENT' as const,
+      title: item.title,
+      body: item.body,
+      link: `/notifications#announcement-${item.id}`,
+      occurredAt: item.publishDate ?? item.updatedAt,
+      unread: false,
+    })),
+  ].sort((left, right) => Date.parse(right.occurredAt || '1970-01-01') - Date.parse(left.occurredAt || '1970-01-01'))
+}
+
+export function hasNotificationAttention(items: DurableNotification[], itemsAnnouncements: Announcement[], seenAnnouncementIds: Set<number>): boolean {
+  return items.some((item) => item.readAt === null) || itemsAnnouncements.some((item) => !seenAnnouncementIds.has(item.id))
 }
 
 export const notifications = {

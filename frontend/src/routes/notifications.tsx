@@ -73,7 +73,7 @@ export function Notifications() {
       <section className="mt-12 border-t border-ink-700 pt-8" aria-labelledby="announcements">
         <div className="mb-4"><p className="letterboard text-gold-400">From Skopia</p><h2 id="announcements" className="font-marquee mt-1 text-xl font-bold text-white">Published announcements</h2><p className="mt-1 text-sm text-ink-300">Platform messages are separate from your personal notification inbox and do not affect its unread count.</p></div>
         {published.length === 0 ? <EmptyState icon={<Megaphone className="size-7" />} title="No announcements" body="There are no published platform announcements for your audience." />
-          : <ul className="space-y-4">{published.map((item) => <li key={item.id} className="rounded-lg border border-gold-400/25 bg-gold-400/5 p-5"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-marquee text-lg font-bold text-white">{item.title}</h3><time className="font-mono text-[11px] text-ink-300">{date(item.publishDate ?? item.updatedAt)}</time></div><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-200">{item.body}</p></li>)}</ul>}
+          : <ul className="space-y-4">{published.map((item) => <li id={`announcement-${item.id}`} key={item.id} className="scroll-mt-24 rounded-lg border border-gold-400/25 bg-gold-400/5 p-5"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-marquee text-lg font-bold text-white">{item.title}</h3><time className="font-mono text-[11px] text-ink-300">{date(item.publishDate ?? item.updatedAt)}</time></div><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-200">{item.body}</p></li>)}</ul>}
       </section>
     </>}
   </main></FrontOfHouse>

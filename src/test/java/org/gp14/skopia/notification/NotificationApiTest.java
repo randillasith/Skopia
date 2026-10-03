@@ -1,6 +1,7 @@
 package org.gp14.skopia.notification;
 
 import org.gp14.skopia.model.notification.Notification;
+import org.gp14.skopia.model.user.Administrator;
 import org.gp14.skopia.model.user.ContentCreator;
 import org.gp14.skopia.model.user.RegisteredViewer;
 import org.gp14.skopia.model.video.Video;
@@ -27,6 +28,7 @@ class NotificationApiTest {
     @Autowired MockMvc mvc;
     @Autowired RegisteredViewerRepository viewers;
     @Autowired ContentCreatorRepository creators;
+    @Autowired AdministratorRepository administrators;
     @Autowired NotificationRepository notifications;
     @Autowired VideoRepository videos;
     @Autowired TokenService tokens;
@@ -49,6 +51,17 @@ class NotificationApiTest {
         return creators.saveAndFlush(creator);
     }
 
+    private Administrator administrator(String name) {
+        Administrator admin = new Administrator();
+        admin.setUsername(name);
+        admin.setEmail(name + "@example.test");
+        admin.setPasswordHash("test-only-hash");
+        admin.setDesignation("Test administrator");
+        admin.setHireDate(java.time.LocalDate.now());
+        admin.setAdminLevel("SUPER");
+        return administrators.saveAndFlush(admin);
+    }
+
     private String bearer(org.gp14.skopia.model.user.User user) {
         return "Bearer " + tokens.issue(user.getId());
     }
@@ -58,6 +71,7 @@ class NotificationApiTest {
         ContentCreator creator = creator("noticeCreator");
         RegisteredViewer first = viewer("noticeFirst");
         RegisteredViewer second = viewer("noticeSecond");
+        Administrator admin = administrator("noticeAdmin");
         RegisteredViewer suspended = viewer("noticeSuspended");
         suspended.setAccountStatus("SUSPENDED");
         viewers.saveAndFlush(suspended);
@@ -70,6 +84,7 @@ class NotificationApiTest {
 
         assertThat(notifications.findByUserIdOrderByCreatedAtDesc(first.getId())).hasSize(1);
         assertThat(notifications.findByUserIdOrderByCreatedAtDesc(second.getId())).hasSize(1);
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(admin.getId())).hasSize(1);
         assertThat(notifications.findByUserIdOrderByCreatedAtDesc(creator.getId())).isEmpty();
         assertThat(notifications.findByUserIdOrderByCreatedAtDesc(suspended.getId())).isEmpty();
         Video video = videos.findAll().stream().filter(v -> "New release".equals(v.getTitle())).findFirst().orElseThrow();

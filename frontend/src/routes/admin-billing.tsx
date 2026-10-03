@@ -99,6 +99,7 @@ export function AdminAnnouncements() {
       if (next === 'publish') await announcements.admin.publish(item.id)
       else await announcements.admin.archive(item.id)
       toast({ title: next === 'publish' ? 'Announcement published' : 'Announcement archived', tone: 'ok' })
+      window.dispatchEvent(new Event('skopia:notifications-changed'))
       setRevision((n) => n + 1)
     }
     catch (cause) { toast({ title: errorText(cause), tone: 'bad' }) }
