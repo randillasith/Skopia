@@ -173,7 +173,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
                 nobody would parse at thumbnail size. */}
             <span className="absolute inset-y-0 right-0 flex w-[38%] flex-col items-center justify-center gap-1 bg-ink-950/78 backdrop-blur-[2px]">
               <ListVideo className="size-4 text-ink-200" />
-              <span className="font-mono text-[12px] tabular-nums text-white">
+              <span className="font-mono text-[12px] tabular-nums text-fg">
                 {p.videoIds.length}
               </span>
             </span>
@@ -182,7 +182,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
       </Link>
       <div className="mt-2.5">
         <Link to={`/playlist/${p.id}`}>
-          <h3 className="font-marquee truncate text-[15px] font-bold tracking-tight text-white transition-colors group-hover:text-violet-200">
+          <h3 className="font-marquee truncate text-[15px] font-bold tracking-tight text-fg transition-colors group-hover:text-tone-violet-200">
             {p.name}
           </h3>
         </Link>
@@ -209,7 +209,7 @@ export function Playlists() {
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="font-marquee text-[clamp(1.7rem,4vw,2.4rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
+          <h1 className="font-marquee text-[clamp(1.7rem,4vw,2.4rem)] font-extrabold leading-tight tracking-[-0.03em] text-fg">
             Playlists
           </h1>
           <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>
@@ -236,7 +236,7 @@ export function Playlists() {
                     )}
                     <span className="absolute inset-y-0 right-0 flex w-[38%] flex-col items-center justify-center gap-1 bg-ink-950/78 backdrop-blur-[2px]">
                       <ListVideo className="size-4 text-ink-200" />
-                      <span className="font-mono text-[12px] tabular-nums text-white">
+                      <span className="font-mono text-[12px] tabular-nums text-fg">
                         {watchLater.length}
                       </span>
                     </span>
@@ -244,7 +244,7 @@ export function Playlists() {
                 </Lightbox>
               </Link>
               <div className="mt-2.5">
-                <h3 className="font-marquee truncate text-[15px] font-bold text-white group-hover:text-violet-200">
+                <h3 className="font-marquee truncate text-[15px] font-bold text-fg group-hover:text-tone-violet-200">
                   Watch later
                 </h3>
                 <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-300">
@@ -340,7 +340,7 @@ export function PlaylistDetail() {
                 )}
               </span>
             </Lightbox>
-            <h1 className="font-marquee mt-4 text-[clamp(1.5rem,3vw,2rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white">
+            <h1 className="font-marquee mt-4 text-[clamp(1.5rem,3vw,2rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-fg">
               {p.name}
             </h1>
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-300">
@@ -411,7 +411,7 @@ export function PlaylistDetail() {
                     </Link>
                     <div className="min-w-0 flex-1">
                       <Link to={`/watch/${v.id}`}>
-                        <p className="font-marquee truncate text-[15px] font-bold text-white hover:text-violet-200">
+                        <p className="font-marquee truncate text-[15px] font-bold text-fg hover:text-tone-violet-200">
                           {v.title}
                         </p>
                       </Link>
@@ -428,7 +428,7 @@ export function PlaylistDetail() {
                         toggleInPlaylist(p.id, v.id)
                         toast({ title: `Removed from ${p.name}` })
                       }}
-                      className="shrink-0 rounded-sm p-2 text-ink-300 opacity-0 transition-opacity hover:bg-ink-800 hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+                      className="shrink-0 rounded-sm p-2 text-ink-300 opacity-0 transition-opacity hover:bg-ink-800 hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <X className="size-4" />
                     </button>

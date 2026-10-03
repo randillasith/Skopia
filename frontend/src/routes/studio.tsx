@@ -86,7 +86,7 @@ export function StudioLibrary() {
         ].map(([label, value]) => (
           <div key={label as string} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{label}</p>
-            <p className="font-marquee mt-1 text-[26px] font-bold tabular-nums text-white">{value}</p>
+            <p className="font-marquee mt-1 text-[26px] font-bold tabular-nums text-fg">{value}</p>
           </div>
         ))}
       </div>
@@ -124,7 +124,7 @@ export function StudioLibrary() {
                         <PosterPlate title={v.title} seed={v.seed} category={v.category} compact lettering={false} />
                       </span>
                     </span>
-                    <span className="font-marquee font-bold text-white group-hover:text-violet-200">
+                    <span className="font-marquee font-bold text-fg group-hover:text-tone-violet-200">
                       {v.title}
                     </span>
                   </Link>
@@ -286,7 +286,7 @@ export function StudioUpload() {
       <div className="mx-auto max-w-3xl">
         <Stations steps={UPLOAD_STEPS} active={step} pointOfNoReturn={4} />
         <p className="mt-3 flex items-center gap-2 text-[13px] text-ink-300">
-          <AlertTriangle className="size-3.5 text-warning-400" />
+          <AlertTriangle className="size-3.5 text-tone-warning-400" />
           Nothing is visible to viewers until you publish at the last station.
         </p>
 
@@ -315,7 +315,7 @@ export function StudioUpload() {
                 className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-ink-600 bg-ink-850/50 px-6 py-16 text-center transition-colors hover:border-violet-500/60 hover:bg-violet-500/4"
               >
                 <FileVideo className="size-9 text-ink-300" />
-                <p className="font-marquee mt-4 text-[19px] font-bold text-white">
+                <p className="font-marquee mt-4 text-[19px] font-bold text-fg">
                   Choose a video file
                 </p>
                 <p className="mt-1.5 text-[14px] text-ink-300">or drag it here</p>
@@ -337,9 +337,9 @@ export function StudioUpload() {
 
               {duplicate && (
                 <div className="flex items-start gap-2.5 rounded-sm border border-warning-500/35 bg-warning-500/8 px-4 py-3">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-400" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tone-warning-400" />
                   <div className="text-[13.5px] leading-relaxed">
-                    <p className="font-medium text-warning-400">This may be a duplicate</p>
+                    <p className="font-medium text-tone-warning-400">This may be a duplicate</p>
                     <p className="mt-0.5 text-ink-300">
                       “{duplicate.title}” by {duplicate.creator} is already in the catalogue. You can
                       continue, but check you are not re-uploading the same video.
@@ -418,9 +418,9 @@ export function StudioUpload() {
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: EASE }} className="space-y-5">
               <div className="rounded-lg border border-ink-700 bg-ink-850 p-5">
                 <div className="flex items-center gap-3">
-                  <Captions className="size-5 text-cyan-400" />
+                  <Captions className="size-5 text-tone-cyan-400" />
                   <div>
-                    <p className="text-[15px] font-medium text-white">Caption tracks</p>
+                    <p className="text-[15px] font-medium text-fg">Caption tracks</p>
                     <p className="text-[13px] text-ink-300">
                       Platform announcement: new uploads must carry at least one track.
                     </p>
@@ -439,7 +439,7 @@ export function StudioUpload() {
               </div>
 
               <div className="rounded-lg border border-ink-700 bg-ink-850 p-5">
-                <p className="text-[15px] font-medium text-white">Playback settings</p>
+                <p className="text-[15px] font-medium text-fg">Playback settings</p>
                 <div className="mt-3 space-y-3">
                   <Checkbox checked onChange={() => {}} label="Allow comments" />
                   <Checkbox checked onChange={() => {}} label="Allow this video to be shared" />
@@ -470,7 +470,7 @@ export function StudioUpload() {
                     </span>
                   </Lightbox>
                   <div className="min-w-0">
-                    <h2 className="font-marquee text-[22px] font-bold text-white">{title}</h2>
+                    <h2 className="font-marquee text-[22px] font-bold text-fg">{title}</h2>
                     <p className="mt-1 text-[13px] text-ink-300">{category} · {genre}</p>
                     <p className="mt-3 text-[14px] leading-relaxed text-ink-200">{synopsis}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -482,7 +482,7 @@ export function StudioUpload() {
               </div>
 
               <div className="mt-5 flex items-start gap-2.5 rounded-sm border border-danger-500/35 bg-danger-500/8 px-4 py-3">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger-400" />
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tone-danger-400" />
                 <p className="text-[13.5px] leading-relaxed text-ink-200">
                   Publishing makes this visible to viewers and starts collecting views and comments.
                   You can archive it afterwards, but the earlier stations close.
@@ -507,8 +507,8 @@ export function StudioUpload() {
           {step === 4 && (
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: EASE }}
               className="rounded-lg border border-success-500/35 bg-success-500/6 p-8 text-center">
-              <Check className="mx-auto size-9 text-success-400" />
-              <h2 className="font-marquee mt-4 text-[24px] font-bold text-white">{title} is now showing</h2>
+              <Check className="mx-auto size-9 text-tone-success-400" />
+              <h2 className="font-marquee mt-4 text-[24px] font-bold text-fg">{title} is now showing</h2>
               <p className="mx-auto mt-2 max-w-[48ch] text-[14px] leading-relaxed text-ink-300">
                 Viewers can find it in {category}. Metrics start from now, and you can edit its
                 details at any time.
@@ -641,7 +641,7 @@ export function StudioEdit() {
           </Field>
 
           <div className="rounded-lg border border-ink-700 bg-ink-850 p-5">
-            <p className="text-[15px] font-medium text-white">Playback settings</p>
+            <p className="text-[15px] font-medium text-fg">Playback settings</p>
             <div className="mt-3 space-y-3">
               <Checkbox checked onChange={() => {}} label="Allow comments" />
               <Checkbox checked onChange={() => {}} label="Allow sharing" />
@@ -654,7 +654,7 @@ export function StudioEdit() {
           </div>
 
           <div className="rounded-lg border border-danger-500/30 bg-danger-500/6 p-5">
-            <h2 className="font-marquee text-[16px] font-bold text-danger-400">Take this down</h2>
+            <h2 className="font-marquee text-[16px] font-bold text-tone-danger-400">Take this down</h2>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-300">
               Archiving hides it from viewers and keeps the record. Deleting removes it and its
               comments for good.
@@ -687,7 +687,7 @@ export function StudioEdit() {
               ].map(([icon, label, value]) => (
                 <div key={label as string} className="flex items-center justify-between">
                   <dt className="flex items-center gap-2 text-ink-300">{icon}{label}</dt>
-                  <dd className="font-mono tabular-nums text-white">{value}</dd>
+                  <dd className="font-mono tabular-nums text-fg">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -736,7 +736,7 @@ export function StudioAnalytics() {
         ].map(([l, v]) => (
           <div key={l} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{l}</p>
-            <p className="font-marquee mt-1 text-[28px] font-bold tabular-nums text-white">{v}</p>
+            <p className="font-marquee mt-1 text-[28px] font-bold tabular-nums text-fg">{v}</p>
           </div>
         ))}
       </div>
@@ -748,7 +748,7 @@ export function StudioAnalytics() {
               <li key={v.id} className="grid grid-cols-[1fr_auto] items-center gap-4">
                 <div className="min-w-0">
                   <div className="flex items-baseline justify-between gap-3">
-                    <Link to={`/studio/video/${v.id}`} className="font-marquee truncate text-[15px] font-bold text-white hover:text-violet-200">
+                    <Link to={`/studio/video/${v.id}`} className="font-marquee truncate text-[15px] font-bold text-fg hover:text-tone-violet-200">
                       {v.title}
                     </Link>
                     <span className="font-mono text-[12px] tabular-nums text-ink-300">
@@ -814,7 +814,7 @@ export function CreateChannel() {
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:py-16">
         <p className="letterboard text-ink-300">Creator</p>
-        <h1 className="font-marquee mt-2 text-[clamp(1.9rem,5vw,2.8rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-white">
+        <h1 className="font-marquee mt-2 text-[clamp(1.9rem,5vw,2.8rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-fg">
           Open a channel
         </h1>
         <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-ink-200">
@@ -946,7 +946,7 @@ export function ChannelModerators() {
                 <li key={id} className="flex flex-wrap items-center gap-3 p-3.5">
                   <Avatar name={a.name} size={34} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium text-white">{a.name}</p>
+                    <p className="truncate text-[14px] font-medium text-fg">{a.name}</p>
                     <p className="truncate font-mono text-[12px] text-ink-300">@{a.handle}</p>
                   </div>
                   <Letterboard tone="neutral">Comments only</Letterboard>
@@ -975,7 +975,7 @@ export function ChannelModerators() {
                 <li key={a.id} className="flex items-center gap-3 p-3">
                   <Avatar name={a.name} size={30} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] text-white">{a.name}</p>
+                    <p className="truncate text-[13px] text-fg">{a.name}</p>
                     <p className="truncate font-mono text-[11px] text-ink-300">@{a.handle}</p>
                   </div>
                   <Button size="sm" onClick={() => grant(a)}>Appoint</Button>

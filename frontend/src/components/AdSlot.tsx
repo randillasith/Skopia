@@ -125,14 +125,14 @@ export function AdSlot({
 
       <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-gradient-to-t from-ink-950/90 to-transparent p-4">
         <div className="min-w-0">
-          <p className="font-marquee truncate text-[17px] font-bold text-white">{ad.adTitle}</p>
+          <p className="font-marquee truncate text-[17px] font-bold text-fg">{ad.adTitle}</p>
           {ad.advertiser && <p className="text-[12.5px] text-ink-300">{ad.advertiser}</p>}
           {ad.clickUrl && (
             <a
               href={ad.clickUrl}
               target="_blank"
               rel="noreferrer noopener sponsored"
-              className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-cyan-300 underline hover:text-cyan-200"
+              className="mt-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-tone-cyan-300 underline hover:text-tone-cyan-200"
             >
               <Link2 className="size-3.5" /> Find out more
             </a>

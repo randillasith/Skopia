@@ -55,7 +55,7 @@ function Loading({ what }: { what: string }) {
 function Failed({ error, onRetry }: { error: ApiError; onRetry?: () => void }) {
   return (
     <div className="mt-6 flex flex-col items-start gap-3 rounded-lg border border-danger-500/35 bg-danger-500/8 px-5 py-4 sm:flex-row sm:items-center">
-      <AlertTriangle className="size-4 shrink-0 text-danger-400" />
+      <AlertTriangle className="size-4 shrink-0 text-tone-danger-400" />
       <div className="min-w-0 flex-1">
         <p className="text-[13.5px] leading-relaxed text-ink-100">{error.message}</p>
         {error.status === 0 && (
@@ -181,9 +181,9 @@ function CampaignListBody({ actorId }: { actorId: number }) {
     <>
       {expired.length > 0 && (
         <div className="mb-6 flex flex-col gap-3 rounded-sm border sm:flex-row sm:items-center border-warning-500/35 bg-warning-500/8 px-4 py-3">
-          <AlertTriangle className="size-4 shrink-0 text-warning-400" />
+          <AlertTriangle className="size-4 shrink-0 text-tone-warning-400" />
           <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-ink-200">
-            <span className="font-medium text-warning-400">
+            <span className="font-medium text-tone-warning-400">
               {expired.length} campaign{expired.length > 1 ? 's have' : ' has'} passed its end date.
             </span>{' '}
             Their advertisements stopped being delivered the moment the date passed — archive them
@@ -228,7 +228,7 @@ function CampaignListBody({ actorId }: { actorId: number }) {
               {list.map((c) => (
                 <Tr key={c.id} onClick={() => nav(`/campaigns/${c.id}`)}>
                   <Td>
-                    <span className="font-marquee block font-bold text-white">{c.campaignName}</span>
+                    <span className="font-marquee block font-bold text-fg">{c.campaignName}</span>
                     <span className="block font-mono text-[11px] text-ink-300">
                       CMP-{c.id}{c.advertiser ? ` · ${c.advertiser}` : ''}
                     </span>
@@ -252,7 +252,7 @@ function CampaignListBody({ actorId }: { actorId: number }) {
                   </Td>
                   <Td numeric>{c.impressions.toLocaleString()}</Td>
                   <Td numeric>{c.clicks.toLocaleString()}</Td>
-                  <Td numeric className={cn(c.ctr > 2 ? 'text-success-400' : 'text-ink-200')}>
+                  <Td numeric className={cn(c.ctr > 2 ? 'text-tone-success-400' : 'text-ink-200')}>
                     {c.ctr.toFixed(2)}%
                   </Td>
                 </Tr>
@@ -513,12 +513,12 @@ function CampaignWizard({ actorId }: { actorId: number }) {
                 {uploading ? (
                   <>
                     <Loader2 className="size-7 animate-spin text-ink-300" />
-                    <p className="mt-3 text-[14px] font-medium text-white">Uploading…</p>
+                    <p className="mt-3 text-[14px] font-medium text-fg">Uploading…</p>
                   </>
                 ) : media ? (
                   <>
-                    <Check className="size-7 text-success-400" />
-                    <p className="mt-3 text-[14px] font-medium text-white">{media.filename}</p>
+                    <Check className="size-7 text-tone-success-400" />
+                    <p className="mt-3 text-[14px] font-medium text-fg">{media.filename}</p>
                     <p className="mt-1 text-[12.5px] text-ink-300">
                       Stored as {media.type === 'VIDEO' ? 'a video' : 'an image'}. Choose another to replace it.
                     </p>
@@ -526,7 +526,7 @@ function CampaignWizard({ actorId }: { actorId: number }) {
                 ) : (
                   <>
                     <Upload className="size-7 text-ink-300" />
-                    <p className="mt-3 text-[14px] font-medium text-white">Upload creative</p>
+                    <p className="mt-3 text-[14px] font-medium text-fg">Upload creative</p>
                     <p className="mt-1 text-[12.5px] text-ink-300">Video or image, up to 50 MB</p>
                   </>
                 )}
@@ -557,7 +557,7 @@ function CampaignWizard({ actorId }: { actorId: number }) {
                 </div>
               </Lightbox>
               <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-ink-300">
-                <Check className="size-3.5 text-success-400" />
+                <Check className="size-3.5 text-tone-success-400" />
                 Every advertisement is labelled as advertising. This cannot be turned off.
               </p>
             </div>
@@ -571,7 +571,7 @@ function CampaignWizard({ actorId }: { actorId: number }) {
             <div>
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <p className="flex items-baseline gap-2 text-[13px] font-medium text-ink-150">
-                  Target titles and categories <span className="text-danger-400">*</span>
+                  Target titles and categories <span className="text-tone-danger-400">*</span>
                 </p>
                 <SearchInput value={targetSearch} onChange={(e) => setTargetSearch(e.target.value)}
                   placeholder="Search the programme" className="ml-auto w-full sm:w-56" />
@@ -600,12 +600,12 @@ function CampaignWizard({ actorId }: { actorId: number }) {
                 </div>
               )}
 
-              {errors.targets && <p className="mt-2 text-[12px] text-danger-400">{errors.targets}</p>}
+              {errors.targets && <p className="mt-2 text-[12px] text-tone-danger-400">{errors.targets}</p>}
             </div>
 
             <div className="rounded-sm border border-ink-700 bg-ink-850 px-4 py-3">
               <p className="flex items-center gap-2 text-[13.5px] text-ink-200">
-                <Target className="size-4 shrink-0 text-cyan-400" />
+                <Target className="size-4 shrink-0 text-tone-cyan-400" />
                 {targets.length === 0
                   ? 'No targets chosen — this campaign would not be delivered anywhere.'
                   : `${targets.length} target${targets.length === 1 ? '' : 's'} chosen: ${targets.map((t) => t.label).join(', ')}`}
@@ -631,14 +631,14 @@ function CampaignWizard({ actorId }: { actorId: number }) {
 
             {scheduleError && (
               <div className="flex items-start gap-2.5 rounded-sm border border-danger-500/35 bg-danger-500/8 px-4 py-3">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger-400" />
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tone-danger-400" />
                 <p className="text-[13.5px] text-ink-200">{scheduleError}</p>
               </div>
             )}
 
             <div className="rounded-sm border border-ink-700 bg-ink-850 px-4 py-3">
               <p className="flex items-start gap-2 text-[13.5px] text-ink-200">
-                <CalendarRange className="mt-0.5 size-4 shrink-0 text-cyan-400" />
+                <CalendarRange className="mt-0.5 size-4 shrink-0 text-tone-cyan-400" />
                 The advertisement is shown only between these dates. After the end date it stops
                 being delivered automatically — the serving engine checks the dates on every
                 request, so this does not wait for anything to run.
@@ -663,8 +663,8 @@ function CampaignWizard({ actorId }: { actorId: number }) {
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4, ease: EASE }}
             className="rounded-lg border border-success-500/35 bg-success-500/6 p-8 text-center">
-            <Check className="mx-auto size-9 text-success-400" />
-            <h2 className="font-marquee mt-4 text-[24px] font-bold text-white">
+            <Check className="mx-auto size-9 text-tone-success-400" />
+            <h2 className="font-marquee mt-4 text-[24px] font-bold text-fg">
               {created.campaignName} is {created.status === 'ACTIVE' ? 'running' : 'scheduled'}
             </h2>
             <p className="mx-auto mt-2 max-w-[50ch] text-[14px] leading-relaxed text-ink-300">
@@ -717,7 +717,7 @@ function TargetGroup({
             className={cn(
               'rounded-sm border px-3 py-1.5 text-[13px] transition-colors',
               isChosen(o.id)
-                ? 'border-violet-400 bg-violet-500/18 text-violet-100'
+                ? 'border-violet-400 bg-violet-500/18 text-tone-violet-100'
                 : 'border-ink-600 bg-ink-850 text-ink-200 hover:border-ink-500',
             )}
           >
@@ -746,7 +746,7 @@ function CreativePreview({
     <>
       <PosterPlate title={title || 'Your campaign'} seed={(title?.length ?? 0) + 4} compact lettering={false} />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink-950/65 text-center">
-        <p className="font-marquee text-[20px] font-bold text-white">{title || 'Your campaign'}</p>
+        <p className="font-marquee text-[20px] font-bold text-fg">{title || 'Your campaign'}</p>
         <p className="text-[12px] text-ink-300">Creative appears here once uploaded</p>
       </div>
     </>
@@ -858,7 +858,7 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to="/campaigns" className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-white">
+        <Link to="/campaigns" className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-fg">
           <ArrowLeft className="size-4" /> All campaigns
         </Link>
         <div className="flex flex-wrap gap-2">
@@ -894,13 +894,13 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
         </div>
       </div>
 
-      <h1 className="font-marquee mt-4 text-[28px] font-bold tracking-tight text-white">
+      <h1 className="font-marquee mt-4 text-[28px] font-bold tracking-tight text-fg">
         {c.campaignName}
       </h1>
 
       {expired && (
         <div className="mt-4 flex items-start gap-2.5 rounded-sm border border-warning-500/35 bg-warning-500/8 px-4 py-3">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-400" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tone-warning-400" />
           <p className="text-[13.5px] leading-relaxed text-ink-200">
             This campaign ended on {dateOnly(c.endDate)} and is no longer being delivered. Its
             recorded performance is kept for reporting.
@@ -941,7 +941,7 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
             ].map(([icon, label, value]) => (
               <div key={label as string} className="rounded-lg border border-ink-700 bg-ink-850 p-4">
                 <p className="letterboard flex items-center gap-1.5 text-ink-300">{icon}{label}</p>
-                <p className="font-marquee mt-1.5 text-[24px] font-bold tabular-nums text-white">{value}</p>
+                <p className="font-marquee mt-1.5 text-[24px] font-bold tabular-nums text-fg">{value}</p>
               </div>
             ))}
           </div>
@@ -998,7 +998,7 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
                 title="Performance"
                 action={
                   <a href={ads.campaigns.csvUrl(c.id)} download
-                    className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-white">
+                    className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-fg">
                     <Download className="size-3.5" /> Export CSV
                   </a>
                 }
@@ -1235,7 +1235,7 @@ function AdvertisementCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-[14px] font-medium text-white">{ad.adTitle}</p>
+            <p className="truncate text-[14px] font-medium text-fg">{ad.adTitle}</p>
             <Letterboard tone={ad.status === 'ACTIVE' ? (ad.servable ? 'live' : 'review') : 'neutral'}>
               {ad.status}
             </Letterboard>
@@ -1253,7 +1253,7 @@ function AdvertisementCard({
           </p>
           {ad.clickUrl && (
             <a href={ad.clickUrl} target="_blank" rel="noreferrer noopener"
-              className="mt-1.5 inline-flex max-w-full items-center gap-1.5 truncate text-[12.5px] text-cyan-300 underline hover:text-cyan-200">
+              className="mt-1.5 inline-flex max-w-full items-center gap-1.5 truncate text-[12.5px] text-tone-cyan-300 underline hover:text-tone-cyan-200">
               <Link2 className="size-3 shrink-0" />
               <span className="truncate">{ad.clickUrl}</span>
             </a>
@@ -1485,7 +1485,7 @@ function AdvertisementFormModal({
             <input type="file" className="sr-only" accept="video/*,image/*"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = '' }} />
             {uploading
-              ? <Loader2 className="size-5 shrink-0 animate-spin text-violet-300" />
+              ? <Loader2 className="size-5 shrink-0 animate-spin text-tone-violet-300" />
               : <Upload className="size-5 shrink-0 text-ink-300" />}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13.5px] text-ink-100">
@@ -1587,7 +1587,7 @@ function PlacementChips({
                   type="button"
                   onClick={() => setEditing(p)}
                   aria-label={`Edit the ${p.targetLabel} placement`}
-                  className="ml-0.5 rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-ink-700 hover:text-white"
+                  className="ml-0.5 rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-ink-700 hover:text-fg"
                 >
                   <Pencil className="size-3" />
                 </button>
@@ -1596,7 +1596,7 @@ function PlacementChips({
                   disabled={busy}
                   onClick={() => detach(p)}
                   aria-label={`Stop targeting ${p.targetLabel}`}
-                  className="rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-danger-500/15 hover:text-danger-300"
+                  className="rounded-xs p-0.5 text-ink-400 transition-colors hover:bg-danger-500/15 hover:text-tone-danger-300"
                 >
                   <X className="size-3" />
                 </button>
@@ -1772,7 +1772,7 @@ function TargetPickerModal({
           </div>
         )}
 
-        {error && <p className="text-[12.5px] text-danger-400">{error}</p>}
+        {error && <p className="text-[12.5px] text-tone-danger-400">{error}</p>}
       </div>
     </Modal>
   )
@@ -1856,7 +1856,7 @@ function PlacementEditModal({
     >
       <div className="space-y-4">
         {error && (
-          <p className="rounded-sm border border-danger-500/35 bg-danger-500/8 px-3 py-2 text-[12.5px] text-danger-300">
+          <p className="rounded-sm border border-danger-500/35 bg-danger-500/8 px-3 py-2 text-[12.5px] text-tone-danger-300">
             {error}
           </p>
         )}
@@ -1912,7 +1912,7 @@ function Breakdowns({ metrics }: { metrics: Metrics }) {
                     <span className="truncate text-[13px] text-ink-100">{r.label}</span>
                     <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-ink-300">
                       {r.impressions.toLocaleString()} ·{' '}
-                      <span className={r.ctr > 2 ? 'text-success-400' : ''}>{r.ctr.toFixed(2)}%</span>
+                      <span className={r.ctr > 2 ? 'text-tone-success-400' : ''}>{r.ctr.toFixed(2)}%</span>
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-800">
@@ -1978,7 +1978,7 @@ function PerformanceBody({ actorId }: { actorId: number }) {
         ].map(([l, v]) => (
           <div key={l} className="border-l border-ink-700 pl-3">
             <p className="letterboard text-ink-300">{l}</p>
-            <p className="font-marquee mt-1 text-[26px] font-bold tabular-nums text-white">{v}</p>
+            <p className="font-marquee mt-1 text-[26px] font-bold tabular-nums text-fg">{v}</p>
           </div>
         ))}
       </div>
@@ -1991,12 +1991,12 @@ function PerformanceBody({ actorId }: { actorId: number }) {
                 <li key={c.id}>
                   <div className="flex items-baseline justify-between gap-3">
                     <Link to={`/campaigns/${c.id}`}
-                      className="font-marquee truncate text-[15px] font-bold text-white hover:text-violet-200">
+                      className="font-marquee truncate text-[15px] font-bold text-fg hover:text-tone-violet-200">
                       {c.campaignName}
                     </Link>
                     <span className="shrink-0 font-mono text-[12px] tabular-nums text-ink-300">
                       {c.impressions.toLocaleString()} impr · {c.clicks.toLocaleString()} clicks ·{' '}
-                      <span className={c.ctr > 2 ? 'text-success-400' : ''}>{c.ctr.toFixed(2)}%</span>
+                      <span className={c.ctr > 2 ? 'text-tone-success-400' : ''}>{c.ctr.toFixed(2)}%</span>
                     </span>
                   </div>
                   <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-ink-800">
@@ -2031,7 +2031,7 @@ function PerformanceBody({ actorId }: { actorId: number }) {
           <tbody>
             {all.map((c) => (
               <Tr key={c.id} onClick={() => nav(`/campaigns/${c.id}`)}>
-                <Td><span className="font-medium text-white">{c.campaignName}</span></Td>
+                <Td><span className="font-medium text-fg">{c.campaignName}</span></Td>
                 <Td><StatusBoard campaign={c} /></Td>
                 <Td numeric>{c.impressions.toLocaleString()}</Td>
                 <Td numeric>{c.clicks.toLocaleString()}</Td>
@@ -2041,7 +2041,7 @@ function PerformanceBody({ actorId }: { actorId: number }) {
                     href={ads.campaigns.csvUrl(c.id)}
                     download
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-300 hover:text-white"
+                    className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-300 hover:text-fg"
                   >
                     <Download className="size-3.5" /> CSV
                   </a>

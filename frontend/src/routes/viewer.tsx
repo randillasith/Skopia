@@ -59,8 +59,8 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             className={cn(
               'letterboard absolute right-2 top-2 rounded-full border px-2 py-0.5 backdrop-blur',
               v.premium
-                ? 'border-gold-500/45 bg-gold-500/12 text-gold-400'
-                : 'border-success-500/35 bg-success-500/10 text-success-400',
+                ? 'border-gold-500/45 bg-gold-500/12 text-tone-gold-400'
+                : 'border-success-500/35 bg-success-500/10 text-tone-success-400',
             )}
           >
             {v.premium ? 'Pass' : 'Free'}
@@ -68,7 +68,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
           {/* Duration on the thumbnail. It is the first thing anyone checks
               before committing to something, and making them open the page to
               find it is a small tax paid on every browse. */}
-          <span className="absolute bottom-1.5 right-1.5 rounded-xs bg-ink-950/85 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-white backdrop-blur-[2px]">
+          <span className="absolute bottom-1.5 right-1.5 rounded-xs bg-ink-950/85 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-fg backdrop-blur-[2px]">
             {v.runtime}
           </span>
         </Link>
@@ -86,9 +86,9 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             }}
             aria-label={saved ? `Remove ${v.title} from Watch later` : `Save ${v.title} to Watch later`}
             title={saved ? 'Remove from Watch later' : 'Watch later'}
-            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
+            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-fg"
           >
-            <Clock className={cn('size-3.5', saved && 'text-cyan-300')} />
+            <Clock className={cn('size-3.5', saved && 'text-tone-cyan-300')} />
           </button>
           <button
             onClick={(e) => {
@@ -99,9 +99,9 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             }}
             aria-label={isQueued(v.id) ? `Take ${v.title} out of the queue` : `Add ${v.title} to the queue`}
             title={isQueued(v.id) ? 'In the queue' : 'Add to queue'}
-            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
+            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-fg"
           >
-            <ListEnd className={cn('size-3.5', isQueued(v.id) && 'text-cyan-300')} />
+            <ListEnd className={cn('size-3.5', isQueued(v.id) && 'text-tone-cyan-300')} />
           </button>
           <button
             onClick={(e) => {
@@ -111,7 +111,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             }}
             aria-label={`Save ${v.title} to a playlist`}
             title="Save to playlist"
-            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-white"
+            className="pointer-events-auto rounded-sm bg-ink-950/85 p-1.5 text-ink-100 backdrop-blur transition-colors hover:text-fg"
           >
             <Bookmark className="size-3.5" />
           </button>
@@ -122,7 +122,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
         <Link to={`/watch/${v.id}`}>
           <h3
             className={cn(
-              'font-marquee truncate font-bold tracking-tight text-white transition-colors group-hover:text-violet-200',
+              'font-marquee truncate font-bold tracking-tight text-fg transition-colors group-hover:text-tone-violet-200',
               size === 'lg' && 'text-[22px]',
               size === 'md' && 'text-[16px]',
               size === 'sm' && 'text-[14px]',
@@ -180,7 +180,7 @@ export function Browse() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="letterboard text-ink-300">Tonight’s programme</p>
-            <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-white">
+            <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-fg">
               The Lobby
             </h1>
           </div>
@@ -207,8 +207,8 @@ export function Browse() {
               className={cn(
                 'rounded-sm border px-3 py-1.5 text-[13px] font-medium transition-colors',
                 cat === c
-                  ? 'border-violet-400 bg-violet-500/16 text-violet-100'
-                  : 'border-ink-700 bg-transparent text-ink-300 hover:border-ink-600 hover:text-white',
+                  ? 'border-violet-400 bg-violet-500/16 text-tone-violet-100'
+                  : 'border-ink-700 bg-transparent text-ink-300 hover:border-ink-600 hover:text-fg',
               )}
             >
               {c}
@@ -255,7 +255,7 @@ export function Browse() {
                   <Letterboard>{lead.genre}</Letterboard>
                 </div>
                 <Link to={`/watch/${lead.id}`}>
-                  <h2 className="font-marquee mt-3 text-[clamp(1.9rem,4.2vw,3rem)] font-extrabold leading-[0.98] tracking-[-0.03em] text-white hover:text-violet-200">
+                  <h2 className="font-marquee mt-3 text-[clamp(1.9rem,4.2vw,3rem)] font-extrabold leading-[0.98] tracking-[-0.03em] text-fg hover:text-tone-violet-200">
                     {lead.title}
                   </h2>
                 </Link>
@@ -311,7 +311,7 @@ export function Browse() {
                           </span>
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="font-marquee block truncate text-[16px] font-bold text-white group-hover:text-violet-200">
+                          <span className="font-marquee block truncate text-[16px] font-bold text-fg group-hover:text-tone-violet-200">
                             {v.title}
                           </span>
                           <span className="block truncate text-[13px] text-ink-300">
@@ -437,7 +437,7 @@ export function SearchPage() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="font-marquee text-[clamp(1.7rem,3.6vw,2.3rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.7rem,3.6vw,2.3rem)] font-extrabold tracking-[-0.03em] text-fg">
           Search the programme
         </h1>
 
@@ -490,13 +490,13 @@ export function SearchPage() {
               <button
                 key={label}
                 onClick={clear}
-                className="letterboard flex items-center gap-1.5 rounded-xs border border-ink-600 bg-ink-800 px-2 py-1 text-ink-150 transition-colors hover:border-ink-500 hover:text-white"
+                className="letterboard flex items-center gap-1.5 rounded-xs border border-ink-600 bg-ink-800 px-2 py-1 text-ink-150 transition-colors hover:border-ink-500 hover:text-fg"
               >
                 {label}
                 <X className="size-3" />
               </button>
             ))}
-            <button onClick={clearAll} className="letterboard text-ink-300 underline-offset-4 hover:text-white hover:underline">
+            <button onClick={clearAll} className="letterboard text-ink-300 underline-offset-4 hover:text-fg hover:underline">
               Clear all
             </button>
           </div>
@@ -511,7 +511,7 @@ export function SearchPage() {
                   <Link to={`/channel/${c.handle}`} className="group flex items-center gap-3">
                     <Avatar name={c.name} size={44} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-medium text-white group-hover:text-violet-200">
+                      <span className="block truncate text-[15px] font-medium text-fg group-hover:text-tone-violet-200">
                         {c.name}
                       </span>
                       <span className="block truncate text-[12px] text-ink-300">
@@ -564,7 +564,7 @@ export function Category() {
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
         <p className="letterboard text-ink-300">Category</p>
-        <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-fg">
           {name}
         </h1>
         {loading || error ? (
@@ -771,7 +771,7 @@ export function Watch() {
                   {v.genre && <Letterboard>{v.genre}</Letterboard>}
                   {v.captions.length > 0 && <Letterboard tone="ok">{`CC ${v.captions.join(' · ')}`}</Letterboard>}
                 </div>
-                <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
+                <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-fg">
                   {v.title}
                 </h1>
                 {tagsFor(v.id).length > 0 && (
@@ -780,7 +780,7 @@ export function Watch() {
                       <Link
                         key={t}
                         to={`/search?q=${encodeURIComponent(t)}`}
-                        className="flex items-center text-[13px] text-violet-300 transition-colors hover:text-violet-200"
+                        className="flex items-center text-[13px] text-tone-violet-300 transition-colors hover:text-tone-violet-200"
                       >
                         <Hash className="size-3" />{t}
                       </Link>
@@ -793,7 +793,7 @@ export function Watch() {
                   <Link to={`/channel/${channel?.handle ?? ''}`} className="group flex min-w-0 items-center gap-3">
                     <Avatar name={v.creator} size={40} />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-white group-hover:text-violet-200">
+                      <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg group-hover:text-tone-violet-200">
                         {v.creator}
                         {isVerified(v.creator) && <VerifiedMark />}
                       </span>
@@ -812,7 +812,7 @@ export function Watch() {
                         aria-pressed={my === 'up'}
                         className={cn(
                           'flex items-center gap-1.5 px-3 py-1.5 text-[13px] transition-colors hover:bg-ink-800',
-                          my === 'up' ? 'text-cyan-300' : 'text-ink-100',
+                          my === 'up' ? 'text-tone-cyan-300' : 'text-ink-100',
                         )}
                       >
                         <ThumbsUp className={cn('size-4', my === 'up' && 'fill-current')} />
@@ -825,7 +825,7 @@ export function Watch() {
                         aria-label="Dislike"
                         className={cn(
                           'px-3 py-1.5 transition-colors hover:bg-ink-800',
-                          my === 'down' ? 'text-danger-400' : 'text-ink-100',
+                          my === 'down' ? 'text-tone-danger-400' : 'text-ink-100',
                         )}
                       >
                         <ThumbsDown className={cn('size-4', my === 'down' && 'fill-current')} />
@@ -844,7 +844,7 @@ export function Watch() {
                     </Button>
                     <Button
                       size="sm"
-                      icon={<ListEnd className={cn('size-4', queued && 'text-cyan-300')} />}
+                      icon={<ListEnd className={cn('size-4', queued && 'text-tone-cyan-300')} />}
                       onClick={() => {
                         if (!viewer) return nav('/login')
                         const added = toggleQueue(v.id)
@@ -855,7 +855,7 @@ export function Watch() {
                     </Button>
                     <Button
                       size="sm"
-                      icon={<Download className={cn('size-4', downloaded && 'text-cyan-300')} />}
+                      icon={<Download className={cn('size-4', downloaded && 'text-tone-cyan-300')} />}
                       onClick={() => {
                         if (!viewer) return nav('/login')
                         const on = toggleDownload(v.id)
@@ -895,7 +895,7 @@ export function Watch() {
               {/* ---- comments ---- */}
               <div className="mt-10 border-t border-ink-800 pt-7">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-marquee text-[17px] font-bold text-white">
+                  <h2 className="font-marquee text-[17px] font-bold text-fg">
                     {commentsLoading ? 'Comments' : `${fmt(thread.length)} comments`}
                   </h2>
                   <div className="flex items-center gap-1">
@@ -905,7 +905,7 @@ export function Watch() {
                         onClick={() => setOrder(o)}
                         className={cn(
                           'letterboard rounded-xs px-2 py-1 transition-colors',
-                          order === o ? 'bg-ink-800 text-white' : 'text-ink-300 hover:text-white',
+                          order === o ? 'bg-ink-800 text-fg' : 'text-ink-300 hover:text-fg',
                         )}
                       >
                         {o === 'top' ? 'Top' : 'Newest'}
@@ -987,8 +987,8 @@ export function Watch() {
                             className={cn(
                               'flex items-center gap-1.5 font-medium',
                               c.byCreator
-                                ? 'rounded-full bg-ink-700 px-2 py-0.5 text-white'
-                                : 'text-white',
+                                ? 'rounded-full bg-ink-700 px-2 py-0.5 text-fg'
+                                : 'text-fg',
                             )}
                           >
                             {c.who}
@@ -998,17 +998,17 @@ export function Watch() {
                         </p>
                         <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-ink-300">
-                          <button className="flex items-center gap-1 transition-colors hover:text-white">
+                          <button className="flex items-center gap-1 transition-colors hover:text-fg">
                             <ThumbsUp className="size-3.5" />
                             <span className="tabular-nums">{fmt(c.likes)}</span>
                           </button>
-                          <button aria-label="Dislike this comment" className="transition-colors hover:text-white">
+                          <button aria-label="Dislike this comment" className="transition-colors hover:text-fg">
                             <ThumbsDown className="size-3.5" />
                           </button>
                           {(() => {
                             const replies = thread.filter((r) => r.parentId === c.id)
                             return replies.length > 0 ? (
-                              <span className="flex items-center gap-1 text-cyan-300">
+                              <span className="flex items-center gap-1 text-tone-cyan-300">
                                 <ChevronRight className="size-3.5" />
                                 {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
                               </span>
@@ -1019,7 +1019,7 @@ export function Watch() {
                               that lives in the moderation queue. */}
                           {c.userId != null && c.userId === actor && (
                             <button
-                              className="ml-auto flex items-center gap-1 transition-colors hover:text-danger-400"
+                              className="ml-auto flex items-center gap-1 transition-colors hover:text-tone-danger-400"
                               onClick={async () => {
                                 try {
                                   await removeComment(c.id)
@@ -1053,7 +1053,7 @@ export function Watch() {
                 <p className="letterboard text-ink-300">
                   Up next
                   {queue.length > 0 && (
-                    <Link to="/queue-up" className="ml-2 text-cyan-300 hover:underline">
+                    <Link to="/queue-up" className="ml-2 text-tone-cyan-300 hover:underline">
                       In queue: {queue.length}
                     </Link>
                   )}
@@ -1072,7 +1072,7 @@ export function Watch() {
                         </span>
                       </span>
                       <span className="min-w-0">
-                        <span className="font-marquee block truncate text-[14px] font-bold text-white group-hover:text-violet-200">
+                        <span className="font-marquee block truncate text-[14px] font-bold text-fg group-hover:text-tone-violet-200">
                           {r.title}
                         </span>
                         <span className="block truncate text-[12px] text-ink-300">{r.creator}</span>
@@ -1233,7 +1233,7 @@ export function Watchlist() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           Watch later
         </h1>
         <p className="mt-2 flex flex-wrap items-center gap-x-3 text-[15px] text-ink-300">
@@ -1284,7 +1284,7 @@ export function Watchlist() {
                     </span>
                   </Link>
                   <div className="min-w-0 flex-1">
-                    <Link to={`/watch/${v.id}`} className="font-marquee block truncate text-[17px] font-bold text-white hover:text-violet-200">
+                    <Link to={`/watch/${v.id}`} className="font-marquee block truncate text-[17px] font-bold text-fg hover:text-tone-violet-200">
                       {v.title}
                     </Link>
                     <p className="truncate text-[13px] text-ink-300">
@@ -1330,7 +1330,7 @@ export function History() {
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+            <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
               Watch history
             </h1>
             <p className="mt-2 text-[15px] text-ink-300">Pick up where you stopped.</p>
@@ -1383,7 +1383,7 @@ export function History() {
                     forgetWatch(v.id)
                     toast({ title: 'Removed from history' })
                   }}
-                  className="absolute right-2 top-2 rounded-sm bg-ink-950/80 p-1.5 text-ink-200 opacity-0 backdrop-blur transition-opacity hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+                  className="absolute right-2 top-2 rounded-sm bg-ink-950/80 p-1.5 text-ink-200 opacity-0 backdrop-blur transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -1439,7 +1439,7 @@ export function ForYou() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           For you
         </h1>
         <p className="mt-2 max-w-[62ch] text-[15px] leading-relaxed text-ink-300">
@@ -1496,7 +1496,7 @@ export function Notifications() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.8rem,3.6vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           Notifications
         </h1>
         <div className="mt-7">
@@ -1527,7 +1527,7 @@ export function NotificationPrefs() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-fg">
           Notification preferences
         </h1>
         <div className="mt-7">
@@ -1629,13 +1629,13 @@ export function Profile() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-fg">
           Account
         </h1>
         <div className="mt-7 flex items-center gap-4">
           <Avatar name={viewer?.name ?? 'Guest'} size={64} />
           <div>
-            <p className="text-[15px] font-medium text-white">{viewer?.name}</p>
+            <p className="text-[15px] font-medium text-fg">{viewer?.name}</p>
             <p className="font-mono text-[12px] text-ink-300">@{viewer?.handle}</p>
           </div>
         </div>
@@ -1698,7 +1698,7 @@ export function Profile() {
         </form>
 
         <div className="mt-12 rounded-lg border border-danger-500/30 bg-danger-500/6 p-5">
-          <h2 className="font-marquee text-[17px] font-bold text-danger-400">Deactivate your account</h2>
+          <h2 className="font-marquee text-[17px] font-bold text-tone-danger-400">Deactivate your account</h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-ink-300">
             You will be signed out and the account will no longer be able to log in. Existing content
             and audit history are retained safely instead of being deleted.
@@ -1745,7 +1745,7 @@ export function Help() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.7rem,3.4vw,2.2rem)] font-extrabold tracking-[-0.03em] text-fg">
           Help & support
         </h1>
         <p className="mt-2 text-[15px] text-ink-300">Common questions, and how to reach a person.</p>
@@ -1753,7 +1753,7 @@ export function Help() {
         <div className="mt-7 divide-y divide-ink-800 border-y border-ink-800">
           {faqs.map(([q, a]) => (
             <details key={q} className="group py-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-medium text-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-medium text-fg">
                 {q}
                 <ChevronRight className="size-4 shrink-0 text-ink-300 transition-transform group-open:rotate-90" />
               </summary>
@@ -1763,7 +1763,7 @@ export function Help() {
         </div>
 
         <div className="mt-8 rounded-lg border border-ink-700 bg-ink-850 p-5">
-          <h2 className="font-marquee text-[17px] font-bold text-white">Still stuck?</h2>
+          <h2 className="font-marquee text-[17px] font-bold text-fg">Still stuck?</h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-ink-300">
             File a complaint and a support officer will pick it up. You can follow its status the
             whole way through.

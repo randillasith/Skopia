@@ -63,7 +63,7 @@ function IconBtn({
       disabled={disabled}
       className={cn(
         'rounded-sm p-1.5 transition-colors hover:bg-white/12 disabled:opacity-40',
-        active ? 'text-cyan-300' : 'text-ink-100 hover:text-white',
+        active ? 'text-tone-cyan-300' : 'text-ink-100 hover:text-fg',
       )}
     >
       {children}
@@ -299,8 +299,8 @@ export function Player({
 
       {failed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <AlertTriangle className="size-8 text-danger-400" />
-          <p className="font-marquee text-[20px] font-bold text-white">Playback could not start</p>
+          <AlertTriangle className="size-8 text-tone-danger-400" />
+          <p className="font-marquee text-[20px] font-bold text-fg">Playback could not start</p>
           <p className="max-w-sm text-[14px] leading-relaxed text-ink-300">
             The stream did not respond. Your connection may have dropped, or this title may be
             temporarily unavailable.
@@ -313,7 +313,7 @@ export function Player({
       ) : ad ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink-950/70 px-6 text-center">
           <Letterboard tone="held">Advertisement</Letterboard>
-          <p className="font-marquee text-[22px] font-bold text-white">Autumn Season Launch</p>
+          <p className="font-marquee text-[22px] font-bold text-fg">Autumn Season Launch</p>
           <p className="text-[13px] text-ink-300">Meridian Films · CMP-410</p>
           <Button size="sm" variant="primary" className="mt-2" onClick={() => setAd(false)}>
             Skip advertisement
@@ -340,7 +340,7 @@ export function Player({
       )}
 
       {captions && playing && !ad && !failed && (
-        <p className="pointer-events-none absolute inset-x-0 bottom-24 mx-auto max-w-lg rounded-xs bg-ink-950/85 px-3 py-1.5 text-center text-[14px] text-white">
+        <p className="pointer-events-none absolute inset-x-0 bottom-24 mx-auto max-w-lg rounded-xs bg-ink-950/85 px-3 py-1.5 text-center text-[14px] text-fg">
           {current ? `${current.title} —` : ''} placeholder caption line, {track || 'English'} track.
         </p>
       )}
@@ -410,7 +410,7 @@ export function Player({
                       onClick={() => { setSpeed(s); setMenu('settings') }}
                       className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8"
                     >
-                      <span className="w-4">{s === speed && <Check className="size-3.5 text-cyan-300" />}</span>
+                      <span className="w-4">{s === speed && <Check className="size-3.5 text-tone-cyan-300" />}</span>
                       {s === 1 ? 'Normal' : `${s}×`}
                     </button>
                   </li>
@@ -444,7 +444,7 @@ export function Player({
                 </li>
                 <li>
                   <button onClick={() => { setCaptions(false); setMenu('settings') }} className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8">
-                    <span className="w-4">{!captions && <Check className="size-3.5 text-cyan-300" />}</span>
+                    <span className="w-4">{!captions && <Check className="size-3.5 text-tone-cyan-300" />}</span>
                     Off
                   </button>
                 </li>
@@ -459,7 +459,7 @@ export function Player({
                         onClick={() => { setTrack(c); setCaptions(true); setMenu('settings') }}
                         className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8"
                       >
-                        <span className="w-4">{captions && track === c && <Check className="size-3.5 text-cyan-300" />}</span>
+                        <span className="w-4">{captions && track === c && <Check className="size-3.5 text-tone-cyan-300" />}</span>
                         {c}
                       </button>
                     </li>
@@ -519,7 +519,7 @@ export function Player({
           >
             {scrub !== null && (
               <span
-                className="pointer-events-none absolute -top-7 -translate-x-1/2 rounded-xs bg-ink-950/95 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-white"
+                className="pointer-events-none absolute -top-7 -translate-x-1/2 rounded-xs bg-ink-950/95 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-fg"
                 style={{ left: `${pct(scrub)}%` }}
               >
                 {clock(scrub)}
@@ -578,7 +578,7 @@ export function Player({
 
             <span className="ml-auto flex items-center gap-0.5">
               {speed !== 1 && (
-                <span className="mr-1 font-mono text-[11px] text-cyan-300">{speed}×</span>
+                <span className="mr-1 font-mono text-[11px] text-tone-cyan-300">{speed}×</span>
               )}
               <IconBtn
                 label={captions ? 'Turn captions off' : 'Turn captions on'}
@@ -617,7 +617,7 @@ export function ChapterList({ video }: { video: Video }) {
         {chapters.map((c) => (
           <li key={c.at}>
             <div className="flex items-baseline gap-3 py-2">
-              <span className="font-mono text-[12px] tabular-nums text-cyan-300">{clock(c.at)}</span>
+              <span className="font-mono text-[12px] tabular-nums text-tone-cyan-300">{clock(c.at)}</span>
               <span className="text-[14px] text-ink-100">{c.title}</span>
             </div>
           </li>

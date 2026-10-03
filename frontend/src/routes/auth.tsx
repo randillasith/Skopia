@@ -1,3 +1,4 @@
+import { ThemeSelect } from '@/components/ThemeSelect'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Play, Check } from 'lucide-react'
@@ -40,12 +41,13 @@ export function Lobby() {
 
   return (
     <div className="min-h-dvh bg-canvas">
-      <header className="mx-auto flex h-20 max-w-[1500px] items-center px-4 sm:px-6 lg:px-8">
+      <header className="mx-auto flex min-h-20 max-w-[1500px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <Wordmark />
         <nav className="ml-auto flex items-center gap-2 sm:gap-3">
+          <ThemeSelect />
           <Link
             to="/login"
-            className="rounded-sm px-3 py-2 text-[14px] font-medium text-ink-200 transition-colors hover:text-white"
+            className="rounded-sm px-3 py-2 text-[14px] font-medium text-ink-200 transition-colors hover:text-fg"
           >
             Sign in
           </Link>
@@ -72,7 +74,7 @@ export function Lobby() {
                 {headline.premium && <Letterboard tone="held">Season Pass</Letterboard>}
               </div>
               <Link to={`/watch/${headline.id}`} className="group block">
-                <h1 className="font-marquee text-[clamp(2.75rem,8.5vw,5.75rem)] font-extrabold leading-[0.92] tracking-[-0.035em] text-white">
+                <h1 className="font-marquee text-[clamp(2.75rem,8.5vw,5.75rem)] font-extrabold leading-[0.92] tracking-[-0.035em] text-fg">
                   {headline.title}
                 </h1>
               </Link>
@@ -107,7 +109,7 @@ export function Lobby() {
                 <div key={v.id}>
                   <BillingBoard billing={v.billing} />
                   <Link to={`/watch/${v.id}`}>
-                    <h2 className="font-marquee mt-2.5 text-[clamp(1.5rem,3.4vw,2.4rem)] font-bold leading-[1.02] tracking-[-0.03em] text-white hover:text-violet-200">
+                    <h2 className="font-marquee mt-2.5 text-[clamp(1.5rem,3.4vw,2.4rem)] font-bold leading-[1.02] tracking-[-0.03em] text-fg hover:text-tone-violet-200">
                       {v.title}
                     </h2>
                   </Link>
@@ -126,7 +128,7 @@ export function Lobby() {
                   <span key={v.id}>
                     <Link
                       to={`/watch/${v.id}`}
-                      className="font-marquee font-semibold text-ink-100 decoration-violet-500/50 underline-offset-4 transition-colors hover:text-white hover:underline"
+                      className="font-marquee font-semibold text-ink-100 decoration-violet-500/50 underline-offset-4 transition-colors hover:text-fg hover:underline"
                     >
                       {v.title}
                     </Link>
@@ -166,12 +168,12 @@ export function Lobby() {
         <section key={category} className="border-t border-ink-800">
           <div className="mx-auto max-w-[1500px] px-4 py-11 sm:px-6 lg:px-8">
             <div className="flex items-baseline justify-between gap-4">
-              <h2 className="font-marquee text-[clamp(1.3rem,2.4vw,1.75rem)] font-bold tracking-[-0.02em] text-white">
+              <h2 className="font-marquee text-[clamp(1.3rem,2.4vw,1.75rem)] font-bold tracking-[-0.02em] text-fg">
                 {category}
               </h2>
               <Link
                 to={`/category/${encodeURIComponent(category)}`}
-                className="group flex shrink-0 items-center gap-1.5 text-[13px] text-ink-300 transition-colors hover:text-white"
+                className="group flex shrink-0 items-center gap-1.5 text-[13px] text-ink-300 transition-colors hover:text-fg"
               >
                 All {category.toLowerCase()}
                 <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -189,7 +191,7 @@ export function Lobby() {
       <section className="border-t border-ink-800">
         <div className="mx-auto flex max-w-[1500px] flex-col gap-5 px-4 py-12 sm:flex-row sm:items-center sm:px-6 lg:px-8">
           <div>
-            <h2 className="font-marquee text-[26px] font-bold text-white">Doors are open.</h2>
+            <h2 className="font-marquee text-[26px] font-bold text-fg">Doors are open.</h2>
             <p className="mt-1.5 text-[15px] text-ink-300">
               Browsing is free. A pass adds the premium programme and removes advertising.
             </p>
@@ -237,9 +239,9 @@ function AuthFrame({
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1fr_1.05fr]">
       <div className="flex flex-col px-4 py-8 sm:px-8 lg:px-14">
-        <Wordmark />
+        <div className="flex items-center justify-between gap-3"><Wordmark /><ThemeSelect /></div>
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
-          <h1 className="font-marquee text-[clamp(1.9rem,4vw,2.5rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
+          <h1 className="font-marquee text-[clamp(1.9rem,4vw,2.5rem)] font-extrabold leading-tight tracking-[-0.03em] text-fg">
             {title}
           </h1>
           <p className="mt-2.5 text-[15px] leading-relaxed text-ink-300">{lede}</p>
@@ -247,7 +249,7 @@ function AuthFrame({
           <div className="mt-6 text-[13.5px] text-ink-300">{foot}</div>
         </div>
       </div>
-      <aside className="relative hidden overflow-hidden border-l border-ink-800 bg-inset lg:block">
+      <aside className="theme-media relative hidden overflow-hidden border-l border-ink-800 bg-inset lg:block">
         <div className="absolute inset-0 opacity-70">
           <PosterPlate title="" seed={3} compact />
         </div>
@@ -255,7 +257,7 @@ function AuthFrame({
         {showing && (
           <div className="absolute inset-x-0 bottom-0 p-10">
             <Letterboard tone="live">Now showing</Letterboard>
-            <p className="font-marquee mt-3 text-[clamp(1.8rem,3vw,2.6rem)] font-extrabold leading-[1] tracking-[-0.03em] text-white">
+            <p className="font-marquee mt-3 text-[clamp(1.8rem,3vw,2.6rem)] font-extrabold leading-[1] tracking-[-0.03em] text-fg">
               {showing.title}
             </p>
             <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-ink-300">
@@ -305,7 +307,7 @@ export function Login() {
       foot={
         <>
           No account yet?{' '}
-          <Link to="/signup" className="text-violet-300 underline hover:text-violet-200">
+          <Link to="/signup" className="text-tone-violet-300 underline hover:text-tone-violet-200">
             Create one
           </Link>
         </>
@@ -332,13 +334,13 @@ export function Login() {
           />
         </Field>
         {err && (
-          <p role="alert" className="text-[13px] text-danger-400">
+          <p role="alert" className="text-[13px] text-tone-danger-400">
             {err}
           </p>
         )}
         <div className="flex items-center justify-between">
           <Checkbox checked label="Keep me signed in" onChange={() => {}} />
-          <Link to="/reset" className="text-[13px] text-ink-300 hover:text-white">
+          <Link to="/reset" className="text-[13px] text-ink-300 hover:text-fg">
             Forgot password?
           </Link>
         </div>
@@ -421,7 +423,7 @@ export function Signup() {
       foot={
         <>
           Already registered?{' '}
-          <Link to="/login" className="text-violet-300 underline hover:text-violet-200">
+          <Link to="/login" className="text-tone-violet-300 underline hover:text-tone-violet-200">
             Sign in
           </Link>
         </>
@@ -493,7 +495,7 @@ export function Signup() {
           label="I want to publish videos — open a channel for me"
         />
         {err && (
-          <p role="alert" className="text-[13px] text-danger-400">
+          <p role="alert" className="text-[13px] text-tone-danger-400">
             {err}
           </p>
         )}
@@ -525,13 +527,13 @@ export function ResetPassword() {
           : 'Enter your email address and we will send you a link to set a new password.'
       }
       foot={
-        <Link to="/login" className="text-violet-300 underline hover:text-violet-200">
+        <Link to="/login" className="text-tone-violet-300 underline hover:text-tone-violet-200">
           Back to sign in
         </Link>
       }
     >
       {sent ? (
-        <div className="flex items-center gap-3 rounded-sm border border-success-500/35 bg-success-500/8 px-4 py-3.5 text-[14px] text-success-400">
+        <div className="flex items-center gap-3 rounded-sm border border-success-500/35 bg-success-500/8 px-4 py-3.5 text-[14px] text-tone-success-400">
           <Check className="size-4 shrink-0" />
           Reset link sent.
         </div>
@@ -566,10 +568,10 @@ export function Onboarding() {
 
   return (
     <div className="mx-auto min-h-dvh max-w-3xl px-4 py-10 sm:px-6">
-      <Wordmark />
+      <div className="flex items-center justify-between gap-3"><Wordmark /><ThemeSelect /></div>
       <div className="py-12">
         <p className="letterboard text-ink-300">Step 1 of 1</p>
-        <h1 className="font-marquee mt-2 text-[clamp(2rem,5vw,3rem)] font-extrabold leading-tight tracking-[-0.03em] text-white">
+        <h1 className="font-marquee mt-2 text-[clamp(2rem,5vw,3rem)] font-extrabold leading-tight tracking-[-0.03em] text-fg">
           What should we put in front of you?
         </h1>
         <p className="mt-3 max-w-[60ch] text-[16px] leading-relaxed text-ink-300">
@@ -627,8 +629,8 @@ function Chip({
       aria-pressed={on}
       className={
         on
-          ? 'rounded-sm border border-violet-400 bg-violet-500/18 px-3.5 py-2 text-[14px] font-medium text-violet-100 transition-colors'
-          : 'rounded-sm border border-ink-600 bg-ink-850 px-3.5 py-2 text-[14px] text-ink-200 transition-colors hover:border-ink-500 hover:text-white'
+          ? 'rounded-sm border border-violet-400 bg-violet-500/18 px-3.5 py-2 text-[14px] font-medium text-tone-violet-100 transition-colors'
+          : 'rounded-sm border border-ink-600 bg-ink-850 px-3.5 py-2 text-[14px] text-ink-200 transition-colors hover:border-ink-500 hover:text-fg'
       }
     >
       {children}

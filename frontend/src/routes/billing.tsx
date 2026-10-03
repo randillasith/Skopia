@@ -24,7 +24,7 @@ export function Plans() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           Passes
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-300">
@@ -42,12 +42,12 @@ export function Plans() {
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           {PLANS.map((p) => (
             <div key={p.id} className="flex flex-col rounded-lg border border-ink-700 bg-ink-850 p-6">
-              <h2 className="font-marquee text-[20px] font-bold text-white">{p.name}</h2>
+              <h2 className="font-marquee text-[20px] font-bold text-fg">{p.name}</h2>
               <p className="mt-1.5 text-[13px] text-ink-400">Price not yet set</p>
               <ul className="mt-5 flex-1 space-y-2.5">
                 {p.entitlements.map((e) => (
                   <li key={e} className="flex items-start gap-2 text-[13.5px] text-ink-200">
-                    <Check className="mt-0.5 size-3.5 shrink-0 text-success-400" />
+                    <Check className="mt-0.5 size-3.5 shrink-0 text-tone-success-400" />
                     {e}
                   </li>
                 ))}
@@ -58,7 +58,7 @@ export function Plans() {
 
         <p className="mt-8 text-[13px] text-ink-400">
           Everything in the free programme is already available —{' '}
-          <Link to="/browse" className="text-cyan-300 underline hover:text-cyan-200">
+          <Link to="/browse" className="text-tone-cyan-300 underline hover:text-tone-cyan-200">
             start watching
           </Link>
           .
@@ -88,7 +88,7 @@ export function Checkout() {
           body="No payment can be taken yet — there is nothing on the server to record one
             against. When passes go on sale this is where the purchase happens."
           action={
-            <Link to="/plans" className="text-[13px] text-cyan-300 underline hover:text-cyan-200">
+            <Link to="/plans" className="text-[13px] text-tone-cyan-300 underline hover:text-tone-cyan-200">
               See what the passes will include
             </Link>
           }
@@ -108,7 +108,7 @@ export function Subscription() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           Your pass
         </h1>
         <div className="mt-7">
@@ -118,7 +118,7 @@ export function Subscription() {
             body="Passes are not on sale yet, so no account holds one. Once they are, this shows
               which pass you hold, when it renews and how to stop it."
             action={
-              <Link to="/plans" className="text-[13px] text-cyan-300 underline hover:text-cyan-200">
+              <Link to="/plans" className="text-[13px] text-tone-cyan-300 underline hover:text-tone-cyan-200">
                 See the passes
               </Link>
             }
@@ -135,7 +135,7 @@ export function BillingHistory() {
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
+        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-fg">
           Billing history
         </h1>
         <div className="mt-7">
