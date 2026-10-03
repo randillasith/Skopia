@@ -1,6 +1,7 @@
 package org.gp14.skopia.user;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.gp14.skopia.billing.BillingService;
 import org.gp14.skopia.model.user.ContentCreator;
 import org.gp14.skopia.model.user.RegisteredViewer;
 import org.gp14.skopia.model.user.User;
@@ -34,16 +35,18 @@ public class AuthController {
     private final UserManagementService userManagement;
     private final PasswordService passwords;
     private final TokenService tokens;
+    private final BillingService billing;
 
     public AuthController(UserRepository users, RegisteredViewerRepository viewers,
                           ContentCreatorRepository creators, UserManagementService userManagement,
-                          PasswordService passwords, TokenService tokens) {
+                          PasswordService passwords, TokenService tokens, BillingService billing) {
         this.users = users;
         this.viewers = viewers;
         this.creators = creators;
         this.userManagement = userManagement;
         this.passwords = passwords;
         this.tokens = tokens;
+        this.billing = billing;
     }
 
     @PostMapping("/register")
@@ -132,7 +135,8 @@ public class AuthController {
         return LoginResponse.builder().id(user.getId()).userId(user.getId()).username(user.getUsername())
                 .email(user.getEmail()).firstName(user.getFirstName()).lastName(user.getLastName())
                 .displayName(dto.getDisplayName()).roleType(dto.getRoleType()).userType(dto.getRoleType())
-                .accountStatus(user.getAccountStatus()).isPremium(dto.getIsPremium()).isVerified(dto.getIsVerified())
+                .accountStatus(user.getAccountStatus()).isPremium(user instanceof RegisteredViewer && billing.hasActivePremium(user.getId()))
+                .isVerified(dto.getIsVerified())
                 .token(tokens.issue(user.getId())).message(message).build();
     }
 

@@ -1,4 +1,8 @@
 HELP.md
+# Never version local or production database/authentication credentials.
+src/main/resources/application.properties
+*.env
+.env*
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

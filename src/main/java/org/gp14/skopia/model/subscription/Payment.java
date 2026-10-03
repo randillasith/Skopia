@@ -45,4 +45,11 @@ public class Payment {
             paidDatetime = LocalDateTime.now();
         }
     }
+
+    /** Payments are ledger entries, not mutable account state. Corrections require a new record. */
+    @PreUpdate
+    @PreRemove
+    protected void rejectMutation() {
+        throw new IllegalStateException("Payments are immutable");
+    }
 }

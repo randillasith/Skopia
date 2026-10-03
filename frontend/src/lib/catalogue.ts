@@ -195,6 +195,9 @@ export const catalogue = {
       actorId,
     }),
 
+  editComment: (commentId: number, text: string, actorId: number | null) =>
+    request<ServerComment>(`/api/comments/${commentId}`, { method: 'PUT', body: { text }, actorId }),
+
   deleteComment: (commentId: number, actorId: number | null) =>
     request<{ message: string }>(`/api/comments/${commentId}`, { method: 'DELETE', actorId }),
 

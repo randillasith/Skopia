@@ -10,4 +10,5 @@ import java.util.List;
 public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
     List<Subscription> findByViewerId(Long viewerId);
     List<Subscription> findByViewerIdAndSubStatus(Long viewerId, String subStatus);
+    List<Subscription> findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(Long viewerId, String subStatus, java.time.LocalDateTime now);
 }

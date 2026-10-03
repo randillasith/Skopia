@@ -46,6 +46,27 @@ public class TokenService {
         }
     }
 
+    /** Short-lived URL scoped to one media file and user. Does not expose the bearer token. */
+    public String issueMedia(Long videoId, String filename, Long userId) {
+        String payload = videoId + ":" + filename + ":" + userId + ":" + Instant.now(clock).plusSeconds(3600).getEpochSecond();
+        String encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        return encoded + "." + sign(encoded);
+    }
+
+    public Long verifyMediaUser(String token, Long videoId, String filename) {
+        if (token == null) return null;
+        String[] parts = token.split("\\.", -1);
+        if (parts.length != 2 || !MessageDigestSupport.constantEquals(sign(parts[0]), parts[1])) return null;
+        try {
+            String[] values = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8).split(":", -1);
+            if (values.length != 4 || !Long.toString(videoId).equals(values[0]) || !filename.equals(values[1])
+                    || Long.parseLong(values[3]) <= Instant.now(clock).getEpochSecond()) return null;
+            return Long.parseLong(values[2]);
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
     private String sign(String value) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

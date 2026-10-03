@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findBySubscriptionId(Long subscriptionId);
+    List<Payment> findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(Long viewerId);
+    java.util.Optional<Payment> findByIdAndSubscriptionViewerId(Long id, Long viewerId);
 }
