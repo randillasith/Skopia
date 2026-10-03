@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     end_date DATETIME NOT NULL,
     sub_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     auto_renew BOOLEAN NOT NULL DEFAULT TRUE,
-    FOREIGN KEY (viewer_id) REFERENCES registered_viewers(viewer_id) ON DELETE CASCADE,
+    FOREIGN KEY (viewer_id) REFERENCES viewers(viewer_id) ON DELETE CASCADE,
     FOREIGN KEY (plan_id) REFERENCES subscription_plans(plan_id)
 );
 
@@ -278,9 +278,11 @@ CREATE TABLE IF NOT EXISTS refunds (
     payment_id BIGINT NOT NULL,
     processed_by BIGINT,
     refund_amount DECIMAL(10, 2) NOT NULL,
-    reason VARCHAR(255) NOT NULL,
+    reason VARCHAR(500) NOT NULL,
     refund_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    requested_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     processed_date DATETIME,
+    decision_note VARCHAR(500),
     FOREIGN KEY (payment_id) REFERENCES payments(payment_id) ON DELETE CASCADE,
     FOREIGN KEY (processed_by) REFERENCES administrators(employee_no) ON DELETE SET NULL
 );
@@ -336,9 +338,14 @@ CREATE TABLE IF NOT EXISTS notifications (
     notification_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     notif_type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
+    target_url VARCHAR(500),
+    dedupe_key VARCHAR(180) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    read_at DATETIME,
+    UNIQUE KEY uq_notification_user_dedupe (user_id, dedupe_key),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
@@ -347,8 +354,11 @@ CREATE TABLE IF NOT EXISTS announcements (
     published_by BIGINT NOT NULL,
     ann_title VARCHAR(255) NOT NULL,
     ann_body TEXT NOT NULL,
-    publish_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    publish_date DATETIME,
     audience VARCHAR(50) NOT NULL DEFAULT 'ALL',
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (published_by) REFERENCES administrators(employee_no) ON DELETE CASCADE
 );
 

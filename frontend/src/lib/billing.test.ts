@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { billing, normalizePlans, validateDemoPayment } from './billing'
+import { billing, normalizePlans, validateDemoPayment, validateRefundReason } from './billing'
 import { catalogue } from './catalogue'
 import { writeSession } from './auth-storage'
 
@@ -76,5 +76,26 @@ describe('demo billing client', () => {
     await billing.cancel(7)
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/billing/cancel')
     expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBe('POST')
+  })
+
+  it('validates and normalizes refund requests before sending', async () => {
+    expect(validateRefundReason('too short')).toBeTruthy()
+    expect(validateRefundReason('  A clear reason for this request.  ')).toBeNull()
+    await billing.requestRefund(12, '  Duplicate demo purchase   made by mistake. ', 7)
+    const [path, init] = vi.mocked(fetch).mock.calls[0]
+    expect(path).toBe('/api/billing/payments/12/refunds')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ reason: 'Duplicate demo purchase made by mistake.' })
+  })
+
+  it('uses the immediate plan-change and admin decision contracts', async () => {
+    await billing.changePlan('YEARLY', 7)
+    await billing.decideRefund(9, 'REJECTED', ' Outside policy. ')
+    const calls = vi.mocked(fetch).mock.calls
+    expect(calls[0][0]).toBe('/api/billing/change-plan')
+    expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ planName: 'YEARLY' })
+    expect(calls[1][0]).toBe('/api/billing/admin/refunds/9/decision')
+    expect(calls[1][1]?.method).toBe('POST')
+    expect(JSON.parse(String(calls[1][1]?.body))).toEqual({ decision: 'REJECTED', note: 'Outside policy.' })
   })
 })

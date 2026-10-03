@@ -10,8 +10,9 @@ import {
 import { Lobby, Login, Signup, ResetPassword, Onboarding } from '@/routes/auth'
 import {
   Browse, SearchPage, Category, Watch, Watchlist, History, ForYou,
-  Notifications, NotificationPrefs, Profile, Help,
+  NotificationPrefs, Profile, Help,
 } from '@/routes/viewer'
+import { Notifications } from '@/routes/notifications'
 import { Plans, Checkout, CheckoutResult, Subscription, BillingHistory } from '@/routes/billing'
 import { MyReports } from '@/routes/reports'
 import {
@@ -25,9 +26,10 @@ import { Explore, Trending, Queue } from '@/routes/discover'
 import { CampaignList, CampaignNew, CampaignDetail, CampaignPerformance } from '@/routes/campaigns'
 import { SupportQueue, ComplaintDetail, ComplaintHistory } from '@/routes/support'
 import {
-  AdminDashboard, AdminAccounts, AdminRoles, AdminModeration, AdminPlans,
-  AdminRefunds, AdminAnnouncements, AdminLogs, AdminSettings,
+  AdminDashboard, AdminAccounts, AdminRoles, AdminModeration,
+  AdminLogs, AdminSettings,
 } from '@/routes/admin'
+import { AdminPlans, AdminRefunds, AdminAnnouncements } from '@/routes/admin-billing'
 
 function ScrollToTop() {
   const { pathname } = useLocation()

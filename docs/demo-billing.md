@@ -1,19 +1,41 @@
-# Subscription plans and test payments
+# Demo subscriptions, simulated refunds, notifications, and announcements
 
-Skopia has **free videos** (public playback) and **premium videos** (requires a registered viewer with an active, unexpired subscription). The Browse page can show all, free, or premium titles. A locked premium title is visible in the catalogue but cannot play; the video-detail API omits its media URL. Locally uploaded premium media uses a short-lived signed URL and rechecks the subscription on every Range request, so cancelling revokes an already-issued URL.
+Skopia has **free videos** (public playback) and **premium videos** (requires an active, unexpired subscription). The subscription table is the authority for entitlement. The legacy `registered_viewers.is_premium` field is synchronized for compatible screens, but it does not grant playback by itself.
 
-## Database
+## Demo subscription and payment semantics
 
-With the normal MySQL/MariaDB configuration (`spring.jpa.hibernate.ddl-auto=update`), records are persisted in `subscription_plans`, `subscriptions`, and `payments`, linked to registered viewers. The payments panel (`/billing`) reads the viewer's own stored payment history from the database, not browser-local sample data. `/subscription` reads the current subscription. Demo plan rows (`MONTHLY`, `YEARLY`) are seeded only when demo mode is enabled, and are zero price. Existing paid plan rows are never overwritten by the seeder.
+Set `SKOPIA_BILLING_DEMO_ENABLED=true` only in an isolated demo/test environment. The existing checkout contract remains synthetic-card-only: `planName`, the documented accepted test card number, `MM/YY` expiry, and cardholder name. Validation is local and no gateway is contacted.
 
-## Safe test-payment mode
+MONTHLY and YEARLY may replace one another immediately. The viewer row is pessimistically locked, every current active subscription is cancelled, and a new active target subscription plus a new immutable payment ledger row are committed in one transaction. Selecting the already-active plan is rejected. Every demo payment has `amount=0.00`, `payStatus=SIMULATED`, a generated test reference, and safe display metadata such as brand/last four digits. Raw card numbers, expiry values, cardholder names, and security codes are never persisted or returned. Cancellation and expiry revoke authoritative entitlement; historical subscriptions and payments remain.
 
-Set `SKOPIA_BILLING_DEMO_ENABLED=true` **only on an isolated test/demo environment**, then start the application with its normal persistent database. Browse `/plans`, sign in as a registered viewer, choose a monthly or yearly demo pass, and press **Activate demo pass**. The API inserts an active subscription and one immutable payment row with `amount=0.00`, `payMethod=DEMO_NO_CHARGE`, and `payStatus=SIMULATED`; no card number, CVV, real money, gateway, or automatic renewal is involved. The client rejects card entry, and the server rejects unknown checkout fields. One active pass per viewer is enforced. Cancel on `/subscription` to immediately revoke access; the payment history remains.
+## Simulated refunds
 
-**Do not enable demo mode as a real payment system.** It grants premium access at no charge. For real charges, integrate a compliant payment provider with verified server-side webhooks; this repository does not process payments.
+Authenticated viewers may request a refund only for their own payment. Reasons are trimmed and bounded, and a payment may have only one PENDING request at a time. The payment row is locked while this rule is checked. Viewers can list only their own requests.
+
+Administrators can list all requests and move a PENDING request once to APPROVED or REJECTED, recording processor identity, decision time, and an optional bounded note. The transition is audited. Approval immediately cancels the associated subscription and synchronizes the legacy premium flag, but it does not transfer money and never changes or deletes the immutable payment. A simulated refund is an entitlement/admin workflow, not a financial settlement.
+
+## Durable notifications
+
+Notifications are stored per user with title, body, type, link, creation time, dedupe key, and read time. `(user_id, dedupe_key)` is unique. Authenticated users can list their own notifications, count unread items, mark one owned notification, or mark all of their notifications read; cross-user IDs return no data.
+
+A successfully committed PUBLISHED video creation creates a notification for every active viewer except the creator. There is no follow/subscription-to-creator persistence in this codebase, so “all active viewers” is the intentional audience. Video and notification inserts share the same transaction: failed video creation leaves no notifications, and retries are deduplicated.
+
+## Announcements
+
+Administrators create and edit DRAFT announcements, publish them, and archive them. Only PUBLISHED announcements are visible through the authenticated user endpoint. Audiences are:
+
+- `ALL`: every authenticated user.
+- `VIEWERS`: registered viewers, excluding content creators.
+- `CREATORS`: content creators.
+
+Announcements are queried at read time and are not copied into per-user notification rows.
+
+## Schema and migration data
+
+`schema.sql` describes a fresh database. Runtime MariaDB/MySQL compatibility migrations are additive and idempotent: they add missing columns/indexes, backfill legacy rows, and broaden the subscription owner foreign key from registered viewers to viewers so creator passes remain valid. They do not truncate tables or discard payments, subscriptions, refunds, notifications, or announcements.
+
+Where project notes refer to **“nursery data,”** interpret that as **necessary seed/migration data** required for the demo catalog and compatibility—not as permission to delete existing user or production data.
 
 ## Verification
 
-Run `mvn clean package` and `npm test` under `frontend/`. The H2 integration suite checks checkout ownership, rejection of card fields, expired/suspended access, persistence mappings, media Range access and cancellation revocation. The Postman collection in `postman/Skopia-Billing-Video.postman_collection.json` covers the demo API. Test against a separate database before any production merge; do not connect smoke tests to the live database.
-
-Externally hosted video URLs cannot be protected after their direct URL becomes known. For protected premium playback, upload the video to Skopia rather than linking an external file.
+Run the backend suite against the isolated H2 `test` profile. Before any production integration, also exercise the packaged application against a throwaway persistent MariaDB database. Never run demo checkout/refund verification against production data.

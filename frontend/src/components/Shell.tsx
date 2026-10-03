@@ -20,6 +20,7 @@ import { Avatar } from './primitives'
 import { MarqueeRule } from './world'
 import { SearchBox } from './search'
 import { billing } from '@/lib/billing'
+import { notifications } from '@/lib/notifications'
 import { actorId as actorIdOf } from '@/lib/session'
 
 /* ---------------------------------------------------------------- session */
@@ -298,12 +299,24 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
   const canUpload = isCreator(viewer)
   const { pathname } = useLocation()
   const [premium, setPremium] = useState(false)
+  const [unread, setUnread] = useState(0)
   useEffect(() => {
     const actor = actorIdOf(viewer)
     if (actor == null) { setPremium(false); return }
     const abort = new AbortController()
     billing.status(actor, abort.signal).then((status) => setPremium(status.premium)).catch(() => setPremium(false))
     return () => abort.abort()
+  }, [viewer, pathname])
+  useEffect(() => {
+    if (!viewer) { setUnread(0); return }
+    let abort = new AbortController()
+    const load = () => {
+      abort.abort(); abort = new AbortController()
+      notifications.unreadCount(abort.signal).then(setUnread).catch(() => setUnread(0))
+    }
+    load()
+    window.addEventListener('skopia:notifications-changed', load)
+    return () => { abort.abort(); window.removeEventListener('skopia:notifications-changed', load) }
   }, [viewer, pathname])
 
   // "/" and Cmd-K reach the search box, the way every catalogue of this size
@@ -429,12 +442,11 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
 
           <Link
             to="/notifications"
-            aria-label="Notifications"
+            aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
             className="relative rounded-sm p-2 text-ink-300 transition-colors hover:bg-ink-850 hover:text-white"
           >
-            {/* No badge: nothing raises a notification yet, so a dot here would
-                promise something waiting that is not. */}
             <Bell className="size-5" />
+            {unread > 0 && <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-danger-500 px-1 text-center font-mono text-[9px] font-bold leading-4 text-white">{unread > 99 ? '99+' : unread}</span>}
           </Link>
 
           <div className="hidden sm:block"><AccountMenu /></div>

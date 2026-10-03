@@ -69,11 +69,12 @@ class BillingApiTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         mvc.perform(get("/api/billing/payments/" + id).header("Authorization", bearer(other)))
                 .andExpect(status().isNotFound());
-        mvc.perform(checkout(owner, validCheckout("YEARLY"))).andExpect(status().isConflict());
+        mvc.perform(checkout(owner, validCheckout("YEARLY"))).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status.planName").value("YEARLY"));
         mvc.perform(post("/api/billing/cancel").header("Authorization", bearer(owner)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
         assertThat(billing.hasActivePremium(owner.getId())).isFalse();
-        assertThat(payments.count()).isEqualTo(1);
+        assertThat(payments.count()).isEqualTo(2);
     }
 
     @Test void rejectsUnauthenticatedUnknownFieldsAndInvalidPlans() throws Exception {

@@ -10,6 +10,7 @@ import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.video.dto.*;
 import org.gp14.skopia.billing.BillingService;
+import org.gp14.skopia.notification.NotificationService;
 import org.springframework.stereotype.Service;
 import org.gp14.skopia.security.TokenService;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,6 +48,7 @@ public class VideoService {
     private final WatchlistRepository watchlistRepository;
     private final WatchlistItemRepository watchlistItemRepository;
     private final BillingService billing;
+    private final NotificationService notifications;
 
     public VideoService(
             VideoRepository videoRepository,
@@ -59,7 +61,8 @@ public class VideoService {
             CommentRepository commentRepository,
             WatchHistoryRepository watchHistoryRepository,
             WatchlistRepository watchlistRepository,
-            WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens, BillingService billing) {
+            WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens, BillingService billing,
+            NotificationService notifications) {
         this.access = access;
         this.tokens = tokens;
         this.videoRepository = videoRepository;
@@ -74,6 +77,7 @@ public class VideoService {
         this.watchlistRepository = watchlistRepository;
         this.watchlistItemRepository = watchlistItemRepository;
         this.billing = billing;
+        this.notifications = notifications;
     }
 
     public List<CategoryResponse> getCategories() {
@@ -175,11 +179,15 @@ public class VideoService {
         video.setThumbnailUrl(finalThumbnailUrl);
         video.setViewCount(0L);
 
-        Video saved = videoRepository.save(video);
+        Video saved = videoRepository.saveAndFlush(video);
         try {
             creator.setTotalUploads((creator.getTotalUploads() != null ? creator.getTotalUploads() : 0) + 1);
             contentCreatorRepository.save(creator);
         } catch (Exception ignored) {}
+
+        if ("PUBLISHED".equalsIgnoreCase(saved.getVideoStatus())) {
+            notifications.notifyVideoCreated(saved);
+        }
 
         return mapToVideoResponse(saved, creatorId);
     }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { Button, Field, Input } from '@/components/primitives'
-import { billing, DEMO_TEST_CARD, validateDemoPayment, type DemoPayment, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
+import { Button, Field, Input, Modal, Textarea, useToast } from '@/components/primitives'
+import { billing, DEMO_TEST_CARD, validateDemoPayment, validateRefundReason, type DemoPayment, type RefundRequest, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
 import { actorId as actorIdOf } from '@/lib/session'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
@@ -135,42 +135,122 @@ export function Subscription() {
   const actor = actorIdOf(viewer)
   const load = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.status(actor, signal), [actor])
   const { value, loading, error, retry } = useLoad<SubscriptionStatus>(load, String(actor))
-  const [canceling, setCanceling] = useState(false)
+  const [busy, setBusy] = useState<'cancel' | PlanChoice | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const alternative: PlanChoice | null = value?.planName === 'MONTHLY' ? 'YEARLY' : value?.planName === 'YEARLY' ? 'MONTHLY' : null
+
+  const changePlan = async (next: PlanChoice) => {
+    if (actor == null || busy) return
+    if (!window.confirm(`Change immediately to the ${next.toLowerCase()} demo pass? The server will replace the current term now; unused time is not carried over.`)) return
+    setBusy(next); setActionError(null)
+    try { await billing.changePlan(next, actor); await refreshAccount().catch(() => undefined); retry() }
+    catch (cause) { setActionError(message(cause)) }
+    finally { setBusy(null) }
+  }
+
   return <Page title="Your demo pass">
     {loading && <p role="status">Loading subscription…</p>}
     <Feedback error={error} retry={retry} />
     {value && <div className={box}>
-      <p>{value.premium ? 'Premium access active' : 'No active premium pass'}</p>
-      <p className="mt-2">Plan: {value.planName ?? 'None'}</p>
-      <p>Status: {value.status ?? 'Not provided'}</p>
-      <p>Start date: {date(value.startDate)}</p>
-      <p>End date: {date(value.endDate)}</p>
-      {value.premium && <Button className="mt-5" variant="danger" loading={canceling} onClick={async () => {
-        if (actor == null || canceling || !window.confirm('Cancel this demo subscription?')) return
-        setCanceling(true); setActionError(null)
-        try { await billing.cancel(actor); await refreshAccount().catch(() => undefined); retry() }
-        catch (cause) { setActionError(message(cause)) }
-        finally { setCanceling(false) }
-      }}>Cancel demo subscription</Button>}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div><p className="letterboard text-ink-300">Access</p><p className="mt-1 text-lg font-semibold text-white">{value.premium ? 'Premium access active' : 'No active premium pass'}</p></div>
+        <div><p className="letterboard text-ink-300">Current plan</p><p className="mt-1 text-lg font-semibold text-white">{value.planName ?? 'None'}</p></div>
+        <div><p className="letterboard text-ink-300">Status</p><p className="mt-1">{value.status ?? 'Not provided'}</p></div>
+        <div><p className="letterboard text-ink-300">Term</p><p className="mt-1">{date(value.startDate)}<br />through {date(value.endDate)}</p></div>
+      </div>
+      {value.premium && <div className="mt-6 border-t border-ink-700 pt-5">
+        <h2 className="font-marquee text-lg font-bold text-white">Manage this pass</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-300">Plan changes take effect immediately. The current term is replaced with a new term for the selected plan; unused demo time is not prorated or carried over.</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {alternative && <Button loading={busy === alternative} disabled={busy != null} onClick={() => void changePlan(alternative)}>Change to {alternative.toLowerCase()}</Button>}
+          <Button variant="danger" loading={busy === 'cancel'} disabled={busy != null} onClick={async () => {
+            if (actor == null || busy || !window.confirm('Cancel this demo subscription immediately? Premium access ends now.')) return
+            setBusy('cancel'); setActionError(null)
+            try { await billing.cancel(actor); await refreshAccount().catch(() => undefined); retry() }
+            catch (cause) { setActionError(message(cause)) }
+            finally { setBusy(null) }
+          }}>Cancel immediately</Button>
+        </div>
+      </div>}
       <Feedback error={actionError} />
     </div>}
-    <Link className={`${link} mt-5 inline-block`} to="/billing">Demo billing history</Link>
+    <Link className={`${link} mt-5 inline-block`} to="/billing">Demo billing history & refunds</Link>
   </Page>
 }
 
 export function BillingHistory() {
   const { viewer } = useSession()
   const actor = actorIdOf(viewer)
-  const load = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.payments(actor, signal), [actor])
-  const { value, loading, error, retry } = useLoad<DemoPayment[]>(load, String(actor))
+  const toast = useToast()
+  const [payments, setPayments] = useState<DemoPayment[] | null>(null)
+  const [refunds, setRefunds] = useState<RefundRequest[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [revision, setRevision] = useState(0)
+  const [selected, setSelected] = useState<DemoPayment | null>(null)
+  const [reason, setReason] = useState('')
+  const [reasonError, setReasonError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (actor == null) return
+    const abort = new AbortController()
+    setLoading(true); setError(null)
+    Promise.all([billing.payments(actor, abort.signal), billing.refunds(actor, abort.signal)])
+      .then(([nextPayments, nextRefunds]) => { setPayments(nextPayments); setRefunds(nextRefunds) })
+      .catch((cause) => { if (!abort.signal.aborted) setError(message(cause)) })
+      .finally(() => { if (!abort.signal.aborted) setLoading(false) })
+    return () => abort.abort()
+  }, [actor, revision])
+
+  const openRefund = (payment: DemoPayment) => {
+    setSelected(payment); setReason(''); setReasonError(null)
+  }
+  const submitRefund = async () => {
+    if (actor == null || selected == null || saving) return
+    const validation = validateRefundReason(reason)
+    setReasonError(validation)
+    if (validation) return
+    setSaving(true)
+    try {
+      await billing.requestRefund(selected.id, reason, actor)
+      toast({ title: 'Refund request submitted', tone: 'ok' })
+      setSelected(null); setRevision((n) => n + 1)
+    } catch (cause) { setReasonError(message(cause)) }
+    finally { setSaving(false) }
+  }
+
   return <Page title="Demo billing history">
     {loading && <p role="status">Loading demo records…</p>}
-    <Feedback error={error} retry={retry} />
-    {value && (value.length === 0 ? <p>No demo payment records yet.</p> : <ul className="space-y-3">{value.map((payment) => <li key={payment.id} className={box}>
-      <p className="font-semibold">{payment.planName ?? 'Demo pass'} · {payment.payStatus ?? 'Status unknown'}</p>
-      <p className="mt-2 text-sm text-ink-300">Demo amount: {payment.amount} (currency not specified)</p>
-      <p className="text-sm text-ink-300">{date(payment.paidDatetime)} · {payment.payMethod ?? 'Method not specified'}</p>
-    </li>)}</ul>)}
+    <Feedback error={error} retry={() => setRevision((n) => n + 1)} />
+    {!loading && payments && refunds && (payments.length === 0 ? <p>No demo payment records yet.</p> : <ul className="space-y-3">{payments.map((payment) => {
+      const request = refunds.find((item) => item.paymentId === payment.id && !['REJECTED', 'CANCELLED'].includes(item.status))
+      const refundable = ['PAID', 'SUCCESS', 'SETTLED', 'SIMULATED'].includes(payment.payStatus ?? '')
+      return <li key={payment.id} className={box}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="font-semibold text-white">{payment.planName ?? 'Demo pass'} · {payment.payStatus ?? 'Status unknown'}</p>
+            <p className="mt-2 text-sm text-ink-300">Demo amount: {payment.amount} (currency not specified)</p>
+            <p className="text-sm text-ink-300">{date(payment.paidDatetime)} · {payment.payMethod ?? 'Method not specified'}</p>
+            {(payment.cardBrand || payment.cardLast4) && <p className="text-sm text-ink-300">Synthetic {payment.cardBrand ?? 'card'} ending {payment.cardLast4 ?? '—'}</p>}
+          </div>
+          {request ? <span className="letterboard rounded border border-gold-400/40 px-2 py-1 text-gold-300">Refund {request.status}</span>
+            : <Button size="sm" disabled={!refundable} title={!refundable ? 'Only settled demo payments can be refunded.' : undefined} onClick={() => openRefund(payment)}>Request refund</Button>}
+        </div>
+        {request && <div className="mt-4 border-t border-ink-700 pt-3 text-sm text-ink-300">
+          <p><span className="text-ink-100">Reason:</span> {request.reason}</p>
+          {request.processingNote && <p className="mt-1"><span className="text-ink-100">Decision note:</span> {request.processingNote}</p>}
+        </div>}
+      </li>
+    })}</ul>)}
+    <Modal open={selected != null} onClose={() => !saving && setSelected(null)} title="Request a demo refund" description="The request is tied to this payment. A second open request for the same payment is not allowed."
+      footer={<><Button variant="quiet" disabled={saving} onClick={() => setSelected(null)}>Cancel</Button><Button loading={saving} onClick={() => void submitRefund()}>Submit request</Button></>}>
+      {selected && <div>
+        <p className="mb-4 text-sm text-ink-300">Payment #{selected.id} · {selected.planName ?? 'Demo pass'} · amount {selected.amount}</p>
+        <Field label="Reason" required error={reasonError ?? undefined} hint={`${reason.trim().length}/255`}>
+          <Textarea maxLength={255} value={reason} onChange={(event) => { setReason(event.target.value); setReasonError(null) }} placeholder="Explain why this demo payment should be refunded." />
+        </Field>
+      </div>}
+    </Modal>
   </Page>
 }

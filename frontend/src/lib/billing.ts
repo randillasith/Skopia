@@ -23,10 +23,43 @@ export type DemoPayment = {
   payMethod: string | null
   payStatus: string | null
   planName: string | null
+  reference?: string | null
+  cardBrand?: string | null
+  cardLast4?: string | null
 }
 export type PlanChoice = 'MONTHLY' | 'YEARLY'
 export type DemoPaymentInput = { cardNumber: string; expiry: string; cardholderName: string }
-export type AdminSubscription = { userId: number; username: string; displayName: string; planName: string | null; status: string; startDate: string | null; endDate: string | null }
+export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | string
+export type RefundRequest = {
+  id: number
+  paymentId: number
+  subscriptionId: number | null
+  planName: string | null
+  amount: number | null
+  reason: string
+  status: RefundStatus
+  requestedAt: string
+  processedById: number | null
+  processedByUsername: string | null
+  processedByEmail: string | null
+  decidedAt: string | null
+  processingNote: string | null
+  username: string | null
+  email: string | null
+}
+export type AdminSubscription = {
+  userId: number
+  username: string
+  displayName: string
+  email: string | null
+  subscriptionId: number | null
+  planName: string | null
+  status: string
+  startDate: string | null
+  endDate: string | null
+  payment: DemoPayment | null
+  refund: RefundRequest | null
+}
 export const DEMO_TEST_CARD = '4216 0000 0000 0002'
 
 const luhn = (value: string) => {
@@ -60,6 +93,21 @@ export function normalizePlans(payload: DemoPlan[] | PlansResponse): PlansRespon
   return { demoEnabled: payload.demoEnabled === true, plans: Array.isArray(payload.plans) ? payload.plans : [] }
 }
 
+export function validateRefundReason(reason: string) {
+  const clean = reason.trim().replace(/\s+/g, ' ')
+  if (clean.length < 10) return 'Explain the refund request in at least 10 characters.'
+  if (clean.length > 255) return 'Keep the refund reason under 255 characters.'
+  return null
+}
+
+export function normalizeUnreadCount(payload: unknown) {
+  if (typeof payload === 'number') return Math.max(0, Math.floor(payload))
+  if (payload && typeof payload === 'object' && typeof (payload as { count?: unknown }).count === 'number') {
+    return Math.max(0, Math.floor((payload as { count: number }).count))
+  }
+  return 0
+}
+
 export const billing = {
   plans: async (signal?: AbortSignal) => normalizePlans(await request<DemoPlan[] | PlansResponse>('/api/billing/plans', { signal })),
   status: (actorId: number, signal?: AbortSignal) => request<SubscriptionStatus>('/api/billing/status', { actorId, signal }),
@@ -73,6 +121,23 @@ export const billing = {
       cardholderName: payment.cardholderName.trim().replace(/\s+/g, ' '),
     } })
   },
-  cancel: (actorId: number) => request<unknown>('/api/billing/cancel', { method: 'POST', actorId }),
+  cancel: (actorId: number) => request<SubscriptionStatus>('/api/billing/cancel', { method: 'POST', actorId }),
+  changePlan: (planName: PlanChoice, actorId: number) => {
+    if (planName !== 'MONTHLY' && planName !== 'YEARLY') throw new Error('Unknown plan')
+    return request<unknown>('/api/billing/change-plan', { method: 'POST', actorId, body: { planName } })
+  },
+  refunds: (actorId: number, signal?: AbortSignal) => request<RefundRequest[]>('/api/billing/refunds', { actorId, signal }),
+  requestRefund: (paymentId: number, reason: string, actorId: number) => {
+    if (!Number.isInteger(paymentId) || paymentId <= 0) throw new Error('Choose a valid payment.')
+    const error = validateRefundReason(reason)
+    if (error) throw new Error(error)
+    return request<RefundRequest>(`/api/billing/payments/${paymentId}/refunds`, { method: 'POST', actorId, body: {
+      reason: reason.trim().replace(/\s+/g, ' '),
+    } })
+  },
   adminUsers: (signal?: AbortSignal) => request<AdminSubscription[]>('/api/billing/admin/users', { signal }),
+  adminRefunds: (signal?: AbortSignal) => request<RefundRequest[]>('/api/billing/admin/refunds', { signal }),
+  decideRefund: (id: number, status: 'APPROVED' | 'REJECTED', decisionNote: string) => request<RefundRequest>(`/api/billing/admin/refunds/${id}/decision`, {
+    method: 'POST', body: { decision: status, note: decisionNote.trim() || null },
+  }),
 }
