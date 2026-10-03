@@ -10,6 +10,9 @@ import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.video.dto.*;
 import org.springframework.stereotype.Service;
+import org.gp14.skopia.security.TokenService;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,6 +32,8 @@ public class VideoService {
 
     private static final Path UPLOAD_DIR = Paths.get("uploads");
 
+    private final VideoAccessService access;
+    private final TokenService tokens;
     private final VideoRepository videoRepository;
     private final CategoryRepository categoryRepository;
     private final AccessTierRepository accessTierRepository;
@@ -52,7 +57,9 @@ public class VideoService {
             CommentRepository commentRepository,
             WatchHistoryRepository watchHistoryRepository,
             WatchlistRepository watchlistRepository,
-            WatchlistItemRepository watchlistItemRepository) {
+            WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens) {
+        this.access = access;
+        this.tokens = tokens;
         this.videoRepository = videoRepository;
         this.categoryRepository = categoryRepository;
         this.accessTierRepository = accessTierRepository;
@@ -100,7 +107,13 @@ public class VideoService {
         );
 
         return videos.stream()
-                .map(v -> mapToVideoResponse(v, viewerId))
+                .filter(v -> this.access.canSee(v, viewerId))
+                .map(v -> {
+                    VideoResponse result = mapToVideoResponse(v, viewerId);
+                    if (!this.access.isPublished(v) || (v.getAccessTier() != null && "PREMIUM".equalsIgnoreCase(v.getAccessTier().getTierName())))
+                        result.setVideoUrl(null);
+                    return result;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -108,11 +121,14 @@ public class VideoService {
     public VideoResponse getVideoById(Long videoId, Long viewerId) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
+        access.requireVisible(video, viewerId);
         return mapToVideoResponse(video, viewerId);
     }
 
     public VideoResponse createVideo(CreateVideoRequest request, MultipartFile videoFile, MultipartFile thumbnailFile, Long creatorId) {
-        ContentCreator creator = getOrCreateCreator(creatorId);
+        if (creatorId == null) throw new AccessDeniedException("Authentication required");
+        ContentCreator creator = contentCreatorRepository.findById(creatorId)
+                .orElseThrow(() -> new AccessDeniedException("Creator account required"));
 
         Long catId = request.getCategoryId() != null ? request.getCategoryId() : 1L;
         Category category = categoryRepository.findById(catId)
@@ -132,7 +148,7 @@ public class VideoService {
                     return accessTierRepository.save(newTier);
                 });
 
-        String finalVideoUrl = request.getVideoUrl();
+        String finalVideoUrl = checkedExternalUrl(request.getVideoUrl());
         if (videoFile != null && !videoFile.isEmpty()) {
             finalVideoUrl = saveUploadedFile(videoFile, true);
         }
@@ -140,7 +156,7 @@ public class VideoService {
             throw new IllegalArgumentException("Video file or URL is required");
         }
 
-        String finalThumbnailUrl = request.getThumbnailUrl();
+        String finalThumbnailUrl = checkedExternalUrl(request.getThumbnailUrl());
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
             finalThumbnailUrl = saveUploadedFile(thumbnailFile, false);
         }
@@ -191,10 +207,10 @@ public class VideoService {
             video.setVideoStatus(request.getStatus().toUpperCase());
         }
         if (request.getVideoUrl() != null && !request.getVideoUrl().isBlank()) {
-            video.setVideoUrl(request.getVideoUrl().trim());
+            video.setVideoUrl(checkedExternalUrl(request.getVideoUrl()));
         }
         if (request.getThumbnailUrl() != null && !request.getThumbnailUrl().isBlank()) {
-            video.setThumbnailUrl(request.getThumbnailUrl().trim());
+            video.setThumbnailUrl(checkedExternalUrl(request.getThumbnailUrl()));
         }
 
         Video updated = videoRepository.save(video);
@@ -231,7 +247,9 @@ public class VideoService {
     public Map<String, Object> toggleLike(Long videoId, Long userId) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
-        User user = getOrCreateUser(userId);
+        access.requireVisible(video, userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AccessDeniedException("Authentication required"));
 
         VideoLikeId likeId = new VideoLikeId(user.getId(), video.getId());
         boolean active;
@@ -258,7 +276,9 @@ public class VideoService {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
 
-        RegisteredViewer viewer = getOrCreateViewer(viewerId);
+        access.requireVisible(video, viewerId);
+        RegisteredViewer viewer = registeredViewerRepository.findById(viewerId)
+                .orElseThrow(() -> new AccessDeniedException("Viewer account required"));
         Watchlist watchlist = watchlistRepository.findFirstByViewerId(viewer.getId())
                 .orElseGet(() -> {
                     Watchlist wl = new Watchlist();
@@ -286,8 +306,9 @@ public class VideoService {
         return response;
     }
 
-    public void incrementViewCount(Long videoId) {
+    public void incrementViewCount(Long videoId, Long viewerId) {
         videoRepository.findById(videoId).ifPresent(v -> {
+            access.requirePlayback(v, viewerId);
             v.setViewCount((v.getViewCount() != null ? v.getViewCount() : 0L) + 1);
             videoRepository.save(v);
         });
@@ -296,7 +317,10 @@ public class VideoService {
     public void saveProgress(Long videoId, Long viewerId, Integer position, Boolean completed) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
-        RegisteredViewer viewer = getOrCreateViewer(viewerId);
+        access.requireVisible(video, viewerId);
+        access.requirePlayback(video, viewerId);
+        RegisteredViewer viewer = registeredViewerRepository.findById(viewerId)
+                .orElseThrow(() -> new AccessDeniedException("Viewer account required"));
 
         WatchHistoryId id = new WatchHistoryId(viewer.getId(), video.getId());
         WatchHistory history = watchHistoryRepository.findById(id)
@@ -315,7 +339,9 @@ public class VideoService {
     }
 
     @Transactional(readOnly = true)
-    public List<CommentResponse> getComments(Long videoId) {
+    public List<CommentResponse> getComments(Long videoId, Long viewerId) {
+        Video video = videoRepository.findById(videoId).orElseThrow(() -> new IllegalArgumentException("Video not found"));
+        access.requireVisible(video, viewerId);
         return commentRepository.findByVideoIdAndCommentStatusOrderByPostedDatetimeDesc(videoId, "VISIBLE").stream()
                 .map(c -> {
                     Long commentUserId = null;
@@ -368,7 +394,9 @@ public class VideoService {
 
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
-        RegisteredViewer viewer = getOrCreateViewer(viewerId);
+        access.requireVisible(video, viewerId);
+        RegisteredViewer viewer = registeredViewerRepository.findById(viewerId)
+                .orElseThrow(() -> new AccessDeniedException("Viewer account required"));
 
         Comment comment = new Comment();
         comment.setVideo(video);
@@ -377,17 +405,18 @@ public class VideoService {
         comment.setCommentStatus("VISIBLE");
 
         if (request.getParentId() != null) {
-            commentRepository.findById(request.getParentId()).ifPresent(comment::setParentComment);
+            Comment parent = commentRepository.findById(request.getParentId())
+                    .orElseThrow(() -> new IllegalArgumentException("Parent comment not found"));
+            if (!"VISIBLE".equals(parent.getCommentStatus()) || parent.getVideo() == null
+                    || !videoId.equals(parent.getVideo().getId()))
+                throw new IllegalArgumentException("Parent comment must be visible on this video");
+            comment.setParentComment(parent);
         }
 
         Comment saved = commentRepository.save(comment);
 
-        String author = (request.getAuthorName() != null && !request.getAuthorName().isBlank())
-                ? request.getAuthorName()
-                : (viewer.getDisplayName() != null ? viewer.getDisplayName() : viewer.getUsername());
-        String avatar = (request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank())
-                ? request.getAvatarUrl()
-                : "https://i.pravatar.cc/160?img=" + (Math.abs((saved.getId() != null ? saved.getId().hashCode() : 1) % 50) + 1);
+        String author = viewer.getDisplayName() != null ? viewer.getDisplayName() : viewer.getUsername();
+        String avatar = "https://i.pravatar.cc/160?img=" + (Math.abs((saved.getId() != null ? saved.getId().hashCode() : 1) % 50) + 1);
 
         return CommentResponse.builder()
                 .id(saved.getId())
@@ -403,20 +432,44 @@ public class VideoService {
                 .build();
     }
 
+    public CommentResponse editComment(Long commentId, Long viewerId, CreateCommentRequest request) {
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        requireCommentOwner(comment, viewerId);
+        if (comment.getVideo() == null) throw new AccessDeniedException("Video is not available");
+        access.requireVisible(comment.getVideo(), viewerId);
+        if (request == null || request.getText() == null || request.getText().isBlank()
+                || request.getText().trim().length() > 1000)
+            throw new IllegalArgumentException("Comment must contain 1 to 1000 characters");
+        comment.setCommentText(request.getText().trim());
+        commentRepository.save(comment);
+        return CommentResponse.builder().id(comment.getId()).text(comment.getCommentText())
+                .parentId(comment.getParentComment() == null ? null : comment.getParentComment().getId())
+                .userId(viewerId)
+                .displayName(comment.getViewer().getDisplayName() != null ? comment.getViewer().getDisplayName() : comment.getViewer().getUsername())
+                .postedAt(comment.getPostedDatetime() == null ? "" : comment.getPostedDatetime().toInstant(ZoneOffset.UTC).toString())
+                .avatarUrl("https://i.pravatar.cc/160?img=" + (Math.abs(commentId.hashCode() % 50) + 1))
+                .badge(Boolean.TRUE.equals(comment.getViewer().getIsPremium()) ? "Music Pass" : null)
+                .likeCount(0).isPinned(false).build();
+    }
+
     public boolean deleteComment(Long commentId, Long viewerId) {
         Optional<Comment> commentOpt = commentRepository.findById(commentId);
-        if (commentOpt.isPresent()) {
-            Comment comment = commentOpt.get();
-            try {
-                if (comment.getViewer() != null && comment.getViewer().getId().equals(viewerId)) {
-                    comment.setCommentStatus("DELETED");
-                    comment.setCommentText("");
-                    commentRepository.save(comment);
-                    return true;
-                }
-            } catch (Exception ignored) { }
-        }
-        return false;
+        if (commentOpt.isEmpty()) return false;
+        Comment comment = commentOpt.get();
+        requireCommentOwner(comment, viewerId);
+        if (comment.getVideo() == null) throw new AccessDeniedException("Video is not available");
+        access.requireVisible(comment.getVideo(), viewerId);
+        comment.setCommentStatus("DELETED");
+        comment.setCommentText("");
+        commentRepository.save(comment);
+        return true;
+    }
+
+    private void requireCommentOwner(Comment comment, Long viewerId) {
+        if (viewerId == null || comment.getViewer() == null || !viewerId.equals(comment.getViewer().getId())
+                || !"VISIBLE".equals(comment.getCommentStatus()))
+            throw new AccessDeniedException("Only the comment author can change a visible comment");
     }
 
     private void requireCreatorOwnership(Video video, Long creatorId) {
@@ -429,6 +482,7 @@ public class VideoService {
     @Transactional(readOnly = true)
     public List<WatchHistoryResponse> getHistory(Long viewerId) {
         return watchHistoryRepository.findByIdViewerIdOrderByWatchedDatetimeDesc(viewerId).stream()
+                .filter(h -> h.getVideo() != null && access.canSee(h.getVideo(), viewerId))
                 .map(h -> {
                     Video v = h.getVideo();
                     String catName = "General";
@@ -441,7 +495,7 @@ public class VideoService {
                     return WatchHistoryResponse.builder()
                             .id(v != null ? v.getId() : null)
                             .title(v != null ? v.getTitle() : "Video")
-                            .thumbnailUrl(v != null ? v.getThumbnailUrl() : "")
+                            .thumbnailUrl(v != null ? thumbnailUrl(v, viewerId) : "")
                             .durationSeconds(v != null ? v.getDuration() : 0)
                             .viewCount(v != null ? v.getViewCount() : 0L)
                             .lastPosition(h.getLastPosition())
@@ -461,6 +515,7 @@ public class VideoService {
         }
 
         return watchlistItemRepository.findByIdWatchlistIdOrderByAddedDateDesc(watchlistOpt.get().getId()).stream()
+                .filter(item -> item.getVideo() != null && access.canSee(item.getVideo(), viewerId))
                 .map(item -> {
                     Video v = item.getVideo();
                     String catName = "General";
@@ -473,7 +528,7 @@ public class VideoService {
                     return WatchlistResponse.builder()
                             .id(v != null ? v.getId() : null)
                             .title(v != null ? v.getTitle() : "Video")
-                            .thumbnailUrl(v != null ? v.getThumbnailUrl() : "")
+                            .thumbnailUrl(v != null ? thumbnailUrl(v, viewerId) : "")
                             .durationSeconds(v != null ? v.getDuration() : 0)
                             .viewCount(v != null ? v.getViewCount() : 0L)
                             .category(catName)
@@ -547,10 +602,8 @@ public class VideoService {
                 .id(v.getId())
                 .title(v.getTitle())
                 .description(v.getDescription())
-                .videoUrl(v.getVideoUrl())
-                .thumbnailUrl((v.getThumbnailUrl() != null && !v.getThumbnailUrl().isBlank() && !v.getThumbnailUrl().contains("default-thumbnail.jpg")) 
-                        ? v.getThumbnailUrl() 
-                        : "https://picsum.photos/seed/" + (v.getId() != null ? v.getId() : 1) + "/640/360")
+                .videoUrl(playbackUrl(v, viewerId))
+                .thumbnailUrl(thumbnailUrl(v, viewerId))
                 .durationSeconds(v.getDuration() != null ? v.getDuration() : 0)
                 .viewCount(v.getViewCount() != null ? v.getViewCount() : 0L)
                 .accessType(accessType)
@@ -568,65 +621,39 @@ public class VideoService {
                 .build();
     }
 
-    private ContentCreator getOrCreateCreator(Long creatorId) {
-        return contentCreatorRepository.findById(creatorId)
-                .orElseGet(() -> {
-                    List<ContentCreator> creators = contentCreatorRepository.findAll();
-                    if (!creators.isEmpty()) return creators.get(0);
-                    ContentCreator newCreator = new ContentCreator();
-                    newCreator.setUsername("creator_" + System.currentTimeMillis());
-                    newCreator.setEmail("creator" + System.currentTimeMillis() + "@skopia.com");
-                    newCreator.setPasswordHash("password");
-                    newCreator.setChannelName("Skopia Creator");
-                    newCreator.setIsVerified(true);
-                    return contentCreatorRepository.save(newCreator);
-                });
+    private String thumbnailUrl(Video video, Long viewerId) {
+        String url = video.getThumbnailUrl();
+        if (url == null || url.isBlank() || url.contains("default-thumbnail.jpg"))
+            return "https://picsum.photos/seed/" + (video.getId() == null ? 1 : video.getId()) + "/640/360";
+        if (!access.isPublished(video) && url.startsWith("/uploads/") && viewerId != null)
+            return url + "?access=" + tokens.issueMedia(video.getId(), url.substring("/uploads/".length()), viewerId);
+        return url;
     }
 
-    private RegisteredViewer getOrCreateViewer(Long viewerId) {
-        return registeredViewerRepository.findById(viewerId)
-                .orElseGet(() -> {
-                    List<RegisteredViewer> viewers = registeredViewerRepository.findAll();
-                    if (!viewers.isEmpty()) return viewers.get(0);
-                    RegisteredViewer viewer = new RegisteredViewer();
-                    viewer.setUsername("viewer_" + System.currentTimeMillis());
-                    viewer.setEmail("viewer" + System.currentTimeMillis() + "@skopia.com");
-                    viewer.setPasswordHash("password");
-                    viewer.setDisplayName("Nethmi");
-                    return registeredViewerRepository.save(viewer);
-                });
+    private String playbackUrl(Video video, Long viewerId) {
+        if (!access.canPlay(video, viewerId)) return null;
+        String url = video.getVideoUrl();
+        if (url != null && url.startsWith("/uploads/") &&
+                (!access.isPublished(video) || (video.getAccessTier() != null &&
+                        "PREMIUM".equalsIgnoreCase(video.getAccessTier().getTierName())))) {
+            String filename = url.substring("/uploads/".length());
+            return url + "?access=" + tokens.issueMedia(video.getId(), filename, viewerId);
+        }
+        return url;
     }
 
-    private User getOrCreateUser(Long userId) {
-        return userRepository.findById(userId)
-                .orElseGet(() -> {
-                    List<User> users = userRepository.findAll();
-                    if (!users.isEmpty()) return users.get(0);
-                    User user = new User();
-                    user.setUsername("user_" + System.currentTimeMillis());
-                    user.setEmail("user" + System.currentTimeMillis() + "@skopia.com");
-                    user.setPasswordHash("password");
-                    return userRepository.save(user);
-                });
+    private String checkedExternalUrl(String url) {
+        if (url == null || url.isBlank()) return url;
+        String trimmed = url.trim();
+        if (!trimmed.matches("(?i)^https?://[^\\s]+$"))
+            throw new IllegalArgumentException("Only HTTP(S) external URLs may be supplied; local uploads must be uploaded as files");
+        return trimmed;
     }
 
     private String saveUploadedFile(MultipartFile file, boolean isVideo) {
         try {
+            String extension = UploadValidator.validate(file, isVideo);
             Files.createDirectories(UPLOAD_DIR);
-            String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
-            String[] allowed = isVideo ? new String[]{".mp4", ".webm", ".ogg", ".mov"} : new String[]{".jpg", ".jpeg", ".png", ".webp"};
-
-            String extension = "";
-            for (String ext : allowed) {
-                if (originalFilename.endsWith(ext)) {
-                    extension = ext;
-                    break;
-                }
-            }
-            if (extension.isEmpty()) {
-                extension = isVideo ? ".mp4" : ".jpg";
-            }
-
             String fileName = UUID.randomUUID().toString() + extension;
             Path targetPath = UPLOAD_DIR.resolve(fileName);
             Files.copy(file.getInputStream(), targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);

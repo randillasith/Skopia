@@ -10,6 +10,8 @@ import java.util.List;
 
 @Repository
 public interface VideoRepository extends JpaRepository<Video, Long> {
+    java.util.Optional<Video> findFirstByVideoUrl(String videoUrl);
+    java.util.Optional<Video> findFirstByThumbnailUrl(String thumbnailUrl);
     List<Video> findByCategoryId(Long categoryId);
 
     /**

@@ -31,6 +31,8 @@ class VideoServiceOwnershipTest {
     @Mock WatchHistoryRepository history;
     @Mock WatchlistRepository watchlists;
     @Mock WatchlistItemRepository watchlistItems;
+    @Mock VideoAccessService access;
+    @Mock org.gp14.skopia.security.TokenService tokens;
 
     VideoService service;
     Video video;
@@ -38,13 +40,13 @@ class VideoServiceOwnershipTest {
     @BeforeEach
     void setUp() {
         service = new VideoService(videos, categories, tiers, creators, users, viewers,
-                likes, comments, history, watchlists, watchlistItems);
+                likes, comments, history, watchlists, watchlistItems, access, tokens);
         ContentCreator owner = new ContentCreator();
         owner.setId(41L);
         video = new Video();
         video.setId(9L);
         video.setCreator(owner);
-        when(videos.findById(9L)).thenReturn(Optional.of(video));
+        org.mockito.Mockito.lenient().when(videos.findById(9L)).thenReturn(Optional.of(video));
     }
 
     @Test
@@ -62,5 +64,36 @@ class VideoServiceOwnershipTest {
         assertThatThrownBy(() -> service.deleteVideo(9L, 42L))
                 .isInstanceOf(AccessDeniedException.class);
         verify(videos, never()).delete(video);
+    }
+
+    @Test
+    void onlyCommentOwnerCanEditOrDeleteAndDeletedCannotBeEdited() {
+        org.gp14.skopia.model.user.RegisteredViewer author = new org.gp14.skopia.model.user.RegisteredViewer();
+        author.setId(7L); author.setDisplayName("Author");
+        org.gp14.skopia.model.interaction.Comment comment = new org.gp14.skopia.model.interaction.Comment();
+        comment.setId(12L); comment.setViewer(author); comment.setVideo(video);
+        comment.setCommentStatus("VISIBLE"); comment.setCommentText("before");
+        when(comments.findById(12L)).thenReturn(Optional.of(comment));
+        org.gp14.skopia.video.dto.CreateCommentRequest request = new org.gp14.skopia.video.dto.CreateCommentRequest();
+        request.setText(" after ");
+        assertThatThrownBy(() -> service.editComment(12L, 8L, request)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.deleteComment(12L, null)).isInstanceOf(AccessDeniedException.class);
+        org.assertj.core.api.Assertions.assertThat(service.editComment(12L, 7L, request).getText()).isEqualTo("after");
+        org.assertj.core.api.Assertions.assertThat(service.deleteComment(12L, 7L)).isTrue();
+        assertThatThrownBy(() -> service.editComment(12L, 7L, request)).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void rejectsReplyToAnotherVideo() {
+        org.gp14.skopia.model.user.RegisteredViewer author = new org.gp14.skopia.model.user.RegisteredViewer();
+        author.setId(7L);
+        when(viewers.findById(7L)).thenReturn(Optional.of(author));
+        org.gp14.skopia.model.interaction.Comment parent = new org.gp14.skopia.model.interaction.Comment();
+        Video other = new Video(); other.setId(10L); parent.setVideo(other); parent.setCommentStatus("VISIBLE");
+        when(comments.findById(12L)).thenReturn(Optional.of(parent));
+        org.gp14.skopia.video.dto.CreateCommentRequest request = new org.gp14.skopia.video.dto.CreateCommentRequest();
+        request.setText("reply"); request.setParentId(12L);
+        assertThatThrownBy(() -> service.addComment(9L, 7L, request)).isInstanceOf(IllegalArgumentException.class);
+        verify(comments, never()).save(org.mockito.ArgumentMatchers.any());
     }
 }

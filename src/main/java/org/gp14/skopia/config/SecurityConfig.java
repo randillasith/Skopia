@@ -32,7 +32,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/complaints").authenticated()
                         .requestMatchers("/api/complaints/**").hasAnyRole("SUPPORT_OFFICER", "ADMINISTRATOR")
                         .requestMatchers("/api/reports/**").authenticated()
-                        .requestMatchers("/api/watchlist", "/api/history", "/api/videos/watchlist", "/api/videos/history").authenticated()
+                        .requestMatchers("/api/watchlist", "/api/history", "/api/videos/watchlist", "/api/videos/history", "/api/comments/**").authenticated()
                         // --- FR5, advertisement management ---------------------------
                         // Serving is the only advertising surface a viewer touches, and
                         // it has to work for guests or no advertisement ever runs.

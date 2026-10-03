@@ -17,23 +17,7 @@ import java.util.Map;
 @RequestMapping("/api")
 public class VideoController {
 
-    /**
-     * The header the caller is identified by, which is the convention the rest of
-     * the platform already uses. It is not proof of identity and is not treated as
-     * such; it says which account the UI believes it is acting for.
-     */
     private static final String ACTOR_HEADER = "X-User-Id";
-
-    /**
-     * Who a request belongs to when the caller does not say.
-     *
-     * These used to be the only answer, so every viewer shared one watchlist and
-     * every upload landed on one channel. They are kept as a fallback so the
-     * endpoints still answer for a caller that has not signed in — a signed-in UI
-     * sends the header and gets its own rows.
-     */
-    private static final Long VIEWER_ID = 1L;
-    private static final Long CREATOR_ID = 2L;
 
     private final VideoService videoService;
 
@@ -41,11 +25,9 @@ public class VideoController {
         this.videoService = videoService;
     }
 
-    /** The verified acting account. Caller-controlled headers are never identity. */
+    /** Ignore legacy caller-supplied IDs; only the bearer principal identifies an actor. */
     private static Long actor(User principal, Long header, Long fallback) {
-        if (principal != null && principal.getId() != null) return principal.getId();
-        if (header != null && header > 0) return header;
-        return fallback;
+        return principal == null ? null : principal.getId();
     }
 
     @GetMapping("/health")
@@ -76,7 +58,7 @@ public class VideoController {
         // creator being filtered on as well as the viewer the flags are read for.
         List<VideoResponse> videos = videoService.getVideos(
                 search, category, access, scope,
-                actor(principal, actorId, CREATOR_ID), actor(principal, actorId, VIEWER_ID));
+                actor(principal, actorId, null), actor(principal, actorId, null));
         return ResponseEntity.ok(videos);
     }
 
@@ -85,7 +67,7 @@ public class VideoController {
             @PathVariable Long id,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        return ResponseEntity.ok(videoService.getVideoById(id, actor(principal, actorId, VIEWER_ID)));
+        return ResponseEntity.ok(videoService.getVideoById(id, actor(principal, actorId, null)));
     }
 
     @PostMapping(value = "/videos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -114,8 +96,7 @@ public class VideoController {
         request.setVideoUrl(videoUrl);
         request.setThumbnailUrl(thumbnailUrl);
 
-        Long effectiveCreatorId = actor(principal, actorId,
-                (creatorId != null && creatorId > 0) ? creatorId : CREATOR_ID);
+        Long effectiveCreatorId = actor(principal, actorId, null);
         VideoResponse created = videoService.createVideo(request, videoFile, thumbnailFile, effectiveCreatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", created.getId(),
@@ -129,8 +110,7 @@ public class VideoController {
             @RequestParam(value = "creatorId", required = false) Long creatorId,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        Long effectiveCreatorId = actor(principal, actorId,
-                (creatorId != null && creatorId > 0) ? creatorId : CREATOR_ID);
+        Long effectiveCreatorId = actor(principal, actorId, null);
         VideoResponse created = videoService.createVideo(request, null, null, effectiveCreatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", created.getId(),
@@ -144,7 +124,7 @@ public class VideoController {
             @RequestBody UpdateVideoRequest request,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        videoService.updateVideo(id, request, actor(principal, actorId, CREATOR_ID));
+        videoService.updateVideo(id, request, actor(principal, actorId, null));
         return ResponseEntity.ok(Map.of("message", "Video updated"));
     }
 
@@ -153,7 +133,7 @@ public class VideoController {
             @PathVariable Long id,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        boolean deleted = videoService.deleteVideo(id, actor(principal, actorId, CREATOR_ID));
+        boolean deleted = videoService.deleteVideo(id, actor(principal, actorId, null));
         if (deleted) {
             return ResponseEntity.ok(Map.of("message", "Video deleted"));
         } else {
@@ -166,7 +146,7 @@ public class VideoController {
             @PathVariable Long id,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        return ResponseEntity.ok(videoService.toggleLike(id, actor(principal, actorId, VIEWER_ID)));
+        return ResponseEntity.ok(videoService.toggleLike(id, actor(principal, actorId, null)));
     }
 
     @PostMapping("/videos/{id}/save")
@@ -174,12 +154,13 @@ public class VideoController {
             @PathVariable Long id,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        return ResponseEntity.ok(videoService.toggleSaved(id, actor(principal, actorId, VIEWER_ID)));
+        return ResponseEntity.ok(videoService.toggleSaved(id, actor(principal, actorId, null)));
     }
 
     @PostMapping("/videos/{id}/view")
-    public ResponseEntity<Map<String, String>> incrementView(@PathVariable Long id) {
-        videoService.incrementViewCount(id);
+    public ResponseEntity<Map<String, String>> incrementView(@PathVariable Long id,
+            @AuthenticationPrincipal User principal) {
+        videoService.incrementViewCount(id, actor(principal, null, null));
         return ResponseEntity.ok(Map.of("message", "View counted"));
     }
 
@@ -189,13 +170,14 @@ public class VideoController {
             @RequestBody WatchProgressRequest request,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        videoService.saveProgress(id, actor(principal, actorId, VIEWER_ID), request.getPosition(), request.getCompleted());
+        videoService.saveProgress(id, actor(principal, actorId, null), request.getPosition(), request.getCompleted());
         return ResponseEntity.ok(Map.of("message", "Progress saved"));
     }
 
     @GetMapping("/videos/{id}/comments")
-    public ResponseEntity<List<CommentResponse>> getComments(@PathVariable Long id) {
-        return ResponseEntity.ok(videoService.getComments(id));
+    public ResponseEntity<List<CommentResponse>> getComments(@PathVariable Long id,
+            @AuthenticationPrincipal User principal) {
+        return ResponseEntity.ok(videoService.getComments(id, actor(principal, null, null)));
     }
 
     @PostMapping("/videos/{id}/comments")
@@ -205,10 +187,16 @@ public class VideoController {
             @RequestBody CreateCommentRequest request,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        Long effectiveViewerId = actor(principal, actorId,
-                (viewerId != null && viewerId > 0) ? viewerId : VIEWER_ID);
+        Long effectiveViewerId = actor(principal, actorId, null);
         CommentResponse response = videoService.addComment(id, effectiveViewerId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PutMapping("/comments/{id}")
+    public ResponseEntity<CommentResponse> editComment(@PathVariable Long id,
+            @RequestBody CreateCommentRequest request,
+            @AuthenticationPrincipal User principal) {
+        return ResponseEntity.ok(videoService.editComment(id, actor(principal, null, null), request));
     }
 
     @DeleteMapping("/comments/{id}")
@@ -216,7 +204,7 @@ public class VideoController {
             @PathVariable Long id,
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        boolean deleted = videoService.deleteComment(id, actor(principal, actorId, VIEWER_ID));
+        boolean deleted = videoService.deleteComment(id, actor(principal, actorId, null));
         if (deleted) {
             return ResponseEntity.ok(Map.of("message", "Comment deleted"));
         } else {
@@ -228,13 +216,13 @@ public class VideoController {
     public ResponseEntity<List<WatchHistoryResponse>> getHistory(
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        return ResponseEntity.ok(videoService.getHistory(actor(principal, actorId, VIEWER_ID)));
+        return ResponseEntity.ok(videoService.getHistory(actor(principal, actorId, null)));
     }
 
     @GetMapping("/watchlist")
     public ResponseEntity<List<WatchlistResponse>> getWatchlist(
             @AuthenticationPrincipal User principal,
             @RequestHeader(value = ACTOR_HEADER, required = false) Long actorId) {
-        return ResponseEntity.ok(videoService.getWatchlist(actor(principal, actorId, VIEWER_ID)));
+        return ResponseEntity.ok(videoService.getWatchlist(actor(principal, actorId, null)));
     }
 }
