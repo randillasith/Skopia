@@ -1,152 +1,149 @@
-/**
- * Passes and billing.
- *
- * Nothing on the server records a plan, a payment or a subscription — there is
- * no billing module on any branch. These screens therefore sell nothing and
- * claim nothing: no card is collected, no pass is reported as held, and no
- * transaction is listed. What is shown is what the passes are intended to
- * include, which is product intent rather than a fact about anybody's account.
- *
- * When a billing backend lands, the tiers below become its response and the
- * purchase path returns to this file.
- */
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { FrontOfHouse, useSession } from '@/components/Shell'
+import { Button } from '@/components/primitives'
+import { billing, type DemoPayment, type PlansResponse, type SubscriptionStatus, type PlanChoice } from '@/lib/billing'
+import { actorId as actorIdOf } from '@/lib/session'
 
-import { Link } from 'react-router-dom'
-import { Check, CreditCard, Receipt, Ticket } from 'lucide-react'
-import { NotAvailableYet } from '@/components/primitives'
-import { Letterboard } from '@/components/world'
-import { FrontOfHouse } from '@/components/Shell'
-import { PLANS } from '@/lib/data'
+const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
+const link = 'text-cyan-300 underline hover:text-cyan-200'
+const message = (error: unknown) => error instanceof Error ? error.message : 'Please try again.'
+const date = (value: string | null) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : 'Not provided'
 
-/* ================================================================== plans */
-
-export function Plans() {
-  return (
-    <FrontOfHouse>
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
-          Passes
-        </h1>
-        <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-300">
-          Browsing and the free programme need no pass. A pass adds the premium programme and
-          removes advertising.
-        </p>
-
-        <div className="mt-5 inline-flex items-center gap-2 rounded-sm border border-ink-600 bg-ink-850 px-3 py-2">
-          <Letterboard tone="soon">Not on sale yet</Letterboard>
-          <span className="text-[13px] text-ink-300">
-            Pricing is not set and no payment can be taken.
-          </span>
-        </div>
-
-        <div className="mt-8 grid gap-5 md:grid-cols-3">
-          {PLANS.map((p) => (
-            <div key={p.id} className="flex flex-col rounded-lg border border-ink-700 bg-ink-850 p-6">
-              <h2 className="font-marquee text-[20px] font-bold text-white">{p.name}</h2>
-              <p className="mt-1.5 text-[13px] text-ink-400">Price not yet set</p>
-              <ul className="mt-5 flex-1 space-y-2.5">
-                {p.entitlements.map((e) => (
-                  <li key={e} className="flex items-start gap-2 text-[13.5px] text-ink-200">
-                    <Check className="mt-0.5 size-3.5 shrink-0 text-success-400" />
-                    {e}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-8 text-[13px] text-ink-400">
-          Everything in the free programme is already available —{' '}
-          <Link to="/browse" className="text-cyan-300 underline hover:text-cyan-200">
-            start watching
-          </Link>
-          .
-        </p>
-      </div>
-    </FrontOfHouse>
-  )
+function Page({ title, children }: { title: string; children: React.ReactNode }) {
+  return <FrontOfHouse><main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+    <p className="letterboard text-gold-400">Demo only · No real payments</p>
+    <h1 className="font-marquee mt-2 text-3xl font-extrabold text-white">{title}</h1>
+    <p className="mt-2 text-sm text-ink-300">This is a demonstration subscription. No money is charged and no card details are collected.</p>
+    <div className="mt-7">{children}</div>
+  </main></FrontOfHouse>
 }
 
-/* =============================================================== checkout */
+function Feedback({ error, retry }: { error: string | null; retry?: () => void }) {
+  return error ? <div role="alert" className="mt-4 rounded border border-danger-500/40 p-4 text-danger-400">{error} {retry && <Button size="sm" onClick={retry}>Retry</Button>}</div> : null
+}
 
-/**
- * Buying a pass.
- *
- * <p>This used to be a three-step wizard that collected a card number and,
- * after a timer, announced success. Nothing was charged and nothing was stored.
- * A form that looks like it takes a payment is the one piece of scaffolding
- * that could do real harm, so it is gone rather than disabled.
- */
+function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
+  const [value, setValue] = useState<T | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [revision, setRevision] = useState(0)
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true); setError(null); setValue(null)
+    load(controller.signal).then((next) => { if (!controller.signal.aborted) setValue(next) })
+      .catch((cause) => { if (!controller.signal.aborted) setError(message(cause)) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  // key identifies the account and revision triggers a retry; load is a stable callback.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, revision])
+  return { value, loading, error, retry: () => setRevision((n) => n + 1) }
+}
+
+export function Plans() {
+  const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'plans')
+  return <Page title="Demo passes">
+    {loading && <p role="status">Loading plans…</p>}
+    <Feedback error={error} retry={retry} />
+    {value && <>
+      {!value.demoEnabled && <p role="status" className="mb-5 text-gold-400">Demo checkout is not enabled. No pass can be activated here.</p>}
+      {value.plans.length ? <div className="grid gap-4 sm:grid-cols-2">{value.plans.map((plan) => <article key={plan.id} className={box}>
+        <h2 className="font-marquee text-xl font-bold text-white">{plan.planName}</h2>
+        <p className="mt-2 text-ink-200">{plan.durationDays} days · Demo price: {plan.price} (currency not specified)</p>
+        {plan.benefit && <p className="mt-3 text-sm text-ink-300">{plan.benefit}</p>}
+        {value.demoEnabled && (plan.planName === 'MONTHLY' || plan.planName === 'YEARLY') && <Link to={`/checkout?plan=${encodeURIComponent(plan.planName)}`} className={`${link} mt-5 inline-block`}>Choose demo pass</Link>}
+      </article>)}</div> : <p>No plans are available.</p>}
+    </>}
+  </Page>
+}
+
 export function Checkout() {
-  return (
-    <FrontOfHouse>
-      <div className="mx-auto max-w-2xl px-4 py-14 sm:px-6">
-        <NotAvailableYet
-          what="Buying a pass"
-          icon={<CreditCard className="size-7" />}
-          body="No payment can be taken yet — there is nothing on the server to record one
-            against. When passes go on sale this is where the purchase happens."
-          action={
-            <Link to="/plans" className="text-[13px] text-cyan-300 underline hover:text-cyan-200">
-              See what the passes will include
-            </Link>
-          }
-        />
-      </div>
-    </FrontOfHouse>
-  )
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const [params] = useSearchParams()
+  const selected = params.get('plan')
+  const nav = useNavigate()
+  const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'checkout')
+  const [saving, setSaving] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const plan = value?.plans.find((p) => p.planName === selected && (p.planName === 'MONTHLY' || p.planName === 'YEARLY'))
+  const submit = async () => {
+    if (actor == null || !plan || !value?.demoEnabled || saving) return
+    setSaving(true); setSubmitError(null)
+    try {
+      const latest = await billing.plans()
+      if (!latest.demoEnabled || !latest.plans.some((p) => p.planName === plan.planName)) throw new Error('Demo checkout is no longer available.')
+      await billing.checkout(plan.planName as PlanChoice, actor)
+      nav('/checkout/result', { replace: true, state: { completed: true } })
+    } catch (cause) { setSubmitError(message(cause)) }
+    finally { setSaving(false) }
+  }
+  return <Page title="Activate a demo pass">
+    {loading && <p role="status">Loading demo plan…</p>}
+    <Feedback error={error} retry={retry} />
+    {value && (!value.demoEnabled ? <p role="status">Demo checkout is unavailable. <Link to="/plans" className={link}>View passes</Link></p>
+      : !plan ? <p>Choose an available plan on the <Link to="/plans" className={link}>passes page</Link>.</p>
+      : <div className={box}>
+        <h2 className="text-xl font-bold">{plan.planName}</h2>
+        <p className="mt-2">{plan.durationDays} days · Demo price {plan.price} (currency not specified)</p>
+        <p className="mt-4 text-sm text-ink-300">Activating creates a demo record only. No payment method is requested.</p>
+        {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to activate</Link>
+          : <Button className="mt-5" variant="primary" loading={saving} disabled={saving} onClick={submit}>Activate demo pass</Button>}
+      </div>)}
+    <Feedback error={submitError} />
+  </Page>
 }
 
 export function CheckoutResult() {
-  return <Checkout />
+  const location = useLocation()
+  const completed = (location.state as { completed?: boolean } | null)?.completed === true
+  return <Page title={completed ? 'Demo activation submitted' : 'No checkout result to show'}>
+    <p>{completed ? 'The server accepted the demo activation. Check your pass for its current status.' : 'Open a pass from the plans page to begin a demo activation.'}</p>
+    <Link to={completed ? '/subscription' : '/plans'} className={`${link} mt-4 inline-block`}>{completed ? 'View your pass' : 'View passes'}</Link>
+  </Page>
 }
-
-/* =========================================================== subscription */
 
 export function Subscription() {
-  return (
-    <FrontOfHouse>
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
-          Your pass
-        </h1>
-        <div className="mt-7">
-          <NotAvailableYet
-            what="Your pass"
-            icon={<Ticket className="size-7" />}
-            body="Passes are not on sale yet, so no account holds one. Once they are, this shows
-              which pass you hold, when it renews and how to stop it."
-            action={
-              <Link to="/plans" className="text-[13px] text-cyan-300 underline hover:text-cyan-200">
-                See the passes
-              </Link>
-            }
-          />
-        </div>
-      </div>
-    </FrontOfHouse>
-  )
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const load = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.status(actor, signal), [actor])
+  const { value, loading, error, retry } = useLoad<SubscriptionStatus>(load, String(actor))
+  const [canceling, setCanceling] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  return <Page title="Your demo pass">
+    {loading && <p role="status">Loading subscription…</p>}
+    <Feedback error={error} retry={retry} />
+    {value && <div className={box}>
+      <p>{value.premium ? 'Premium access active' : 'No active premium pass'}</p>
+      <p className="mt-2">Plan: {value.planName ?? 'None'}</p>
+      <p>Status: {value.status ?? 'Not provided'}</p>
+      <p>End date: {date(value.endDate)}</p>
+      {value.premium && <Button className="mt-5" variant="danger" loading={canceling} onClick={async () => {
+        if (actor == null || canceling || !window.confirm('Cancel this demo subscription?')) return
+        setCanceling(true); setActionError(null)
+        try { await billing.cancel(actor); retry() }
+        catch (cause) { setActionError(message(cause)) }
+        finally { setCanceling(false) }
+      }}>Cancel demo subscription</Button>}
+      <Feedback error={actionError} />
+    </div>}
+    <Link className={`${link} mt-5 inline-block`} to="/billing">Demo billing history</Link>
+  </Page>
 }
 
-/* ======================================================== billing history */
-
 export function BillingHistory() {
-  return (
-    <FrontOfHouse>
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-        <h1 className="font-marquee text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-[-0.03em] text-white">
-          Billing history
-        </h1>
-        <div className="mt-7">
-          <NotAvailableYet
-            what="Billing history"
-            icon={<Receipt className="size-7" />}
-            body="Every payment taken from your account will be listed here with its receipt. No
-              payment has been taken from anyone yet, so the list is genuinely empty."
-          />
-        </div>
-      </div>
-    </FrontOfHouse>
-  )
+  const { viewer } = useSession()
+  const actor = actorIdOf(viewer)
+  const load = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.payments(actor, signal), [actor])
+  const { value, loading, error, retry } = useLoad<DemoPayment[]>(load, String(actor))
+  return <Page title="Demo billing history">
+    {loading && <p role="status">Loading demo records…</p>}
+    <Feedback error={error} retry={retry} />
+    {value && (value.length === 0 ? <p>No demo payment records yet.</p> : <ul className="space-y-3">{value.map((payment) => <li key={payment.id} className={box}>
+      <p className="font-semibold">{payment.planName ?? 'Demo pass'} · {payment.payStatus ?? 'Status unknown'}</p>
+      <p className="mt-2 text-sm text-ink-300">Demo amount: {payment.amount} (currency not specified)</p>
+      <p className="text-sm text-ink-300">{date(payment.paidDatetime)} · {payment.payMethod ?? 'Method not specified'}</p>
+    </li>)}</ul>)}
+  </Page>
 }

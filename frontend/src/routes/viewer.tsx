@@ -601,7 +601,7 @@ export function Watch() {
   const numericId = id ? videoIdOf(id) : null
   const {
     comments: thread, loading: commentsLoading, error: commentsError,
-    post: postComment, remove: removeComment,
+    post: postComment, remove: removeComment, edit: editComment,
   } = useComments(numericId)
   const {
     votes, vote, isSaved, recordWatch,
@@ -621,6 +621,9 @@ export function Watch() {
   const [adShowing, setAdShowing] = useState(true)
   const backendVideoId = numericId
   const [comment, setComment] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editText, setEditText] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
   const [order, setOrder] = useState<'top' | 'new'>('top')
 
   const related = useMemo(
@@ -997,7 +1000,25 @@ export function Watch() {
                           </span>
                           <span className="text-ink-300">{c.at}</span>
                         </p>
-                        <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>
+                        {editingCommentId === c.id ? <form className="mt-2" onSubmit={async (event) => {
+                          event.preventDefault()
+                          const text = editText.trim()
+                          if (!text || editSaving) return
+                          setEditSaving(true)
+                          try {
+                            await editComment(c.id, text)
+                            setEditingCommentId(null)
+                            toast({ title: 'Comment updated', tone: 'ok' })
+                          } catch (cause) {
+                            toast({ title: cause instanceof ApiError ? cause.message : 'Could not edit the comment.', tone: 'bad' })
+                          } finally { setEditSaving(false) }
+                        }}>
+                          <Textarea aria-label="Edit comment" value={editText} onChange={(event) => setEditText(event.target.value)} disabled={editSaving} />
+                          <div className="mt-2 flex gap-2">
+                            <Button type="submit" size="sm" loading={editSaving} disabled={!editText.trim()}>Save edit</Button>
+                            <Button type="button" size="sm" variant="quiet" disabled={editSaving} onClick={() => setEditingCommentId(null)}>Cancel</Button>
+                          </div>
+                        </form> : <p className="mt-1 text-[14px] leading-relaxed text-ink-200">{c.body}</p>}
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-ink-300">
                           <button className="flex items-center gap-1 transition-colors hover:text-white">
                             <ThumbsUp className="size-3.5" />
@@ -1015,6 +1036,12 @@ export function Watch() {
                               </span>
                             ) : null
                           })()}
+                          {c.userId != null && c.userId === actor && (
+                            <button type="button" disabled={editSaving} className="ml-auto transition-colors hover:text-white" onClick={() => {
+                              setEditingCommentId(c.id)
+                              setEditText(c.body)
+                            }}>Edit</button>
+                          )}
                           {/* Only your own comment can be taken down here; a
                               channel removing somebody else's is moderation, and
                               that lives in the moderation queue. */}

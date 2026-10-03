@@ -292,7 +292,15 @@ export function useComments(videoId: number | null) {
     [actor],
   )
 
-  return { comments, loading, error, post, remove }
+  const edit = useCallback(
+    async (commentId: number, text: string) => {
+      const row = await catalogue.editComment(commentId, text, actor)
+      setComments((list) => list.map((c) => c.id === commentId ? toThreadComment(row) : c))
+    },
+    [actor],
+  )
+
+  return { comments, loading, error, post, remove, edit }
 }
 
 /**
