@@ -22,6 +22,8 @@ class FeatureSchemaMigration implements ApplicationRunner {
         add("notifications","title","varchar(255) null"); add("notifications","target_url","varchar(500) null");
         add("notifications","dedupe_key","varchar(180) null"); add("notifications","read_at","datetime null");
         add("announcements","status","varchar(20) not null default 'DRAFT'"); add("announcements","created_at","datetime null"); add("announcements","updated_at","datetime null");
+        // Legacy schema declared publish_date NOT NULL, which prevents drafts. Widen it non-destructively.
+        jdbc.execute("alter table announcements modify column publish_date datetime null");
         jdbc.update("update refunds set requested_date=coalesce(requested_date, processed_date, current_timestamp) where requested_date is null");
         jdbc.update("update notifications set title=coalesce(nullif(title,''),'Notification'), dedupe_key=coalesce(nullif(dedupe_key,''),concat('LEGACY:',notification_id)) where title is null or title='' or dedupe_key is null or dedupe_key=''");
         jdbc.update("update announcements set status=case when publish_date is null then 'DRAFT' else 'PUBLISHED' end, created_at=coalesce(created_at,publish_date,current_timestamp), updated_at=coalesce(updated_at,created_at,publish_date,current_timestamp) where status is null or status='' or created_at is null or updated_at is null");
