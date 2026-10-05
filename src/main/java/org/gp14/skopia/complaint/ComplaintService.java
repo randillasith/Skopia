@@ -25,11 +25,13 @@ public class ComplaintService {
 
     // Creates a complaint from an existing report (e.g. escalated from UC-FR3-01)
     public Complaint createComplaintFromReport(Long reportId, Long reportingViewerId) {
-        Complaint complaint = new Complaint(reportId, reportingViewerId);
-        Complaint saved = complaintRepository.save(complaint);
-        historyRepository.save(new ComplaintHistory(saved.getId(), "CREATED",
-                "Complaint created from report " + reportId, null));
-        return saved;
+        return complaintRepository.findByReportId(reportId).orElseGet(() -> {
+            Complaint complaint = new Complaint(reportId, reportingViewerId);
+            Complaint saved = complaintRepository.save(complaint);
+            historyRepository.save(new ComplaintHistory(saved.getId(), "CREATED",
+                    "Complaint created from report " + reportId, null));
+            return saved;
+        });
     }
 
     // Step 1: officer views the incoming (unassigned) complaint queue

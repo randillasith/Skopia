@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotNull;
 
 public class SubmitReportRequest {
 
-    @NotNull
     private Long viewerId;
 
     @NotNull
