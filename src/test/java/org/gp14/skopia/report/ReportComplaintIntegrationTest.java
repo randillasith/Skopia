@@ -2,9 +2,14 @@ package org.gp14.skopia.report;
 
 import org.gp14.skopia.complaint.ComplaintRepository;
 import org.gp14.skopia.model.user.Administrator;
+import org.gp14.skopia.model.user.ContentCreator;
 import org.gp14.skopia.model.user.RegisteredViewer;
+import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.AdministratorRepository;
+import org.gp14.skopia.repository.ContentCreatorRepository;
+import org.gp14.skopia.repository.NotificationRepository;
 import org.gp14.skopia.repository.RegisteredViewerRepository;
+import org.gp14.skopia.repository.VideoRepository;
 import org.gp14.skopia.security.TokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +26,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,15 +41,20 @@ class ReportComplaintIntegrationTest {
     @Autowired RegisteredViewerRepository viewers;
     @Autowired AdministratorRepository administrators;
     @Autowired ComplaintRepository complaints;
+    @Autowired ContentCreatorRepository creators;
+    @Autowired VideoRepository videos;
+    @Autowired NotificationRepository notifications;
 
     @Test
     void submittedVideoReportImmediatelyAppearsInAdminModerationQueueAndCanBeResolved() throws Exception {
         RegisteredViewer viewer = viewer("reporter");
         Administrator admin = admin("admin");
+        ContentCreator creator = creator("creator");
+        Video video = video(creator, "Reported Training Video");
 
         String body = """
-                {"type":"INAPPROPRIATE_CONTENT","details":"This video contains abusive content.","contentReference":"video:77"}
-                """;
+                {"type":"INAPPROPRIATE_CONTENT","details":"This video contains abusive content.","contentReference":"video:%d"}
+                """.formatted(video.getId());
 
         String response = mvc.perform(post("/api/reports")
                         .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
@@ -51,7 +62,7 @@ class ReportComplaintIntegrationTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.viewerId").value(viewer.getId()))
-                .andExpect(jsonPath("$.contentReference").value("video:77"))
+                .andExpect(jsonPath("$.contentReference").value("video:" + video.getId()))
                 .andReturn().getResponse().getContentAsString();
 
         long reportId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("id").asLong();
@@ -78,6 +89,21 @@ class ReportComplaintIntegrationTest {
                         .content("{\"resolutionNotes\":\"Pulled the reported title after review.\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
+
+        mvc.perform(patch("/api/admin/videos/" + video.getId() + "/status")
+                        .header("Authorization", "Bearer " + tokens.issue(admin.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ARCHIVED\",\"reason\":\"Complaint upheld\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(viewer.getId()))
+                .anySatisfy(notification -> {
+                    assertThat(notification.getNotifType()).isEqualTo("VIDEO_TAKEN_DOWN");
+                    assertThat(notification.getTitle()).contains("Reported Training Video");
+                    assertThat(notification.getMessage()).contains("reported").contains("taken down");
+                    assertThat(notification.getDedupeKey()).isEqualTo("VIDEO_TAKEN_DOWN:" + video.getId());
+                });
     }
 
     private RegisteredViewer viewer(String prefix) {
@@ -99,5 +125,25 @@ class ReportComplaintIntegrationTest {
         admin.setHireDate(LocalDate.now());
         admin.setAdminLevel("SUPER");
         return administrators.saveAndFlush(admin);
+    }
+
+    private ContentCreator creator(String prefix) {
+        ContentCreator creator = new ContentCreator();
+        creator.setUsername(prefix + "_" + UUID.randomUUID());
+        creator.setEmail(UUID.randomUUID() + "@example.test");
+        creator.setPasswordHash("hash");
+        creator.setChannelName(prefix + " channel");
+        return creators.saveAndFlush(creator);
+    }
+
+    private Video video(ContentCreator creator, String title) {
+        Video video = new Video();
+        video.setCreator(creator);
+        video.setTitle(title);
+        video.setDescription("Report test video");
+        video.setDuration(10);
+        video.setVideoStatus("PUBLISHED");
+        video.setVideoUrl("https://example.test/" + UUID.randomUUID() + ".mp4");
+        return videos.saveAndFlush(video);
     }
 }

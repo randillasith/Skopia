@@ -2,6 +2,7 @@ package org.gp14.skopia.complaint;
 
 import org.gp14.skopia.complaint.dto.ResolveComplaintRequest;
 import org.gp14.skopia.complaint.dto.UpdateStatusPriorityRequest;
+import org.gp14.skopia.report.ReportRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -14,13 +15,16 @@ public class ComplaintService {
     private final ComplaintRepository complaintRepository;
     private final ComplaintHistoryRepository historyRepository;
     private final NotificationService notificationService;
+    private final ReportRepository reportRepository;
 
     public ComplaintService(ComplaintRepository complaintRepository,
                              ComplaintHistoryRepository historyRepository,
-                             NotificationService notificationService) {
+                             NotificationService notificationService,
+                             ReportRepository reportRepository) {
         this.complaintRepository = complaintRepository;
         this.historyRepository = historyRepository;
         this.notificationService = notificationService;
+        this.reportRepository = reportRepository;
     }
 
     // Creates a complaint from an existing report (e.g. escalated from UC-FR3-01)
@@ -98,6 +102,15 @@ public class ComplaintService {
 
     public List<Complaint> searchByViewer(Long viewerId) {
         return complaintRepository.findByReportingViewerId(viewerId);
+    }
+
+    public void notifyReportersOfVideoTakedown(Long videoId, String videoTitle) {
+        if (videoId == null) return;
+        reportRepository.findByContentReferenceOrderByCreatedAtDesc("video:" + videoId).stream()
+                .map(report -> report.getViewerId())
+                .filter(viewerId -> viewerId != null)
+                .distinct()
+                .forEach(viewerId -> notificationService.notifyViewerOfVideoTakedown(viewerId, videoId, videoTitle));
     }
 
     private Complaint getComplaintOrThrow(Long id) {
