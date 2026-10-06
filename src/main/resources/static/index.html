@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      // Apply before styles/React load to avoid flashing the wrong appearance.
+      (() => {
+        let preference = 'system';
+        try { preference = localStorage.getItem('skopia.theme') || 'system'; } catch {}
+        const dark = preference === 'dark' ||
+          (preference !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        document.querySelector('meta[name="theme-color"]').content = dark ? '#080d1c' : '#ffffff';
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="/skopia-logo.png" />
+    <meta
+      name="description"
+      content="Skopia — a web-based video browsing platform. Watch beyond limits."
+    />
+    <title>Skopia · Watch Beyond Limits</title>
+
+    <script type="module" crossorigin src="/assets/index-B79EQXBU.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BbCCmu73.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

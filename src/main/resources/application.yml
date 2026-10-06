@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: Skopia
+  datasource:
+    url: ${SKOPIA_DB_URL:jdbc:mysql://localhost:3306/skopia?createDatabaseIfNotExist=true&connectionTimeZone=SERVER&preserveInstants=false}
+    username: ${SKOPIA_DB_USER:root}
+    password: ${SKOPIA_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 250MB
+      max-request-size: 260MB
+skopia:
+  auth:
+    secret: ${SKOPIA_AUTH_SECRET:}
+    ttl-seconds: ${SKOPIA_AUTH_TTL_SECONDS:3600}
+  cors:
+    allowed-origins: ${SKOPIA_CORS_ALLOWED_ORIGINS:http://localhost:5175,http://localhost:5173}
+  ads:
+    media:
+      storage-dir: ${SKOPIA_ADS_MEDIA_STORAGE_DIR:uploads/ads}
+      public-base: ${SKOPIA_ADS_MEDIA_PUBLIC_BASE:/uploads/ads}
+      max-bytes: 52428800
+    expiry:
+      cron: "0 */5 * * * *"
+server:
+  port: 8081

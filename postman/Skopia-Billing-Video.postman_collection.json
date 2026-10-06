@@ -1,0 +1,34 @@
+{
+  "info": {
+    "name": "Skopia | Demo Billing and Protected Video",
+    "description": "Spring Boot API contract. Set baseUrl (default local H2 smoke server) and bearerToken from the Login request. Demo checkout is zero-charge and requires SKOPIA_BILLING_DEMO_ENABLED=true on an isolated demo server. It accepts only the designated synthetic 4216 test card pattern, validates it transiently, never charges, and never stores raw card data. For creator-only operations use a creator token. IDs and signed media URL are set from responses or manually.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key":"baseUrl","value":"http://localhost:18092"},
+    {"key":"bearerToken","value":""},
+    {"key":"videoId","value":"1"},
+    {"key":"commentId","value":"1"},
+    {"key":"paymentId","value":"1"},
+    {"key":"signedMediaUrl","value":""}
+  ],
+  "item": [
+    {"name":"Public health","request":{"method":"GET","url":"{{baseUrl}}/api/health"}},
+    {"name":"Login (saves viewer token)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"identifier\":\"viewer@example.com\",\"password\":\"replace-with-your-test-password\"}"},"url":"{{baseUrl}}/api/auth/login"},"event":[{"listen":"test","script":{"exec":["pm.test('Login succeeds', () => pm.response.to.have.status(200));", "if (pm.response.code === 200) pm.collectionVariables.set('bearerToken', pm.response.json().token);"]}}]},
+    {"name":"Demo plans (public)","request":{"method":"GET","url":"{{baseUrl}}/api/billing/plans"},"event":[{"listen":"test","script":{"exec":["pm.test('Plan flag is explicit', () => { pm.expect(pm.response.json()).to.have.property('demoEnabled'); pm.expect(pm.response.json().plans).to.be.an('array'); });"]}}]},
+    {"name":"Subscription status","request":{"method":"GET","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"url":"{{baseUrl}}/api/billing/status"}},
+    {"name":"Checkout MONTHLY (synthetic TEST card, amount 0)","request":{"method":"POST","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"planName\":\"MONTHLY\",\"cardNumber\":\"4216000000000002\",\"expiry\":\"12/99\",\"cardholderName\":\"Demo Viewer\"}"},"url":"{{baseUrl}}/api/billing/checkout"},"event":[{"listen":"test","script":{"exec":["pm.test('Simulated, zero-charge payment only', () => { pm.response.to.have.status(201); const p = pm.response.json().payment; pm.expect(Number(p.amount)).to.eql(0); pm.expect(p.payMethod).to.eql('DEMO_TEST_VISA_0002'); pm.expect(p.payStatus).to.eql('SIMULATED'); pm.collectionVariables.set('paymentId', p.id); });"]}}]},
+    {"name":"Reject invalid/non-designated card","request":{"method":"POST","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"planName\":\"MONTHLY\",\"cardNumber\":\"4111111111111111\",\"expiry\":\"12/99\",\"cardholderName\":\"Demo Viewer\"}"},"url":"{{baseUrl}}/api/billing/checkout"},"event":[{"listen":"test","script":{"exec":["pm.test('Only designated synthetic card data is accepted', () => pm.response.to.have.status(400));"]}}]},
+    {"name":"My payments","request":{"method":"GET","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"url":"{{baseUrl}}/api/billing/payments"}},
+    {"name":"My payment by ID","request":{"method":"GET","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"url":"{{baseUrl}}/api/billing/payments/{{paymentId}}"}},
+    {"name":"Public catalogue","request":{"method":"GET","url":"{{baseUrl}}/api/videos"}},
+    {"name":"Premium video detail (stores signed URL)","request":{"method":"GET","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"url":"{{baseUrl}}/api/videos/{{videoId}}"},"event":[{"listen":"test","script":{"exec":["pm.test('Video detail responds', () => pm.response.to.have.status(200));", "if (pm.response.code === 200 && pm.response.json().videoUrl) pm.collectionVariables.set('signedMediaUrl', pm.response.json().videoUrl);"]}}]},
+    {"name":"Signed protected media (set signedMediaUrl from premium detail)","request":{"method":"GET","header":[{"key":"Range","value":"bytes=0-3"}],"url":"{{baseUrl}}{{signedMediaUrl}}"},"event":[{"listen":"test","script":{"exec":["pm.test('Range bytes served when entitled', () => pm.response.to.have.status(206));"]}}]},
+    {"name":"Video comments","request":{"method":"GET","url":"{{baseUrl}}/api/videos/{{videoId}}/comments"}},
+    {"name":"Post comment (viewer)","request":{"method":"POST","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"text\":\"Postman demo comment\"}"},"url":"{{baseUrl}}/api/videos/{{videoId}}/comments"}},
+    {"name":"Edit own comment","request":{"method":"PUT","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"text\":\"Edited Postman demo comment\"}"},"url":"{{baseUrl}}/api/comments/{{commentId}}"}},
+    {"name":"Cancel subscription (revokes signed URL)","request":{"method":"POST","auth":{"type":"bearer","bearer":[{"key":"token","value":"{{bearerToken}}","type":"string"}]},"url":"{{baseUrl}}/api/billing/cancel"}},
+    {"name":"Old signed media URL denied after cancel","request":{"method":"GET","header":[{"key":"Range","value":"bytes=0-3"}],"url":"{{baseUrl}}{{signedMediaUrl}}"},"event":[{"listen":"test","script":{"exec":["pm.test('Cancelled subscription cannot reuse signed URL', () => pm.response.to.have.status(403));"]}}]},
+    {"name":"Unauthenticated status denied","request":{"method":"GET","url":"{{baseUrl}}/api/billing/status"},"event":[{"listen":"test","script":{"exec":["pm.test('Authentication required', () => pm.response.to.have.status(401));"]}}]}
+  ]
+}
