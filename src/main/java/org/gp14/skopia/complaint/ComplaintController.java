@@ -55,8 +55,10 @@ public class ComplaintController {
     @PostMapping("/{id}/assign")
     public ResponseEntity<ComplaintResponse> assign(@PathVariable Long id,
                                                       @Valid @RequestBody AssignComplaintRequest request,
+                                                      @RequestParam(required = false) Long officerId,
                                                       @AuthenticationPrincipal User principal) {
-        Complaint complaint = complaintService.assignComplaint(id, principal.getId());
+        Long effectiveOfficerId = principal != null ? principal.getId() : (officerId != null ? officerId : (request != null ? request.getOfficerId() : 1L));
+        Complaint complaint = complaintService.assignComplaint(id, effectiveOfficerId);
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -66,7 +68,8 @@ public class ComplaintController {
                                                             @Valid @RequestBody UpdateStatusPriorityRequest request,
                                                             @RequestParam(required = false) Long officerId,
                                                             @AuthenticationPrincipal User principal) {
-        Complaint complaint = complaintService.updateStatusAndPriority(id, request, principal.getId());
+        Long effectiveOfficerId = principal != null ? principal.getId() : (officerId != null ? officerId : 1L);
+        Complaint complaint = complaintService.updateStatusAndPriority(id, request, effectiveOfficerId);
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -76,7 +79,8 @@ public class ComplaintController {
                                                        @Valid @RequestBody ResolveComplaintRequest request,
                                                        @RequestParam(required = false) Long officerId,
                                                        @AuthenticationPrincipal User principal) {
-        Complaint complaint = complaintService.resolveComplaint(id, request, principal.getId());
+        Long effectiveOfficerId = principal != null ? principal.getId() : (officerId != null ? officerId : 1L);
+        Complaint complaint = complaintService.resolveComplaint(id, request, effectiveOfficerId);
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -85,7 +89,8 @@ public class ComplaintController {
     public ResponseEntity<ComplaintResponse> close(@PathVariable Long id,
                                                    @RequestParam(required = false) Long officerId,
                                                    @AuthenticationPrincipal User principal) {
-        Complaint complaint = complaintService.closeComplaint(id, principal.getId());
+        Long effectiveOfficerId = principal != null ? principal.getId() : (officerId != null ? officerId : 1L);
+        Complaint complaint = complaintService.closeComplaint(id, effectiveOfficerId);
         return ResponseEntity.ok(ComplaintResponse.fromEntity(complaint));
     }
 

@@ -49,6 +49,7 @@ public class VideoService {
     private final WatchlistItemRepository watchlistItemRepository;
     private final BillingService billing;
     private final NotificationService notifications;
+    private final org.gp14.skopia.report.ReportRepository reportRepository;
 
     public VideoService(
             VideoRepository videoRepository,
@@ -62,7 +63,8 @@ public class VideoService {
             WatchHistoryRepository watchHistoryRepository,
             WatchlistRepository watchlistRepository,
             WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens, BillingService billing,
-            NotificationService notifications) {
+            NotificationService notifications,
+            org.gp14.skopia.report.ReportRepository reportRepository) {
         this.access = access;
         this.tokens = tokens;
         this.videoRepository = videoRepository;
@@ -78,6 +80,7 @@ public class VideoService {
         this.watchlistItemRepository = watchlistItemRepository;
         this.billing = billing;
         this.notifications = notifications;
+        this.reportRepository = reportRepository;
     }
 
     public List<CategoryResponse> getCategories() {
@@ -226,10 +229,38 @@ public class VideoService {
     }
 
     public VideoResponse moderateVideoStatus(Long videoId, String status, Long viewerId) {
+        return moderateVideoStatus(videoId, status, viewerId, null);
+    }
+
+    public VideoResponse moderateVideoStatus(Long videoId, String status, Long viewerId, String reason) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
-        video.setVideoStatus(status.toUpperCase());
-        return mapToVideoResponse(videoRepository.save(video), viewerId);
+        String normalized = status.toUpperCase();
+        video.setVideoStatus(normalized);
+        Video saved = videoRepository.save(video);
+
+        try {
+            if ("PUBLISHED".equalsIgnoreCase(normalized)) {
+                // Video republished / restored
+                if (saved.getCreator() != null) {
+                    notifications.notifyVideoRepublished(saved.getCreator(), saved);
+                }
+            } else if ("ARCHIVED".equalsIgnoreCase(normalized) || "PULLED".equalsIgnoreCase(normalized) || "HELD_OVER".equalsIgnoreCase(normalized)) {
+                // Video taken down: notify creator and reporting viewers
+                List<User> reportingViewers = Collections.emptyList();
+                if (reportRepository != null) {
+                    List<org.gp14.skopia.report.Report> reports = reportRepository.findByContentReference("video:" + videoId);
+                    Set<Long> viewerIds = reports.stream()
+                            .map(org.gp14.skopia.report.Report::getViewerId)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
+                    reportingViewers = userRepository.findAllById(viewerIds);
+                }
+                notifications.notifyVideoTakenDown(saved.getCreator(), reportingViewers, saved, reason);
+            }
+        } catch (Exception ignored) {}
+
+        return mapToVideoResponse(saved, viewerId);
     }
 
     @Transactional(readOnly = true)

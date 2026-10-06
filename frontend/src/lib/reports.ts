@@ -68,10 +68,18 @@ export const reports = {
     contentReference: string | null
   }) => request<ServerReport>('/api/reports', { method: 'POST', body: input }),
 
+  all: (signal?: AbortSignal) => request<ServerReport[]>('/api/reports', { signal }),
+
   forViewer: (viewerId: number, signal?: AbortSignal) =>
     request<ServerReport[]>(`/api/reports/viewer/${viewerId}`, { signal }),
 
   one: (id: number, signal?: AbortSignal) => request<ServerReport>(`/api/reports/${id}`, { signal }),
+
+  resolve: (id: number, resolutionNotes?: string) =>
+    request<ServerReport>(`/api/reports/${id}/resolve`, {
+      method: 'POST',
+      body: { resolutionNotes: resolutionNotes || 'Reviewed and resolved by platform moderation' },
+    }),
 }
 
 /* -------------------------------------------------------------- complaints */
@@ -199,13 +207,25 @@ export async function loadQueue(
   signal?: AbortSignal,
 ): Promise<QueueItem[]> {
   const ids = [...new Set(complaintRows.map((c) => c.reportId).filter((id): id is number => id != null))]
-  // One failed report must not empty the whole queue, so each is settled on its
-  // own and a complaint whose report cannot be read still lists.
-  const settled = await Promise.allSettled(ids.map((id) => reports.one(id, signal)))
   const byId = new Map<number, ServerReport>()
-  settled.forEach((outcome, i) => {
-    if (outcome.status === 'fulfilled') byId.set(ids[i], outcome.value)
-  })
+
+  try {
+    const all = await reports.all(signal)
+    if (Array.isArray(all)) {
+      all.forEach((r) => byId.set(r.id, r))
+    }
+  } catch {
+    // Fallback to individual report fetch
+  }
+
+  const missingIds = ids.filter((id) => !byId.has(id))
+  if (missingIds.length > 0) {
+    const settled = await Promise.allSettled(missingIds.map((id) => reports.one(id, signal)))
+    settled.forEach((outcome, i) => {
+      if (outcome.status === 'fulfilled') byId.set(missingIds[i], outcome.value)
+    })
+  }
+
   return complaintRows.map((complaint) => ({
     complaint,
     report: complaint.reportId != null ? byId.get(complaint.reportId) ?? null : null,
@@ -222,3 +242,59 @@ export const subjectOf = (item: QueueItem) =>
 
 export const referenceOf = (complaint: ServerComplaint) =>
   `CMP-${String(complaint.id).padStart(4, '0')}`
+
+const REPORT_CHANNEL = 'skopia:reports-broadcast'
+
+export function notifyReportsChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('skopia:reports-changed'))
+    window.dispatchEvent(new Event('skopia:notifications-changed'))
+    try {
+      localStorage.setItem('skopia:reports-event', String(Date.now()))
+      localStorage.setItem('skopia:notifications-event', String(Date.now()))
+    } catch {}
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel(REPORT_CHANNEL)
+        bc.postMessage({ type: 'changed', time: Date.now() })
+        bc.close()
+      }
+    } catch {}
+  }
+}
+
+export function subscribeReportsChanged(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  const handler = () => callback()
+  window.addEventListener('skopia:reports-changed', handler)
+  window.addEventListener('focus', handler)
+  document.addEventListener('visibilitychange', handler)
+
+  const storageHandler = (e: StorageEvent) => {
+    if (e.key === 'skopia:reports-event') {
+      callback()
+    }
+  }
+  window.addEventListener('storage', storageHandler)
+
+  let bc: BroadcastChannel | null = null
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      bc = new BroadcastChannel(REPORT_CHANNEL)
+      bc.onmessage = () => callback()
+    }
+  } catch {}
+
+  const interval = setInterval(handler, 3000)
+
+  return () => {
+    clearInterval(interval)
+    window.removeEventListener('skopia:reports-changed', handler)
+    window.removeEventListener('focus', handler)
+    document.removeEventListener('visibilitychange', handler)
+    window.removeEventListener('storage', storageHandler)
+    if (bc) {
+      bc.close()
+    }
+  }
+}

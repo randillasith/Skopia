@@ -2,45 +2,59 @@ package org.gp14.skopia.complaint;
 
 import org.gp14.skopia.complaint.dto.ResolveComplaintRequest;
 import org.gp14.skopia.complaint.dto.UpdateStatusPriorityRequest;
+import org.gp14.skopia.model.user.User;
+import org.gp14.skopia.model.video.Video;
+import org.gp14.skopia.report.Report;
 import org.gp14.skopia.report.ReportRepository;
+import org.gp14.skopia.repository.UserRepository;
+import org.gp14.skopia.repository.VideoRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 @Service
 public class ComplaintService {
 
     private final ComplaintRepository complaintRepository;
     private final ComplaintHistoryRepository historyRepository;
-    private final NotificationService notificationService;
+    private final org.gp14.skopia.notification.NotificationService notificationService;
+    private final UserRepository userRepository;
     private final ReportRepository reportRepository;
+    private final VideoRepository videoRepository;
 
     public ComplaintService(ComplaintRepository complaintRepository,
                              ComplaintHistoryRepository historyRepository,
-                             NotificationService notificationService,
-                             ReportRepository reportRepository) {
+                             org.gp14.skopia.notification.NotificationService notificationService,
+                             UserRepository userRepository,
+                             ReportRepository reportRepository,
+                             VideoRepository videoRepository) {
         this.complaintRepository = complaintRepository;
         this.historyRepository = historyRepository;
         this.notificationService = notificationService;
+        this.userRepository = userRepository;
         this.reportRepository = reportRepository;
+        this.videoRepository = videoRepository;
     }
 
     // Creates a complaint from an existing report (e.g. escalated from UC-FR3-01)
     public Complaint createComplaintFromReport(Long reportId, Long reportingViewerId) {
-        return complaintRepository.findByReportId(reportId).orElseGet(() -> {
-            Complaint complaint = new Complaint(reportId, reportingViewerId);
-            Complaint saved = complaintRepository.save(complaint);
-            historyRepository.save(new ComplaintHistory(saved.getId(), "CREATED",
-                    "Complaint created from report " + reportId, null));
-            return saved;
-        });
+        List<Complaint> existing = complaintRepository.findByReportId(reportId);
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
+        Complaint complaint = new Complaint(reportId, reportingViewerId);
+        Complaint saved = complaintRepository.save(complaint);
+        historyRepository.save(new ComplaintHistory(saved.getId(), "CREATED",
+                "Complaint created from report " + reportId, null));
+        return saved;
     }
 
-    // Step 1: officer views the incoming (unassigned) complaint queue
+    // Step 1: officer views the incoming complaint queue
     public List<Complaint> getOpenComplaints() {
-        return complaintRepository.findByStatus(ComplaintStatus.OPEN);
+        return complaintRepository.findAllByOrderByCreatedAtDesc();
     }
 
     // Step 2: officer assigns/accepts a complaint
@@ -68,13 +82,52 @@ public class ComplaintService {
     // Step 4-5: record a resolution and notify the reporting viewer
     public Complaint resolveComplaint(Long complaintId, ResolveComplaintRequest request, Long officerId) {
         Complaint complaint = getComplaintOrThrow(complaintId);
-        complaint.setResolutionNotes(request.getResolutionNotes());
+        String notes = (request != null && request.getResolutionNotes() != null && !request.getResolutionNotes().isBlank())
+                ? request.getResolutionNotes().trim()
+                : "Reviewed and resolved by platform moderation.";
+        complaint.setResolutionNotes(notes);
         complaint.setStatus(ComplaintStatus.RESOLVED);
         Complaint saved = complaintRepository.save(complaint);
-        historyRepository.save(new ComplaintHistory(complaintId, "RESOLVED",
-                request.getResolutionNotes(), officerId));
-        notificationService.notifyViewerOfStatusChange(
-                complaint.getReportingViewerId(), complaintId, ComplaintStatus.RESOLVED);
+        historyRepository.save(new ComplaintHistory(complaintId, "RESOLVED", notes, officerId));
+
+        // In-app notification to the reporting viewer
+        try {
+            Long viewerId = complaint.getReportingViewerId();
+            Report rep = null;
+            if (complaint.getReportId() != null) {
+                rep = reportRepository.findById(complaint.getReportId()).orElse(null);
+                if (rep != null) {
+                    rep.setStatus(org.gp14.skopia.report.ReportStatus.RESOLVED);
+                    reportRepository.save(rep);
+                    if (viewerId == null) {
+                        viewerId = rep.getViewerId();
+                    }
+                }
+            }
+
+            String videoTitle = null;
+            if (rep != null && rep.getContentReference() != null && rep.getContentReference().startsWith("video:")) {
+                try {
+                    Long vid = Long.parseLong(rep.getContentReference().substring(6));
+                    videoTitle = videoRepository.findById(vid).map(Video::getTitle).orElse(null);
+                } catch (Exception ignored) {}
+            }
+            final String finalVideoTitle = videoTitle;
+
+            // Primary reporting viewer notification
+            if (viewerId != null) {
+                User viewer = userRepository.findById(viewerId).orElse(null);
+                if (viewer != null) {
+                    notificationService.notifyViewerReportResolved(
+                            viewer,
+                            complaint.getReportId() != null ? complaint.getReportId() : complaintId,
+                            request.getResolutionNotes(),
+                            finalVideoTitle
+                    );
+                }
+            }
+        } catch (Exception ignored) {}
+
         return saved;
     }
 
@@ -104,17 +157,8 @@ public class ComplaintService {
         return complaintRepository.findByReportingViewerId(viewerId);
     }
 
-    public void notifyReportersOfVideoTakedown(Long videoId, String videoTitle) {
-        if (videoId == null) return;
-        reportRepository.findByContentReferenceOrderByCreatedAtDesc("video:" + videoId).stream()
-                .map(report -> report.getViewerId())
-                .filter(viewerId -> viewerId != null)
-                .distinct()
-                .forEach(viewerId -> notificationService.notifyViewerOfVideoTakedown(viewerId, videoId, videoTitle));
-    }
-
     private Complaint getComplaintOrThrow(Long id) {
         return complaintRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Complaint not found: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Complaint not found: " + id));
     }
 }

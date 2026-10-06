@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Inbox, Check, UserPlus, AlertTriangle, Search as SearchIcon,
-  Ban, UserX, Tv, Eye,
+  Ban, UserX, Tv, Eye, RefreshCw, CheckCircle2,
 } from 'lucide-react'
 import {
   Button, Field, Select, Textarea, Table, Th, Td, Tr, Tabs, EmptyState,
@@ -17,7 +17,7 @@ import { administration } from '@/lib/accounts'
 import { useCatalogue } from '@/lib/useCatalogue'
 import { videoIdOf } from '@/lib/catalogue'
 import {
-  complaints, loadQueue, reports, referenceOf, subjectOf,
+  complaints, loadQueue, reports, referenceOf, subjectOf, subscribeReportsChanged, notifyReportsChanged,
   COMPLAINT_STATUS_LABEL, COMPLAINT_STATUS_TONE, REPORT_TYPE_LABEL,
   type ComplaintHistoryEntry, type ComplaintPriority, type ComplaintStatus,
   type QueueItem, type ServerReport, type ServerComplaint,
@@ -48,12 +48,20 @@ const settled = (s: ComplaintStatus) => s === 'RESOLVED' || s === 'CLOSED'
 function useQueue(officerId: number | null, scope: 'open' | 'mine') {
   const [items, setItems] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
   useEffect(() => {
+    return subscribeReportsChanged(() => setNonce((n) => n + 1))
+  }, [])
+
+  useEffect(() => {
     const abort = new AbortController()
-    setLoading(true)
+    if (items.length === 0) {
+      setLoading(true)
+    }
+    setRefreshing(true)
     const rows =
       scope === 'mine' && officerId != null
         ? complaints.search({ officerId }, abort.signal)
@@ -70,12 +78,21 @@ function useQueue(officerId: number | null, scope: 'open' | 'mine') {
         setItems([])
       })
       .finally(() => {
-        if (!abort.signal.aborted) setLoading(false)
+        if (!abort.signal.aborted) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       })
     return () => abort.abort()
   }, [officerId, scope, nonce])
 
-  return { items, loading, error, refresh: useCallback(() => setNonce((n) => n + 1), []) }
+  return {
+    items,
+    loading,
+    refreshing,
+    error,
+    refresh: useCallback(() => setNonce((n) => n + 1), []),
+  }
 }
 
 /* ============================================================ the queue */
@@ -86,7 +103,7 @@ export function SupportQueue() {
   const officerId = actorIdOf(viewer)
   const [tab, setTab] = useState('unassigned')
   const [q, setQ] = useState('')
-  const { items, loading, error, refresh } = useQueue(officerId, tab === 'mine' ? 'mine' : 'open')
+  const { items, loading, refreshing, error, refresh } = useQueue(officerId, tab === 'mine' ? 'mine' : 'open')
 
   const list = useMemo(() => {
     let l = items
@@ -102,7 +119,25 @@ export function SupportQueue() {
   const urgent = items.filter((i) => i.complaint.priority === 'URGENT' && !settled(i.complaint.status))
 
   return (
-    <BackOfHouse title="Complaint queue">
+    <BackOfHouse
+      title="Complaint queue"
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-success-400">
+            <span className="size-2 rounded-full bg-success-500 animate-pulse" />
+            Live real-time
+          </span>
+          <Button
+            size="sm"
+            variant="quiet"
+            icon={<RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />}
+            onClick={refresh}
+          >
+            Refresh
+          </Button>
+        </div>
+      }
+    >
       {urgent.length > 0 && (
         <div className="mb-6 flex flex-col gap-3 rounded-sm border sm:flex-row sm:items-center border-danger-500/35 bg-danger-500/8 px-4 py-3">
           <AlertTriangle className="size-4 shrink-0 text-tone-danger-400" />
@@ -274,6 +309,7 @@ export function ComplaintDetail() {
     try {
       await what()
       toast({ title: said, tone })
+      notifyReportsChanged()
       refresh()
     } catch (cause) {
       toast({
@@ -321,10 +357,28 @@ export function ComplaintDetail() {
       toast({ title: `"${pullTarget.title}" taken down and archived`, tone: 'bad' })
       setPullTarget(null)
       setPullReason('')
+      notifyReportsChanged()
       refreshCatalogue()
       refresh()
     } catch (cause) {
       toast({ title: cause instanceof ApiError ? cause.message : 'Failed to take down video', tone: 'bad' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const confirmRestoreVideo = async (video: { id: string; title: string }) => {
+    const numeric = videoIdOf(video.id)
+    if (numeric == null) return
+    setBusy(true)
+    try {
+      await administration.moderateVideo(numeric, 'PUBLISHED', `Restored to catalogue following review of complaint ${referenceOf(complaint)}`)
+      toast({ title: `"${video.title}" restored and republished`, tone: 'ok' })
+      notifyReportsChanged()
+      refreshCatalogue()
+      refresh()
+    } catch (cause) {
+      toast({ title: cause instanceof ApiError ? cause.message : 'Failed to re-publish video', tone: 'bad' })
     } finally {
       setBusy(false)
     }
@@ -338,6 +392,7 @@ export function ComplaintDetail() {
       toast({ title: `${banTarget.isChannel ? 'Channel & Creator' : 'Account'} @${banTarget.username} has been banned`, tone: 'bad' })
       setBanTarget(null)
       setBanReason('')
+      notifyReportsChanged()
       refresh()
     } catch (cause) {
       toast({ title: cause instanceof ApiError ? cause.message : 'Failed to apply ban', tone: 'bad' })
@@ -440,9 +495,15 @@ export function ComplaintDetail() {
                       Takedown Video
                     </Button>
                   ) : (
-                    <span className="inline-flex items-center rounded px-2 py-1 text-xs font-semibold text-danger-400 bg-danger-500/15">
-                      Video Already Pulled
-                    </span>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon={<CheckCircle2 className="size-4" />}
+                      loading={busy}
+                      onClick={() => confirmRestoreVideo(attachedVideo)}
+                    >
+                      Re-publish Video
+                    </Button>
                   )}
                   <Button
                     size="sm"
@@ -477,7 +538,12 @@ export function ComplaintDetail() {
                 disabled={!resolution.trim() || busy}
                 onClick={() =>
                   handle(
-                    () => complaints.resolve(complaint.id, resolution.trim(), officerId!),
+                    async () => {
+                      if (complaint.reportId != null) {
+                        await reports.resolve(complaint.reportId, resolution.trim()).catch(() => null)
+                      }
+                      await complaints.resolve(complaint.id, resolution.trim(), officerId!)
+                    },
                     'Resolved — reporter notified',
                     'ok',
                   )

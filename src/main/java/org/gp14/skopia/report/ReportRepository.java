@@ -6,5 +6,6 @@ import java.util.List;
 
 public interface ReportRepository extends JpaRepository<Report, Long> {
     List<Report> findByViewerIdOrderByCreatedAtDesc(Long viewerId);
-    List<Report> findByContentReferenceOrderByCreatedAtDesc(String contentReference);
+    List<Report> findAllByOrderByCreatedAtDesc();
+    List<Report> findByContentReference(String contentReference);
 }

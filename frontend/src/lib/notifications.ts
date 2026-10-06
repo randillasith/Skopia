@@ -30,6 +30,7 @@ export type NotificationFeedItem = {
   id: string
   sourceId: number
   kind: 'NOTIFICATION' | 'ANNOUNCEMENT'
+  type?: string
   title: string
   body: string
   link: string
@@ -67,6 +68,7 @@ export function buildNotificationFeed(items: DurableNotification[], itemsAnnounc
       id: `notification-${item.id}`,
       sourceId: item.id,
       kind: 'NOTIFICATION' as const,
+      type: item.type,
       title: item.title,
       body: item.body,
       link: item.link || '/notifications',
@@ -77,6 +79,7 @@ export function buildNotificationFeed(items: DurableNotification[], itemsAnnounc
       id: `announcement-${item.id}`,
       sourceId: item.id,
       kind: 'ANNOUNCEMENT' as const,
+      type: 'ANNOUNCEMENT',
       title: item.title,
       body: item.body,
       link: `/notifications#announcement-${item.id}`,

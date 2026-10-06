@@ -21,7 +21,7 @@ import { filterByAccess, type AccessFilter } from '@/lib/access-filter'
 import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import {
-  reports, REPORT_TYPES, REPORT_TYPE_LABEL, type ServerReportType,
+  complaints, reports, notifyReportsChanged, REPORT_TYPES, REPORT_TYPE_LABEL, type ServerReportType,
 } from '@/lib/reports'
 import { profile } from '@/lib/accounts'
 import { Resolve } from '@/components/Loading'
@@ -1201,12 +1201,16 @@ export function ReportModal({
     setErr('')
     setBusy(true)
     try {
-      await reports.submit({
+      const saved = await reports.submit({
         viewerId: actor,
         type,
         details: detail.trim(),
         contentReference: videoId ? `video:${videoId}` : null,
       })
+      if (saved?.id) {
+        await complaints.fromReport(saved.id, actor).catch(() => {})
+      }
+      notifyReportsChanged()
       toast({ title: 'Report submitted — you can track it under My reports', tone: 'ok' })
       setType('')
       setDetail('')

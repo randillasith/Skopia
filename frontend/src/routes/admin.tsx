@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Ban, ShieldCheck, Plus, Eye,
   Download, ScrollText, CheckCircle2,
-  Tv, UserX, ShieldAlert,
+  Tv, UserX, ShieldAlert, RefreshCw,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Table, Th, Td, Tr, Tabs, Modal,
@@ -20,7 +20,8 @@ import {
 } from '@/lib/accounts'
 import { useCatalogue } from '@/lib/useCatalogue'
 import {
-  complaints, loadQueue, referenceOf, COMPLAINT_STATUS_LABEL,
+  complaints, loadQueue, reports, referenceOf, subscribeReportsChanged, notifyReportsChanged,
+  COMPLAINT_STATUS_LABEL, COMPLAINT_STATUS_TONE, REPORT_STATUS_LABEL, REPORT_STATUS_TONE,
   REPORT_TYPE_LABEL,
   type QueueItem, type ServerComplaint, type ServerReportType,
 } from '@/lib/reports'
@@ -57,24 +58,50 @@ export function AdminDashboard() {
   const [logs, setLogs] = useState<ActivityLogRow[]>([])
   const [campaigns, setCampaigns] = useState<AdCampaign[] | null>(null)
   const [subscriptionRows, setSubscriptionRows] = useState<AdminSubscription[] | null>(null)
+  const [nonce, setNonce] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const reloadAll = useCallback(() => setNonce((n) => n + 1), [])
+
+  useEffect(() => {
+    return subscribeReportsChanged(() => setNonce((n) => n + 1))
+  }, [])
 
   useEffect(() => {
     const abort = new AbortController()
-    administration.users(abort.signal).then((rows) => setAccounts(rows.map(rowToAccount))).catch(() => setAccounts(null))
-    administration.stats().then(setStats).catch(() => setStats(null))
-    administration.activityLogs(abort.signal).then((rows) => setLogs(rows.slice(0, 6))).catch(() => setLogs([]))
-    complaints.queue(abort.signal).then(setQueue).catch(() => setQueue(null))
-    ads.campaigns.list(null).then(setCampaigns).catch(() => setCampaigns(null))
-    billing.adminUsers(abort.signal).then(setSubscriptionRows).catch(() => setSubscriptionRows(null))
+    setRefreshing(true)
+    Promise.allSettled([
+      administration.users(abort.signal).then((rows) => setAccounts(rows.map(rowToAccount))).catch(() => setAccounts(null)),
+      administration.stats().then(setStats).catch(() => setStats(null)),
+      administration.activityLogs(abort.signal).then((rows) => setLogs(rows.slice(0, 6))).catch(() => setLogs([])),
+      complaints.queue(abort.signal).then(setQueue).catch(() => setQueue(null)),
+      ads.campaigns.list(null).then(setCampaigns).catch(() => setCampaigns(null)),
+      billing.adminUsers(abort.signal).then(setSubscriptionRows).catch(() => setSubscriptionRows(null)),
+    ]).finally(() => {
+      if (!abort.signal.aborted) setRefreshing(false)
+    })
     return () => abort.abort()
-  }, [])
+  }, [nonce])
 
   const openComplaints = queue?.filter((c) => c.status !== 'RESOLVED' && c.status !== 'CLOSED') ?? []
   const inReview = videos.filter((v) => v.billing === 'IN REVIEW')
   const count = (n: number | undefined | null) => (n == null ? '—' : String(n))
 
   return (
-    <BackOfHouse title="Dashboard">
+    <BackOfHouse
+      title="Dashboard"
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-success-400">
+            <span className="size-2 rounded-full bg-success-500 animate-pulse" />
+            Live real-time
+          </span>
+          <Button size="sm" variant="quiet" icon={<RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />} onClick={reloadAll}>
+            Refresh
+          </Button>
+        </div>
+      }
+    >
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         {[
           ['Accounts', count(stats?.totalUsers ?? accounts?.length), stats ? `${stats.activeUsers} active · ${stats.blockedUsers} banned` : accounts ? `${accounts.filter((a) => a.status === 'Active').length} active` : 'could not be read'],
@@ -735,6 +762,7 @@ export function AdminModeration() {
   const [busy, setBusy] = useState<string | null>(null)
   
   // Search & Filters
+  const [statusFilter, setStatusFilter] = useState('All')
   const [reportTypeFilter, setReportTypeFilter] = useState('All')
   const [priorityFilter, setPriorityFilter] = useState('All')
   const [searchFilter, setSearchFilter] = useState('')
@@ -753,11 +781,19 @@ export function AdminModeration() {
   const [queueLoading, setQueueLoading] = useState(true)
   const [queueError, setQueueError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
   const reloadQueue = useCallback(() => setNonce((n) => n + 1), [])
 
   useEffect(() => {
+    return subscribeReportsChanged(() => setNonce((n) => n + 1))
+  }, [])
+
+  useEffect(() => {
     const abort = new AbortController()
-    setQueueLoading(true)
+    if (reported.length === 0) {
+      setQueueLoading(true)
+    }
+    setRefreshing(true)
     complaints
       .queue(abort.signal)
       .then((rows) => loadQueue(rows, abort.signal))
@@ -771,7 +807,10 @@ export function AdminModeration() {
         setReported([])
       })
       .finally(() => {
-        if (!abort.signal.aborted) setQueueLoading(false)
+        if (!abort.signal.aborted) {
+          setQueueLoading(false)
+          setRefreshing(false)
+        }
       })
     return () => abort.abort()
   }, [nonce])
@@ -784,6 +823,9 @@ export function AdminModeration() {
   // Filtered reported complaints
   const filteredReports = useMemo(() => {
     return reported.filter(({ complaint, report }) => {
+      if (statusFilter === 'UNRESOLVED' && (complaint.status === 'RESOLVED' || complaint.status === 'CLOSED')) return false
+      if (statusFilter === 'RESOLVED' && complaint.status !== 'RESOLVED') return false
+      if (statusFilter === 'CLOSED' && complaint.status !== 'CLOSED') return false
       if (reportTypeFilter !== 'All' && report && report.type !== reportTypeFilter) return false
       if (priorityFilter !== 'All' && complaint.priority !== priorityFilter) return false
       if (searchFilter.trim()) {
@@ -794,7 +836,7 @@ export function AdminModeration() {
       }
       return true
     })
-  }, [reported, reportTypeFilter, priorityFilter, searchFilter, videos])
+  }, [reported, statusFilter, reportTypeFilter, priorityFilter, searchFilter, videos])
 
   // Execute Pull Title (Archive)
   const confirmPull = async () => {
@@ -807,6 +849,7 @@ export function AdminModeration() {
       toast({ title: `"${pullTarget.title}" pulled from the catalogue`, tone: 'bad' })
       setPullTarget(null)
       setPullReason('')
+      notifyReportsChanged()
       refreshCatalogue()
       reloadQueue()
     } catch (cause) {
@@ -824,6 +867,7 @@ export function AdminModeration() {
     try {
       await administration.moderateVideo(numeric, 'PUBLISHED', 'Restored to catalogue by platform administrator')
       toast({ title: `"${v.title}" restored to catalogue`, tone: 'ok' })
+      notifyReportsChanged()
       refreshCatalogue()
     } catch (cause) {
       toast({ title: cause instanceof ApiError ? cause.message : 'That did not go through.', tone: 'bad' })
@@ -844,6 +888,7 @@ export function AdminModeration() {
       })
       setBanTarget(null)
       setBanReason('')
+      notifyReportsChanged()
       reloadQueue()
       refreshCatalogue()
     } catch (cause) {
@@ -857,11 +902,16 @@ export function AdminModeration() {
   const confirmResolve = async () => {
     if (!resolveTarget) return
     setBusy(`resolve-${resolveTarget.complaint.id}`)
+    const note = resolveNote.trim() || 'Reviewed and resolved by administrator'
     try {
-      await complaints.resolve(resolveTarget.complaint.id, resolveNote.trim() || 'Reviewed and resolved by administrator', 1)
+      if (resolveTarget.complaint.reportId != null) {
+        await reports.resolve(resolveTarget.complaint.reportId, note).catch(() => null)
+      }
+      await complaints.resolve(resolveTarget.complaint.id, note, 1)
       toast({ title: `Complaint ${referenceOf(resolveTarget.complaint)} resolved`, tone: 'ok' })
       setResolveTarget(null)
       setResolveNote('')
+      notifyReportsChanged()
       reloadQueue()
     } catch (cause) {
       toast({ title: cause instanceof ApiError ? cause.message : 'Failed to resolve complaint.', tone: 'bad' })
@@ -871,7 +921,25 @@ export function AdminModeration() {
   }
 
   return (
-    <BackOfHouse title="Content Moderation &amp; Reports">
+    <BackOfHouse
+      title="Content Moderation &amp; Reports"
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-success-400">
+            <span className="size-2 rounded-full bg-success-500 animate-pulse" />
+            Live real-time
+          </span>
+          <Button
+            size="sm"
+            variant="quiet"
+            icon={<RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />}
+            onClick={() => { reloadQueue(); refreshCatalogue() }}
+          >
+            Refresh
+          </Button>
+        </div>
+      }
+    >
       <Tabs
         value={tab}
         onChange={setTab}
@@ -891,10 +959,21 @@ export function AdminModeration() {
               className="flex-1"
             />
             <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter status"
+              className="sm:w-44"
+            >
+              <option value="All">All statuses</option>
+              <option value="UNRESOLVED">Open / Unresolved</option>
+              <option value="RESOLVED">Resolved only</option>
+              <option value="CLOSED">Closed only</option>
+            </Select>
+            <Select
               value={reportTypeFilter}
               onChange={(e) => setReportTypeFilter(e.target.value)}
               aria-label="Filter report type"
-              className="sm:w-52"
+              className="sm:w-48"
             >
               <option value="All">All report types</option>
               <option value="INAPPROPRIATE_CONTENT">{REPORT_TYPE_LABEL.INAPPROPRIATE_CONTENT}</option>
@@ -907,7 +986,7 @@ export function AdminModeration() {
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
               aria-label="Filter priority"
-              className="sm:w-40"
+              className="sm:w-36"
             >
               <option value="All">All priorities</option>
               <option value="URGENT">Urgent only</option>
@@ -927,7 +1006,7 @@ export function AdminModeration() {
             <div className="mt-8">
               <EmptyState icon={<ShieldCheck className="size-7" />} title="No reports matching"
                 body="No complaints or content reports match the current filters."
-                action={<Button onClick={() => { setReportTypeFilter('All'); setPriorityFilter('All'); setSearchFilter('') }}>Clear filters</Button>} />
+                action={<Button onClick={() => { setStatusFilter('All'); setReportTypeFilter('All'); setPriorityFilter('All'); setSearchFilter('') }}>Clear filters</Button>} />
             </div>
           ) : (
             <ul className="mt-6 space-y-4">
@@ -950,9 +1029,14 @@ export function AdminModeration() {
                               {REPORT_TYPE_LABEL[report.type as ServerReportType] ?? report.type}
                             </Letterboard>
                           )}
-                          <span className="rounded bg-ink-800 px-2 py-0.5 font-mono text-[11px] text-ink-300">
-                            {COMPLAINT_STATUS_LABEL[complaint.status]}
-                          </span>
+                          <Letterboard tone={COMPLAINT_STATUS_TONE[complaint.status]}>
+                            {`CMP: ${COMPLAINT_STATUS_LABEL[complaint.status].toUpperCase()}`}
+                          </Letterboard>
+                          {report && (
+                            <Letterboard tone={REPORT_STATUS_TONE[report.status]}>
+                              {`RPT: ${REPORT_STATUS_LABEL[report.status].toUpperCase()}`}
+                            </Letterboard>
+                          )}
                           {v && <BillingBoard billing={v.billing} />}
                         </div>
 
@@ -995,7 +1079,17 @@ export function AdminModeration() {
                         <Button size="sm" variant="quiet" onClick={() => nav(`/queue/${complaint.id}`)}>
                           Full Complaint
                         </Button>
-                        {v && v.billing !== 'HELD OVER' && v.billing !== 'PULLED' && (
+                        {v && (v.billing === 'HELD OVER' || v.billing === 'PULLED') ? (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            icon={<CheckCircle2 className="size-4" />}
+                            loading={busy === v.id}
+                            onClick={() => restoreVideo(v)}
+                          >
+                            Re-publish Video
+                          </Button>
+                        ) : v ? (
                           <Button
                             size="sm"
                             variant="danger"
@@ -1004,7 +1098,7 @@ export function AdminModeration() {
                           >
                             Pull Title
                           </Button>
-                        )}
+                        ) : null}
                         {v && (
                           <Button
                             size="sm"

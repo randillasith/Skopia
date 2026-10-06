@@ -39,7 +39,7 @@ public class AdminVideoController {
                                       HttpServletRequest httpRequest) {
         User actor = actor(authentication);
         ContentCreator target = videos.getVideoCreator(id);
-        VideoResponse result = videos.moderateVideoStatus(id, request.getStatus(), actor.getId());
+        VideoResponse result = videos.moderateVideoStatus(id, request.getStatus(), actor.getId(), request.getReason());
         users.logActivity(actor, target, "VIDEO_STATUS_CHANGED",
                 "video " + id + " to " + request.getStatus() +
                         (request.getReason() == null || request.getReason().isBlank() ? "" : "; reason: " + request.getReason().trim()),

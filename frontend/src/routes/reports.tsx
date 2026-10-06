@@ -8,7 +8,7 @@ import { ReportModal } from '@/routes/viewer'
 import { ApiError } from '@/lib/api'
 import { actorId as actorIdOf } from '@/lib/session'
 import {
-  reports, isClosed, REPORT_STATUS_LABEL, REPORT_STATUS_TONE, REPORT_TYPE_LABEL,
+  reports, isClosed, subscribeReportsChanged, REPORT_STATUS_LABEL, REPORT_STATUS_TONE, REPORT_TYPE_LABEL,
   type ServerReport,
 } from '@/lib/reports'
 
@@ -31,6 +31,10 @@ export function MyReports() {
   const [open, setOpen] = useState<number | null>(null)
 
   const refresh = useCallback(() => setNonce((n) => n + 1), [])
+
+  useEffect(() => {
+    return subscribeReportsChanged(() => setNonce((n) => n + 1))
+  }, [])
 
   useEffect(() => {
     if (resolving) return

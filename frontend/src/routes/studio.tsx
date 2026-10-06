@@ -143,7 +143,27 @@ export function StudioLibrary() {
                   )}
                 </Td>
                 <Td>
-                  <div className="flex justify-end gap-1">
+                  <div className="flex justify-end items-center gap-1.5">
+                    {(v.billing === 'HELD OVER' || v.billing === 'PULLED') && (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        icon={<Check className="size-3.5" />}
+                        onClick={async () => {
+                          const numeric = videoIdOf(v.id)
+                          if (numeric == null) return
+                          try {
+                            await studio.update(numeric, { status: 'PUBLISHED' }, actor)
+                            toast({ title: `"${v.title}" published to catalogue`, tone: 'ok' })
+                            refresh()
+                          } catch (e) {
+                            toast({ title: e instanceof ApiError ? e.message : 'Could not re-publish', tone: 'bad' })
+                          }
+                        }}
+                      >
+                        Publish
+                      </Button>
+                    )}
                     <Button size="sm" variant="quiet" onClick={() => nav(`/studio/video/${v.id}`)}>
                       Edit
                     </Button>

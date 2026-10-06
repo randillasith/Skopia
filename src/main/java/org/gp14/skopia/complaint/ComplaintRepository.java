@@ -10,5 +10,7 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
     Optional<Complaint> findByReportId(Long reportId);
     List<Complaint> findByAssignedOfficerId(Long officerId);
     List<Complaint> findByReportingViewerId(Long viewerId);
+    List<Complaint> findByReportId(Long reportId);
     List<Complaint> findByStatusAndPriority(ComplaintStatus status, ComplaintPriority priority);
+    List<Complaint> findAllByOrderByCreatedAtDesc();
 }

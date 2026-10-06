@@ -24,7 +24,79 @@ public class NotificationService {
         Notification n=new Notification();n.setUser(user);n.setTitle(title);n.setMessage(body);n.setNotifType(type);n.setTargetUrl(link);n.setDedupeKey(dedupeKey);return notifications.save(n);
     }
     @Transactional public void notifyVideoCreated(Video video){if(video==null||video.getId()==null||!"PUBLISHED".equalsIgnoreCase(video.getVideoStatus()))return;Long creatorId=video.getCreator()==null?null:video.getCreator().getId();for(User user:users.findByAccountStatus("ACTIVE")){if(user.getId().equals(creatorId))continue;create(user,"New video: "+video.getTitle(),"A new Skopia video is available to watch.","VIDEO_CREATED","/watch/"+video.getId(),"VIDEO_CREATED:"+video.getId());}}
-    @Transactional public void notifyVideoTakenDown(User user,Long videoId,String videoTitle){if(user==null||videoId==null)return;String title=(videoTitle==null||videoTitle.isBlank())?"the reported video":videoTitle;create(user,"Video taken down: "+title,"The video you reported has been taken down after administrator review.","VIDEO_TAKEN_DOWN","/notifications","VIDEO_TAKEN_DOWN:"+videoId);}
+    @Transactional
+    public void notifyViewerReportSubmitted(User user, Long reportId, String videoTitle) {
+        if (user == null) return;
+        String subject = (videoTitle != null && !videoTitle.isBlank()) ? " for \"" + videoTitle + "\"" : "";
+        create(
+                user,
+                "Report Under Review",
+                "Your report" + subject + " has been received and is currently under review by our moderation team.",
+                "REPORT_UNDER_REVIEW",
+                "/reports",
+                "REPORT_UNDER_REVIEW:" + reportId
+        );
+    }
+
+    @Transactional
+    public void notifyViewerReportResolved(User user, Long reportId, String resolutionNotes, String videoTitle) {
+        if (user == null) return;
+        String subject = (videoTitle != null && !videoTitle.isBlank()) ? " regarding \"" + videoTitle + "\"" : "";
+        String notes = (resolutionNotes != null && !resolutionNotes.isBlank()) ? " Note: " + resolutionNotes.trim() : "";
+        create(
+                user,
+                "Report Resolved",
+                "Your report" + subject + " has been reviewed and resolved by platform moderation." + notes,
+                "REPORT_RESOLVED",
+                "/reports",
+                "REPORT_RESOLVED:" + reportId + ":" + System.currentTimeMillis()
+        );
+    }
+
+    @Transactional
+    public void notifyVideoTakenDown(User creator, List<User> reportingViewers, Video video, String reason) {
+        if (video == null) return;
+        String why = (reason != null && !reason.isBlank()) ? " Reason: " + reason.trim() : "";
+        
+        if (creator != null) {
+            create(
+                    creator,
+                    "Video Taken Down",
+                    "Your video \"" + video.getTitle() + "\" has been taken down following moderation review." + why,
+                    "VIDEO_TAKEDOWN",
+                    "/studio",
+                    "VIDEO_TAKEDOWN:" + video.getId() + ":" + System.currentTimeMillis()
+            );
+        }
+
+        if (reportingViewers != null) {
+            for (User viewer : reportingViewers) {
+                if (viewer == null || (creator != null && viewer.getId().equals(creator.getId()))) continue;
+                create(
+                        viewer,
+                        "Action Taken on Your Report",
+                        "The video \"" + video.getTitle() + "\" you reported has been taken down by platform moderation.",
+                        "REPORT_ACTION_TAKEDOWN",
+                        "/reports",
+                        "REPORT_ACTION_TAKEDOWN:" + video.getId() + ":" + viewer.getId() + ":" + System.currentTimeMillis()
+                );
+            }
+        }
+    }
+
+    @Transactional
+    public void notifyVideoRepublished(User creator, Video video) {
+        if (video == null || creator == null) return;
+        create(
+                creator,
+                "Video Republished",
+                "Your video \"" + video.getTitle() + "\" has been restored and republished to the catalogue.",
+                "VIDEO_REPUBLISHED",
+                "/watch/" + video.getId(),
+                "VIDEO_REPUBLISHED:" + video.getId() + ":" + System.currentTimeMillis()
+        );
+    }
+
     @Transactional(readOnly=true) public List<View> list(Long userId){require(userId);return notifications.findByUserIdOrderByCreatedAtDesc(userId).stream().map(this::view).toList();}
     @Transactional(readOnly=true) public long unread(Long userId){require(userId);return notifications.countByUserIdAndReadAtIsNull(userId);}
     @Transactional public View markRead(Long userId,Long id){require(userId);Notification n=notifications.findByIdAndUserId(id,userId).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));if(n.getReadAt()==null){n.setReadAt(LocalDateTime.now());n.setIsRead(true);}return view(n);}
