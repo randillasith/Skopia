@@ -13,12 +13,9 @@ import { SPEEDS, chaptersFor, clock, seconds, type Video } from '@/lib/data'
 /**
  * The transport.
  *
- * There is no stream behind it, so the clock is driven by a timer rather than a
- * media element. That is deliberate: a scrubber that moves, a chapter that
- * becomes current and a time that counts up make the controls testable and let
- * somebody judge the layout at every state. Everything here maps onto a real
- * `<video>` — `time` becomes `currentTime`, `speed` becomes `playbackRate` — so
- * wiring a stream in later is a substitution, not a rewrite.
+ * An uploaded file uses the browser's media element and its playback events.
+ * Catalogue records without a file use a simulated clock so the controls can
+ * still be previewed. Both paths update the same player state.
  *
  * Fullscreen and captions are real. Picture-in-picture is not offered, because
  * it needs an actual media element and a button that cannot do its job is worse
@@ -34,6 +31,7 @@ export type PlayerProps = {
   autoplay: boolean
   onAutoplay: (v: boolean) => void
   onEnded?: () => void
+  onPlaybackStarted?: () => void
   onReport: () => void
   /** Lets the page offer "share from here". */
   onTimeChange?: (t: number) => void
@@ -76,6 +74,7 @@ export function Player({
   autoplay,
   onAutoplay,
   onEnded,
+  onPlaybackStarted,
   onReport,
   onTimeChange,
 }: PlayerProps) {
@@ -113,6 +112,12 @@ export function Player({
   useEffect(() => {
     onTimeChange?.(time)
   }, [time, onTimeChange])
+
+  // React subscribes to the media element's play event below. The simulated
+  // clock uses the same state change, so either player can notify its page.
+  useEffect(() => {
+    if (playing) onPlaybackStarted?.()
+  }, [playing, onPlaybackStarted])
 
   /**
    * Start or stop, whichever of the two is running.
