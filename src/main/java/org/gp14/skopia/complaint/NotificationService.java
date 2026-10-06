@@ -32,8 +32,4 @@ public class NotificationService {
         ));
     }
 
-    public void notifyViewerOfVideoTakedown(Long viewerId, Long videoId, String videoTitle) {
-        users.findById(viewerId).ifPresent(user ->
-                platformNotifications.notifyVideoTakenDown(user, videoId, videoTitle));
-    }
 }

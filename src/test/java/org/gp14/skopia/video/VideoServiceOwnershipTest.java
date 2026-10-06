@@ -36,7 +36,7 @@ class VideoServiceOwnershipTest {
     @Mock org.gp14.skopia.security.TokenService tokens;
     @Mock org.gp14.skopia.billing.BillingService billing;
     @Mock org.gp14.skopia.notification.NotificationService notifications;
-    @Mock org.gp14.skopia.report.ReportRepository reports;
+    @Mock org.gp14.skopia.complaint.ComplaintService complaints;
 
     VideoService service;
     Video video;
@@ -44,7 +44,7 @@ class VideoServiceOwnershipTest {
     @BeforeEach
     void setUp() {
         service = new VideoService(videos, categories, tiers, creators, users, viewers,
-                likes, comments, history, watchlists, watchlistItems, access, tokens, billing, notifications, reports);
+                likes, comments, history, watchlists, watchlistItems, access, tokens, billing, notifications, complaints);
         ContentCreator owner = new ContentCreator();
         owner.setId(41L);
         video = new Video();

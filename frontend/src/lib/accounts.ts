@@ -7,6 +7,7 @@
  */
 
 import { request, ApiError } from './api'
+import type { ServerVideo } from './catalogue'
 import type { Account, AccountStatus, StaffRole } from './session'
 import { channelByHandle } from './session'
 
@@ -216,6 +217,7 @@ export const administration = {
   stats: () => request<PlatformUserStats>('/api/admin/users/stats'),
   activityLogs: (signal?: AbortSignal) =>
     request<ActivityLogRow[]>('/api/admin/users/activity-logs', { signal }),
+  videos: (signal?: AbortSignal) => request<ServerVideo[]>('/api/admin/videos', { signal }),
   setStatus: (userId: number, status: 'ACTIVE' | 'SUSPENDED' | 'BLOCKED', reason: string) =>
     request<ServerUserRow>(`/api/admin/users/${userId}/status`, {
       method: 'PATCH',

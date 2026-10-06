@@ -2,7 +2,6 @@ package org.gp14.skopia.video;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.gp14.skopia.complaint.ComplaintService;
 import org.gp14.skopia.model.user.ContentCreator;
 import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.user.UserManagementService;
@@ -10,6 +9,7 @@ import org.gp14.skopia.video.dto.AdminVideoStatusRequest;
 import org.gp14.skopia.video.dto.VideoResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,17 +18,23 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/admin/videos")
 public class AdminVideoController {
     private final VideoService videos;
     private final UserManagementService users;
-    private final ComplaintService complaints;
 
-    public AdminVideoController(VideoService videos, UserManagementService users, ComplaintService complaints) {
+    public AdminVideoController(VideoService videos, UserManagementService users) {
         this.videos = videos;
         this.users = users;
-        this.complaints = complaints;
+    }
+
+    @GetMapping
+    public List<VideoResponse> list(Authentication authentication) {
+        User actor = actor(authentication);
+        return videos.getAllVideosForModeration(actor.getId());
     }
 
     @PatchMapping("/{id}/status")
@@ -44,9 +50,6 @@ public class AdminVideoController {
                 "video " + id + " to " + request.getStatus() +
                         (request.getReason() == null || request.getReason().isBlank() ? "" : "; reason: " + request.getReason().trim()),
                 clientIp(httpRequest));
-        if ("ARCHIVED".equalsIgnoreCase(request.getStatus())) {
-            complaints.notifyReportersOfVideoTakedown(id, result.getTitle());
-        }
         return result;
     }
 

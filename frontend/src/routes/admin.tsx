@@ -20,12 +20,12 @@ import {
 } from '@/lib/accounts'
 import { useCatalogue } from '@/lib/useCatalogue'
 import {
-  complaints, loadQueue, reports, referenceOf, subscribeReportsChanged, notifyReportsChanged,
+  complaints, loadQueue, referenceOf, subscribeReportsChanged, notifyReportsChanged,
   COMPLAINT_STATUS_LABEL, COMPLAINT_STATUS_TONE, REPORT_STATUS_LABEL, REPORT_STATUS_TONE,
   REPORT_TYPE_LABEL,
   type QueueItem, type ServerComplaint, type ServerReportType,
 } from '@/lib/reports'
-import { videoIdOf } from '@/lib/catalogue'
+import { toVideo, videoIdOf } from '@/lib/catalogue'
 import { billing, type AdminSubscription } from '@/lib/billing'
 import { ads, type Campaign as AdCampaign } from '@/lib/ads'
 import {
@@ -757,7 +757,9 @@ export function AdminRoles() {
 export function AdminModeration() {
   const nav = useNavigate()
   const toast = useToast()
-  const { videos, loading: catalogueLoading, error: catalogueError, refresh: refreshCatalogue } = useCatalogue()
+  const { videos: catalogueVideos, loading: catalogueLoading, error: catalogueError, refresh: refreshCatalogue } = useCatalogue()
+  const [moderationVideos, setModerationVideos] = useState<ReturnType<typeof toVideo>[] | null>(null)
+  const videos = moderationVideos ?? catalogueVideos
   const [tab, setTab] = useState('queue')
   const [busy, setBusy] = useState<string | null>(null)
   
@@ -811,6 +813,17 @@ export function AdminModeration() {
           setQueueLoading(false)
           setRefreshing(false)
         }
+      })
+    return () => abort.abort()
+  }, [nonce])
+
+  useEffect(() => {
+    const abort = new AbortController()
+    administration.videos(abort.signal)
+      .then((rows) => setModerationVideos(rows.map(toVideo)))
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setModerationVideos(null)
       })
     return () => abort.abort()
   }, [nonce])
@@ -869,6 +882,7 @@ export function AdminModeration() {
       toast({ title: `"${v.title}" restored to catalogue`, tone: 'ok' })
       notifyReportsChanged()
       refreshCatalogue()
+      reloadQueue()
     } catch (cause) {
       toast({ title: cause instanceof ApiError ? cause.message : 'That did not go through.', tone: 'bad' })
     } finally {
@@ -904,9 +918,6 @@ export function AdminModeration() {
     setBusy(`resolve-${resolveTarget.complaint.id}`)
     const note = resolveNote.trim() || 'Reviewed and resolved by administrator'
     try {
-      if (resolveTarget.complaint.reportId != null) {
-        await reports.resolve(resolveTarget.complaint.reportId, note).catch(() => null)
-      }
       await complaints.resolve(resolveTarget.complaint.id, note, 1)
       toast({ title: `Complaint ${referenceOf(resolveTarget.complaint)} resolved`, tone: 'ok' })
       setResolveTarget(null)

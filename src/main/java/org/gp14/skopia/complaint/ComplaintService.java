@@ -10,10 +10,12 @@ import org.gp14.skopia.repository.UserRepository;
 import org.gp14.skopia.repository.VideoRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.LinkedHashSet;
 
 @Service
 public class ComplaintService {
@@ -40,6 +42,7 @@ public class ComplaintService {
     }
 
     // Creates a complaint from an existing report (e.g. escalated from UC-FR3-01)
+    @Transactional
     public Complaint createComplaintFromReport(Long reportId, Long reportingViewerId) {
         List<Complaint> existing = complaintRepository.findByReportId(reportId);
         if (!existing.isEmpty()) {
@@ -80,6 +83,7 @@ public class ComplaintService {
     }
 
     // Step 4-5: record a resolution and notify the reporting viewer
+    @Transactional
     public Complaint resolveComplaint(Long complaintId, ResolveComplaintRequest request, Long officerId) {
         Complaint complaint = getComplaintOrThrow(complaintId);
         String notes = (request != null && request.getResolutionNotes() != null && !request.getResolutionNotes().isBlank())
@@ -90,43 +94,26 @@ public class ComplaintService {
         Complaint saved = complaintRepository.save(complaint);
         historyRepository.save(new ComplaintHistory(complaintId, "RESOLVED", notes, officerId));
 
-        // In-app notification to the reporting viewer
-        try {
-            Long viewerId = complaint.getReportingViewerId();
-            Report rep = null;
-            if (complaint.getReportId() != null) {
-                rep = reportRepository.findById(complaint.getReportId()).orElse(null);
-                if (rep != null) {
-                    rep.setStatus(org.gp14.skopia.report.ReportStatus.RESOLVED);
-                    reportRepository.save(rep);
-                    if (viewerId == null) {
-                        viewerId = rep.getViewerId();
-                    }
-                }
-            }
+        Long viewerId = complaint.getReportingViewerId();
+        Report report = complaint.getReportId() == null ? null : reportRepository.findById(complaint.getReportId()).orElse(null);
+        if (report != null) {
+            report.setStatus(org.gp14.skopia.report.ReportStatus.RESOLVED);
+            reportRepository.save(report);
+            if (viewerId == null) viewerId = report.getViewerId();
+        }
 
-            String videoTitle = null;
-            if (rep != null && rep.getContentReference() != null && rep.getContentReference().startsWith("video:")) {
-                try {
-                    Long vid = Long.parseLong(rep.getContentReference().substring(6));
-                    videoTitle = videoRepository.findById(vid).map(Video::getTitle).orElse(null);
-                } catch (Exception ignored) {}
+        String videoTitle = videoTitle(report);
+        if (viewerId != null) {
+            User viewer = userRepository.findById(viewerId).orElse(null);
+            if (viewer != null) {
+                notificationService.notifyViewerReportResolved(
+                        viewer,
+                        complaint.getReportId() != null ? complaint.getReportId() : complaintId,
+                        notes,
+                        videoTitle
+                );
             }
-            final String finalVideoTitle = videoTitle;
-
-            // Primary reporting viewer notification
-            if (viewerId != null) {
-                User viewer = userRepository.findById(viewerId).orElse(null);
-                if (viewer != null) {
-                    notificationService.notifyViewerReportResolved(
-                            viewer,
-                            complaint.getReportId() != null ? complaint.getReportId() : complaintId,
-                            request.getResolutionNotes(),
-                            finalVideoTitle
-                    );
-                }
-            }
-        } catch (Exception ignored) {}
+        }
 
         return saved;
     }
@@ -155,6 +142,42 @@ public class ComplaintService {
 
     public List<Complaint> searchByViewer(Long viewerId) {
         return complaintRepository.findByReportingViewerId(viewerId);
+    }
+
+    @Transactional
+    public void resolveReportsForVideoTakedown(Video video, String reason, Long officerId) {
+        if (video == null || video.getId() == null) return;
+        String notes = reason == null || reason.isBlank()
+                ? "Reported video taken down by platform moderation."
+                : reason.trim();
+        LinkedHashSet<Long> reporterIds = new LinkedHashSet<>();
+
+        for (Report report : reportRepository.findByContentReference("video:" + video.getId())) {
+            report.setStatus(org.gp14.skopia.report.ReportStatus.RESOLVED);
+            reportRepository.save(report);
+            if (report.getViewerId() != null) reporterIds.add(report.getViewerId());
+
+            for (Complaint complaint : complaintRepository.findByReportId(report.getId())) {
+                if (complaint.getStatus() == ComplaintStatus.CLOSED || complaint.getStatus() == ComplaintStatus.RESOLVED) continue;
+                complaint.setStatus(ComplaintStatus.RESOLVED);
+                complaint.setResolutionNotes(notes);
+                complaintRepository.save(complaint);
+                historyRepository.save(new ComplaintHistory(complaint.getId(), "RESOLVED", notes, officerId));
+            }
+        }
+
+        List<User> reporters = userRepository.findAllById(reporterIds);
+        notificationService.notifyVideoTakenDown(video.getCreator(), reporters, video, notes);
+    }
+
+    private String videoTitle(Report report) {
+        if (report == null || report.getContentReference() == null || !report.getContentReference().startsWith("video:")) return null;
+        try {
+            Long videoId = Long.parseLong(report.getContentReference().substring(6));
+            return videoRepository.findById(videoId).map(Video::getTitle).orElse(null);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private Complaint getComplaintOrThrow(Long id) {

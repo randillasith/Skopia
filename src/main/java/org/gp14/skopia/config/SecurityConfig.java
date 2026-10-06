@@ -33,7 +33,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/billing/**").authenticated()
                         .requestMatchers("/api/notifications/**", "/api/announcements").authenticated()
                         .requestMatchers("/api/auth/me", "/api/users/me", "/api/users/me/**").authenticated()
-                        .requestMatchers("/api/complaints", "/api/complaints/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/complaints").authenticated()
+                        .requestMatchers("/api/complaints/**").hasAnyRole("SUPPORT_OFFICER", "ADMINISTRATOR")
                         .requestMatchers("/api/reports", "/api/reports/**").authenticated()
                         .requestMatchers("/api/watchlist", "/api/history", "/api/videos/watchlist", "/api/videos/history", "/api/comments/**").authenticated()
                         // --- FR5, advertisement management ---------------------------

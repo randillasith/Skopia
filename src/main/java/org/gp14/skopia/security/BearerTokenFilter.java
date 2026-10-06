@@ -45,15 +45,9 @@ public class BearerTokenFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
             String header = request.getHeader("Authorization");
-            String actorHeader = request.getHeader("X-User-Id");
             Long id = null;
             if (header != null && header.startsWith("Bearer ")) {
                 id = tokens.verifyAndGetUserId(header.substring(7));
-            }
-            if (id == null && actorHeader != null && !actorHeader.isBlank()) {
-                try {
-                    id = Long.parseLong(actorHeader.trim());
-                } catch (Exception ignored) {}
             }
             if (id != null) {
                 User user = users.findById(id).orElse(null);

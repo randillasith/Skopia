@@ -9,18 +9,13 @@ import org.springframework.web.bind.annotation.*;
 import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.notification.NotificationService;
-import org.gp14.skopia.repository.UserRepository;
 import org.gp14.skopia.repository.VideoRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.server.ResponseStatusException;
 
-import org.gp14.skopia.complaint.Complaint;
-import org.gp14.skopia.complaint.ComplaintRepository;
-import org.gp14.skopia.complaint.ComplaintStatus;
 import org.gp14.skopia.complaint.dto.ResolveComplaintRequest;
 import java.util.List;
-import org.gp14.skopia.complaint.ComplaintService;
 import java.util.stream.Collectors;
 
 @RestController
@@ -28,26 +23,14 @@ import java.util.stream.Collectors;
 public class ReportController {
 
     private final ReportService reportService;
-    private final ReportRepository reportRepository;
-    private final ComplaintService complaintService;
-    private final ComplaintRepository complaintRepository;
     private final NotificationService notificationService;
-    private final UserRepository userRepository;
     private final VideoRepository videoRepository;
 
     public ReportController(ReportService reportService,
-                            ReportRepository reportRepository,
-                            ComplaintService complaintService,
-                            ComplaintRepository complaintRepository,
                             NotificationService notificationService,
-                            UserRepository userRepository,
                             VideoRepository videoRepository) {
         this.reportService = reportService;
-        this.reportRepository = reportRepository;
-        this.complaintService = complaintService;
-        this.complaintRepository = complaintRepository;
         this.notificationService = notificationService;
-        this.userRepository = userRepository;
         this.videoRepository = videoRepository;
     }
 
@@ -55,32 +38,21 @@ public class ReportController {
     @PostMapping
     public ResponseEntity<ReportResponse> submitReport(@Valid @RequestBody SubmitReportRequest request,
                                                        @AuthenticationPrincipal User principal) {
-        if (principal != null) {
-            request.setViewerId(principal.getId());
-        }
+        if (principal == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        request.setViewerId(principal.getId());
         Report saved = reportService.submitReport(request);
-        try {
-            Long viewerId = principal != null ? principal.getId() : saved.getViewerId();
-            complaintService.createComplaintFromReport(saved.getId(), viewerId);
-        } catch (Exception ignored) {}
 
         // Send notification to the reporting viewer that their report is received and under review
-        try {
-            User targetUser = principal;
-            if (targetUser == null && saved.getViewerId() != null) {
-                targetUser = userRepository.findById(saved.getViewerId()).orElse(null);
+        String videoTitle = null;
+        if (saved.getContentReference() != null && saved.getContentReference().startsWith("video:")) {
+            try {
+                Long videoId = Long.parseLong(saved.getContentReference().substring(6));
+                videoTitle = videoRepository.findById(videoId).map(Video::getTitle).orElse(null);
+            } catch (NumberFormatException ignored) {
+                // A non-video reference remains a valid general report.
             }
-            if (targetUser != null) {
-                String videoTitle = null;
-                if (saved.getContentReference() != null && saved.getContentReference().startsWith("video:")) {
-                    try {
-                        Long videoId = Long.parseLong(saved.getContentReference().substring(6));
-                        videoTitle = videoRepository.findById(videoId).map(Video::getTitle).orElse(null);
-                    } catch (Exception ignored) {}
-                }
-                notificationService.notifyViewerReportSubmitted(targetUser, saved.getId(), videoTitle);
-            }
-        } catch (Exception ignored) {}
+        }
+        notificationService.notifyViewerReportSubmitted(principal, saved.getId(), videoTitle);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(ReportResponse.fromEntity(saved));
     }
@@ -104,7 +76,7 @@ public class ReportController {
                                                                     Authentication authentication) {
         Long effectiveViewerId = isSupportStaff(authentication)
                 ? viewerId
-                : (principal != null ? principal.getId() : viewerId);
+                : requirePrincipal(principal).getId();
         List<ReportResponse> reports = reportService.getReportsForViewer(effectiveViewerId).stream()
                 .map(ReportResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -125,48 +97,21 @@ public class ReportController {
     @PostMapping("/{id}/resolve")
     public ResponseEntity<ReportResponse> resolveReport(@PathVariable Long id,
                                                         @RequestBody(required = false) ResolveComplaintRequest request,
-                                                        @AuthenticationPrincipal User principal) {
-        Report report = reportService.getReportById(id);
-        report.setStatus(ReportStatus.RESOLVED);
-        Report saved = reportRepository.save(report);
-
-        // Also resolve associated complaint if any
-        try {
-            List<Complaint> complaints = complaintRepository.findByReportId(id);
-            for (Complaint c : complaints) {
-                c.setStatus(ComplaintStatus.RESOLVED);
-                if (request != null && request.getResolutionNotes() != null) {
-                    c.setResolutionNotes(request.getResolutionNotes());
-                }
-                complaintRepository.save(c);
-            }
-        } catch (Exception ignored) {}
-
-        // Notify reporting viewer
-        try {
-            if (saved.getViewerId() != null) {
-                User viewer = userRepository.findById(saved.getViewerId()).orElse(null);
-                if (viewer != null) {
-                    String videoTitle = null;
-                    if (saved.getContentReference() != null && saved.getContentReference().startsWith("video:")) {
-                        try {
-                            Long vid = Long.parseLong(saved.getContentReference().substring(6));
-                            videoTitle = videoRepository.findById(vid).map(Video::getTitle).orElse(null);
-                        } catch (Exception ignored) {}
-                    }
-                    String notes = (request != null && request.getResolutionNotes() != null) ? request.getResolutionNotes() : "Reviewed and resolved by platform moderation.";
-                    notificationService.notifyViewerReportResolved(viewer, saved.getId(), notes, videoTitle);
-                }
-            }
-        } catch (Exception ignored) {}
-
+                                                        @AuthenticationPrincipal User principal,
+                                                        Authentication authentication) {
+        if (!isSupportStaff(authentication)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Staff only");
+        Report saved = reportService.resolveReport(id, request, requirePrincipal(principal).getId());
         return ResponseEntity.ok(ReportResponse.fromEntity(saved));
     }
 
     private boolean isSupportStaff(Authentication authentication) {
         return authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPPORT_OFFICER")
-                        || authority.getAuthority().equals("ROLE_ADMINISTRATOR")
-                        || authority.getAuthority().equals("ROLE_USER"));
+                        || authority.getAuthority().equals("ROLE_ADMINISTRATOR"));
+    }
+
+    private User requirePrincipal(User principal) {
+        if (principal == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        return principal;
     }
 }

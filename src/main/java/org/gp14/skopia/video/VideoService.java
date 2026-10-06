@@ -10,6 +10,7 @@ import org.gp14.skopia.model.video.Video;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.video.dto.*;
 import org.gp14.skopia.billing.BillingService;
+import org.gp14.skopia.complaint.ComplaintService;
 import org.gp14.skopia.notification.NotificationService;
 import org.springframework.stereotype.Service;
 import org.gp14.skopia.security.TokenService;
@@ -49,7 +50,7 @@ public class VideoService {
     private final WatchlistItemRepository watchlistItemRepository;
     private final BillingService billing;
     private final NotificationService notifications;
-    private final org.gp14.skopia.report.ReportRepository reportRepository;
+    private final ComplaintService complaints;
 
     public VideoService(
             VideoRepository videoRepository,
@@ -64,7 +65,7 @@ public class VideoService {
             WatchlistRepository watchlistRepository,
             WatchlistItemRepository watchlistItemRepository, VideoAccessService access, TokenService tokens, BillingService billing,
             NotificationService notifications,
-            org.gp14.skopia.report.ReportRepository reportRepository) {
+            ComplaintService complaints) {
         this.access = access;
         this.tokens = tokens;
         this.videoRepository = videoRepository;
@@ -80,7 +81,7 @@ public class VideoService {
         this.watchlistItemRepository = watchlistItemRepository;
         this.billing = billing;
         this.notifications = notifications;
-        this.reportRepository = reportRepository;
+        this.complaints = complaints;
     }
 
     public List<CategoryResponse> getCategories() {
@@ -101,6 +102,15 @@ public class VideoService {
         return categories.stream()
                 .map(c -> new CategoryResponse(c.getId(), c.getCategoryName()))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<VideoResponse> getAllVideosForModeration(Long viewerId) {
+        return videoRepository.findAll().stream()
+                .sorted(Comparator.comparing(Video::getUploadDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(Video::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(video -> mapToVideoResponse(video, viewerId))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -239,26 +249,13 @@ public class VideoService {
         video.setVideoStatus(normalized);
         Video saved = videoRepository.save(video);
 
-        try {
-            if ("PUBLISHED".equalsIgnoreCase(normalized)) {
-                // Video republished / restored
-                if (saved.getCreator() != null) {
-                    notifications.notifyVideoRepublished(saved.getCreator(), saved);
-                }
-            } else if ("ARCHIVED".equalsIgnoreCase(normalized) || "PULLED".equalsIgnoreCase(normalized) || "HELD_OVER".equalsIgnoreCase(normalized)) {
-                // Video taken down: notify creator and reporting viewers
-                List<User> reportingViewers = Collections.emptyList();
-                if (reportRepository != null) {
-                    List<org.gp14.skopia.report.Report> reports = reportRepository.findByContentReference("video:" + videoId);
-                    Set<Long> viewerIds = reports.stream()
-                            .map(org.gp14.skopia.report.Report::getViewerId)
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toSet());
-                    reportingViewers = userRepository.findAllById(viewerIds);
-                }
-                notifications.notifyVideoTakenDown(saved.getCreator(), reportingViewers, saved, reason);
+        if ("PUBLISHED".equalsIgnoreCase(normalized)) {
+            if (saved.getCreator() != null) {
+                notifications.notifyVideoRepublished(saved.getCreator(), saved);
             }
-        } catch (Exception ignored) {}
+        } else if ("ARCHIVED".equalsIgnoreCase(normalized) || "PULLED".equalsIgnoreCase(normalized) || "HELD_OVER".equalsIgnoreCase(normalized)) {
+            complaints.resolveReportsForVideoTakedown(saved, reason, viewerId);
+        }
 
         return mapToVideoResponse(saved, viewerId);
     }

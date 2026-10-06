@@ -44,6 +44,7 @@ class ReportComplaintIntegrationTest {
     @Autowired ContentCreatorRepository creators;
     @Autowired VideoRepository videos;
     @Autowired NotificationRepository notifications;
+    @Autowired ReportRepository reports;
 
     @Test
     void submittedVideoReportImmediatelyAppearsInAdminModerationQueueAndCanBeResolved() throws Exception {
@@ -99,11 +100,70 @@ class ReportComplaintIntegrationTest {
 
         assertThat(notifications.findByUserIdOrderByCreatedAtDesc(viewer.getId()))
                 .anySatisfy(notification -> {
-                    assertThat(notification.getNotifType()).isEqualTo("VIDEO_TAKEN_DOWN");
-                    assertThat(notification.getTitle()).contains("Reported Training Video");
-                    assertThat(notification.getMessage()).contains("reported").contains("taken down");
-                    assertThat(notification.getDedupeKey()).isEqualTo("VIDEO_TAKEN_DOWN:" + video.getId());
+                    assertThat(notification.getNotifType()).isEqualTo("REPORT_ACTION_TAKEDOWN");
+                    assertThat(notification.getMessage()).contains("Reported Training Video").contains("taken down");
+                    assertThat(notification.getDedupeKey()).startsWith("REPORT_ACTION_TAKEDOWN:" + video.getId() + ":" + viewer.getId());
                 });
+    }
+
+    @Test
+    void takedownResolvesReportNotifiesReporterAndArchivedVideoCanBeRepublished() throws Exception {
+        RegisteredViewer viewer = viewer("tdreporter");
+        Administrator admin = admin("tdadmin");
+        ContentCreator creator = creator("tdcreator");
+        Video video = video(creator, "Mistaken Takedown Video");
+
+        String response = mvc.perform(post("/api/reports")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"type":"INAPPROPRIATE_CONTENT","details":"Please review this video.","contentReference":"video:%d"}
+                                """.formatted(video.getId())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long reportId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("id").asLong();
+        long complaintId = complaints.findByReportId(reportId).get(0).getId();
+
+        mvc.perform(patch("/api/admin/videos/" + video.getId() + "/status")
+                        .header("Authorization", "Bearer " + tokens.issue(admin.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ARCHIVED\",\"reason\":\"Report upheld after review\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        assertThat(videos.findById(video.getId()).orElseThrow().getVideoStatus()).isEqualTo("ARCHIVED");
+        assertThat(reports.findById(reportId).orElseThrow().getStatus()).isEqualTo(ReportStatus.RESOLVED);
+        assertThat(complaints.findById(complaintId).orElseThrow().getStatus().name()).isEqualTo("RESOLVED");
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(viewer.getId()))
+                .extracting(notification -> notification.getNotifType())
+                .contains("REPORT_UNDER_REVIEW", "REPORT_ACTION_TAKEDOWN");
+
+        mvc.perform(get("/api/reports/viewer/" + viewer.getId())
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("RESOLVED"));
+
+        mvc.perform(get("/api/admin/videos")
+                        .header("Authorization", "Bearer " + tokens.issue(admin.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + video.getId() + ")].status").value(org.hamcrest.Matchers.hasItem("ARCHIVED")));
+
+        mvc.perform(patch("/api/admin/videos/" + video.getId() + "/status")
+                        .header("Authorization", "Bearer " + tokens.issue(admin.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"PUBLISHED\",\"reason\":\"Restored after mistaken takedown\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
+
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(creator.getId()))
+                .extracting(notification -> notification.getNotifType())
+                .contains("VIDEO_TAKEDOWN", "VIDEO_REPUBLISHED");
+
+        mvc.perform(get("/api/complaints/queue")
+                        .header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/complaints/queue").header("X-User-Id", admin.getId()))
+                .andExpect(status().isUnauthorized());
     }
 
     private RegisteredViewer viewer(String prefix) {
