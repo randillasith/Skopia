@@ -6,4 +6,5 @@ import java.util.Optional;
 
 public interface SubscriptionPlanRepository extends JpaRepository<SubscriptionPlan, Long> {
     Optional<SubscriptionPlan> findByPlanName(String planName);
+    boolean existsByPlanNameIgnoreCase(String planName);
 }

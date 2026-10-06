@@ -30,4 +30,11 @@ public class SubscriptionPlan {
 
     @Column(columnDefinition = "TEXT")
     private String benefit;
+
+    // Nullable for compatibility: legacy MONTHLY/YEARLY rows retain their benefits.
+    @Column(name = "ad_free")
+    private Boolean adFree;
+
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private Boolean active = true;
 }

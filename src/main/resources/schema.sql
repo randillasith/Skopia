@@ -235,7 +235,9 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
     plan_name VARCHAR(100) NOT NULL UNIQUE,
     price DECIMAL(10, 2) NOT NULL,
     duration_days INT NOT NULL,
-    benefit TEXT
+    benefit TEXT,
+    ad_free BOOLEAN NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 -- Subscriptions

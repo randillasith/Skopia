@@ -12,4 +12,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByViewerIdAndSubStatus(Long viewerId, String subStatus);
     List<Subscription> findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(Long viewerId, String subStatus, java.time.LocalDateTime now);
     List<Subscription> findByViewerIdOrderByEndDateDescIdDesc(Long viewerId);
+    java.util.Optional<Subscription> findByIdAndViewerId(Long id, Long viewerId);
+    boolean existsByPlanId(Long planId);
+    List<Subscription> findBySubStatusAndEndDateAfterAndEndDateLessThanEqual(
+            String status, java.time.LocalDateTime from, java.time.LocalDateTime until);
 }
