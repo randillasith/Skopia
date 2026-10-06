@@ -33,7 +33,9 @@ public class NotificationService {
     }
 
     public void notifyViewerOfVideoTakedown(Long viewerId, Long videoId, String videoTitle) {
-        users.findById(viewerId).ifPresent(user ->
-                platformNotifications.notifyVideoTakenDown(user, videoId, videoTitle));
+        users.findById(viewerId).ifPresent(user -> platformNotifications.create(
+                user, "Reported video taken down: " + videoTitle,
+                "The video \"" + videoTitle + "\" you reported has been taken down by platform moderation.",
+                "VIDEO_TAKEN_DOWN", "/reports", "VIDEO_TAKEN_DOWN:" + videoId));
     }
 }

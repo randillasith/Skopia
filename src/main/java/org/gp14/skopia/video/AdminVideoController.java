@@ -2,7 +2,6 @@ package org.gp14.skopia.video;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.gp14.skopia.complaint.ComplaintService;
 import org.gp14.skopia.model.user.ContentCreator;
 import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.user.UserManagementService;
@@ -23,12 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminVideoController {
     private final VideoService videos;
     private final UserManagementService users;
-    private final ComplaintService complaints;
 
-    public AdminVideoController(VideoService videos, UserManagementService users, ComplaintService complaints) {
+    public AdminVideoController(VideoService videos, UserManagementService users) {
         this.videos = videos;
         this.users = users;
-        this.complaints = complaints;
     }
 
     @PatchMapping("/{id}/status")
@@ -44,9 +41,7 @@ public class AdminVideoController {
                 "video " + id + " to " + request.getStatus() +
                         (request.getReason() == null || request.getReason().isBlank() ? "" : "; reason: " + request.getReason().trim()),
                 clientIp(httpRequest));
-        if ("ARCHIVED".equalsIgnoreCase(request.getStatus())) {
-            complaints.notifyReportersOfVideoTakedown(id, result.getTitle());
-        }
+        // VideoService already notifies the creator and reporting viewers.
         return result;
     }
 

@@ -74,11 +74,11 @@ public class NotificationService {
                 if (viewer == null || (creator != null && viewer.getId().equals(creator.getId()))) continue;
                 create(
                         viewer,
-                        "Action Taken on Your Report",
+                        "Reported video taken down: " + video.getTitle().substring(0, Math.min(220, video.getTitle().length())),
                         "The video \"" + video.getTitle() + "\" you reported has been taken down by platform moderation.",
-                        "REPORT_ACTION_TAKEDOWN",
+                        "VIDEO_TAKEN_DOWN",
                         "/reports",
-                        "REPORT_ACTION_TAKEDOWN:" + video.getId() + ":" + viewer.getId() + ":" + System.currentTimeMillis()
+                        "VIDEO_TAKEN_DOWN:" + video.getId()
                 );
             }
         }

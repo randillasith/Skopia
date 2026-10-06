@@ -45,15 +45,9 @@ public class BearerTokenFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
             String header = request.getHeader("Authorization");
-            String actorHeader = request.getHeader("X-User-Id");
             Long id = null;
             if (header != null && header.startsWith("Bearer ")) {
                 id = tokens.verifyAndGetUserId(header.substring(7));
-            }
-            if (id == null && actorHeader != null && !actorHeader.isBlank()) {
-                try {
-                    id = Long.parseLong(actorHeader.trim());
-                } catch (Exception ignored) {}
             }
             if (id != null) {
                 User user = users.findById(id).orElse(null);
@@ -61,7 +55,7 @@ public class BearerTokenFilter extends OncePerRequestFilter {
                     List<GrantedAuthority> authorities = new ArrayList<>();
                     authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
 
-                    if (user instanceof Administrator || admins.existsById(user.getId()) || "admin".equalsIgnoreCase(user.getUsername())) {
+                    if (user instanceof Administrator || admins.existsById(user.getId())) {
                         authorities.add(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"));
                         authorities.add(new SimpleGrantedAuthority("ROLE_SUPPORT_OFFICER"));
                     } else if (user instanceof SupportOfficer || supportOfficers.existsById(user.getId())) {

@@ -166,7 +166,6 @@ public class ReportController {
     private boolean isSupportStaff(Authentication authentication) {
         return authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_SUPPORT_OFFICER")
-                        || authority.getAuthority().equals("ROLE_ADMINISTRATOR")
-                        || authority.getAuthority().equals("ROLE_USER"));
+                        || authority.getAuthority().equals("ROLE_ADMINISTRATOR"));
     }
 }
