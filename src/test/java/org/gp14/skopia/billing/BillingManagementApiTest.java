@@ -35,6 +35,7 @@ class BillingManagementApiTest {
     @Autowired SubscriptionRepository subscriptions;
     @Autowired PaymentRepository payments;
     @Autowired RefundRepository refunds;
+    @Autowired NotificationRepository notifications;
     @Autowired ActivityLogRepository activityLogs;
     @Autowired TokenService tokens;
     @Autowired BillingService billing;
@@ -112,21 +113,21 @@ class BillingManagementApiTest {
 
         mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds").header("Authorization", bearer(other))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentId\":" + paymentId + ",\"reason\":\"Not mine\"}"))
+                        .content("{\"paymentId\":" + paymentId + ",\"category\":\"OTHER\",\"reason\":\"This is not mine\"}"))
                 .andExpect(status().isNotFound());
         mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentId\":" + paymentId + ",\"reason\":\"  Changed my mind  \"}"))
+                        .content("{\"paymentId\":" + paymentId + ",\"category\":\"ACCIDENTAL_PURCHASE\",\"reason\":\"  Changed my mind  \"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.reason").value("Changed my mind"));
         mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentId\":" + paymentId + ",\"reason\":\"Duplicate\"}"))
+                        .content("{\"paymentId\":" + paymentId + ",\"category\":\"DUPLICATE_PURCHASE\",\"reason\":\"Duplicate request\"}"))
                 .andExpect(status().isConflict());
         mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentId\":" + paymentId + ",\"reason\":\"" + "x".repeat(256) + "\"}"))
+                        .content("{\"paymentId\":" + paymentId + ",\"category\":\"OTHER\",\"reason\":\"" + "x".repeat(256) + "\"}"))
                 .andExpect(status().isBadRequest());
 
         mvc.perform(get("/api/billing/refunds").header("Authorization", bearer(owner)))
@@ -145,7 +146,7 @@ class BillingManagementApiTest {
         var payment = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0);
         mvc.perform(post("/api/billing/payments/" + payment.getId() + "/refunds").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentId\":" + payment.getId() + ",\"reason\":\"Please revoke\"}"))
+                        .content("{\"paymentId\":" + payment.getId() + ",\"category\":\"OTHER\",\"reason\":\"Please revoke\"}"))
                 .andExpect(status().isCreated());
         Refund refund = refunds.findAll().get(0);
 
@@ -192,7 +193,7 @@ class BillingManagementApiTest {
         Long paymentId = payments.findAll().get(0).getId();
         mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"paymentId\":" + paymentId + ",\"reason\":\"Review me\"}"))
+                        .content("{\"paymentId\":" + paymentId + ",\"category\":\"OTHER\",\"reason\":\"Review this request\"}"))
                 .andExpect(status().isCreated());
 
         mvc.perform(get("/api/billing/admin/users").header("Authorization", bearer(admin)))
@@ -203,5 +204,100 @@ class BillingManagementApiTest {
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].payment.id").value(paymentId.intValue()))
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].payment.payMethod").value("DEMO_TEST_VISA_0002"))
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].refund.status").value("PENDING"));
+    }
+
+    @Test
+    void refundEligibilityCategoryCancellationHistoryAndPermanentDuplicateRule() throws Exception {
+        RegisteredViewer owner = viewer("refundLifecycle");
+        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
+                .andExpect(status().isCreated());
+        Long paymentId = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0).getId();
+
+        mvc.perform(get("/api/billing/payments/" + paymentId + "/refund-eligibility")
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(true))
+                .andExpect(jsonPath("$.reason").value("ELIGIBLE"))
+                .andExpect(jsonPath("$.windowDays").value(30));
+
+        mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"ACCIDENTAL_PURCHASE\",\"reason\":\"Too short\"}"))
+                .andExpect(status().isBadRequest());
+
+        String created = mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"ACCIDENTAL_PURCHASE\",\"reason\":\"I selected the wrong demo subscription.\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.category").value("ACCIDENTAL_PURCHASE"))
+                .andExpect(jsonPath("$.currency").value("USD"))
+                .andExpect(jsonPath("$.simulation").value(true))
+                .andReturn().getResponse().getContentAsString();
+        long refundId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created).get("id").asLong();
+
+        mvc.perform(get("/api/billing/refunds/" + refundId + "/history")
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].toStatus").value("PENDING"));
+
+        mvc.perform(post("/api/billing/refunds/" + refundId + "/cancel")
+                        .header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"OTHER\",\"reason\":\"Trying to submit this payment again.\"}"))
+                .andExpect(status().isConflict());
+
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(owner.getId()))
+                .extracting(n -> n.getNotifType())
+                .contains("REFUND_REQUESTED", "REFUND_CANCELLED");
+    }
+
+    @Test
+    void adminRefundQueueSupportsDecisionNotificationFilteringCountAndCsv() throws Exception {
+        RegisteredViewer owner = viewer("refundQueueOwner");
+        Administrator admin = admin("refundQueueAdmin");
+        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("YEARLY")))
+                .andExpect(status().isCreated());
+        Long paymentId = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0).getId();
+        String created = mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds")
+                        .header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"TECHNICAL_ISSUE\",\"reason\":\"Premium access did not work as expected.\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long refundId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created).get("id").asLong();
+
+        mvc.perform(get("/api/billing/admin/refunds/pending-count").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.count").value(1));
+        mvc.perform(get("/api/billing/admin/refunds?status=PENDING&category=TECHNICAL_ISSUE&q=refundQueueOwner&page=0&size=25")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(refundId))
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        mvc.perform(post("/api/billing/admin/refunds/" + refundId + "/decision")
+                        .header("Authorization", bearer(admin)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"REJECTED\",\"note\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/billing/admin/refunds/" + refundId + "/decision")
+                        .header("Authorization", bearer(admin)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"REJECTED\",\"note\":\"Outside the demo refund policy.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(owner.getId()))
+                .extracting(n -> n.getNotifType()).contains("REFUND_REJECTED");
+        assertThat(notifications.findByUserIdOrderByCreatedAtDesc(admin.getId()))
+                .extracting(n -> n.getNotifType()).contains("REFUND_ADMIN_NEW");
+
+        mvc.perform(get("/api/billing/admin/refunds/export.csv?status=REJECTED")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", org.hamcrest.Matchers.containsString("text/csv")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("refundQueueOwner")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("4216000000000002"))));
     }
 }

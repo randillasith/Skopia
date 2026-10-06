@@ -85,6 +85,27 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   return (text ? JSON.parse(text) : undefined) as T
 }
 
+/** Fetch a server-generated file while preserving the same auth and error behavior. */
+export async function requestBlob(path: string, options: Omit<Options, 'body'> = {}): Promise<Blob> {
+  const headers: Record<string, string> = {}
+  if (options.actorId != null) headers[ACTOR_HEADER] = String(options.actorId)
+  const token = bearerToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  let response: Response
+  try {
+    response = await fetch(path, { method: options.method ?? 'GET', headers, signal: options.signal })
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
+    throw new ApiError(0, 'Could not reach Skopia. Check that the API is running.')
+  }
+  if (!response.ok) {
+    if (response.status === 401 && token) clearSession()
+    throw await toError(response)
+  }
+  return response.blob()
+}
+
 /** Upload a file. Separate from `request` because it must not set Content-Type. */
 export async function upload<T>(path: string, file: File, actorId: number | null): Promise<T> {
   const form = new FormData()

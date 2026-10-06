@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { Bell, BellRing, CheckCircle2, Megaphone, PlayCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Bell, BellRing, CheckCircle2, Megaphone, PlayCircle, Receipt, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useSession } from '@/lib/session-context'
@@ -56,6 +56,14 @@ function notifBadgeMeta(item: NotificationFeedItem) {
 
   const type = (item.type || '').toUpperCase()
   const title = (item.title || '').toLowerCase()
+
+  if (type.includes('REFUND') || title.includes('refund')) {
+    return {
+      icon: <Receipt size={17} />,
+      bg: type.includes('REJECTED') ? 'bg-rose-500/10 text-rose-400' : type.includes('APPROVED') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-tone-amber-400',
+      label: type.includes('ADMIN_NEW') ? 'Refund queue' : 'Refund update',
+    }
+  }
 
   if (type.includes('RESOLVED') || title.includes('resolved')) {
     return {
@@ -135,6 +143,7 @@ export function NotificationBell() {
     window.addEventListener('storage', onStorage)
     window.addEventListener('skopia:notifications-changed', onRefresh)
     window.addEventListener('skopia:reports-changed', onRefresh)
+    window.addEventListener('skopia:refunds-changed', onRefresh)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.clearInterval(interval)
@@ -142,6 +151,7 @@ export function NotificationBell() {
       window.removeEventListener('storage', onStorage)
       window.removeEventListener('skopia:notifications-changed', onRefresh)
       window.removeEventListener('skopia:reports-changed', onRefresh)
+      window.removeEventListener('skopia:refunds-changed', onRefresh)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [refresh])
@@ -224,7 +234,7 @@ export function NotificationBell() {
             <div className="flex items-center justify-between border-b border-ink-800 px-4 py-3">
               <div>
                 <p className="text-sm font-black text-fg">Notifications</p>
-                <p className="text-[11px] text-ink-500">Activity, report updates and announcements</p>
+                <p className="text-[11px] text-ink-500">Activity, refund and report updates, and announcements</p>
               </div>
               {hasAttention && <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" aria-label="New activity" />}
             </div>

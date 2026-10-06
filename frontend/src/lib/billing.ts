@@ -1,4 +1,4 @@
-import { request } from './api'
+import { request, requestBlob } from './api'
 
 /** Billing is a server-backed DEMO only. No card or real-money checkout exists here. */
 export type DemoPlan = {
@@ -21,6 +21,7 @@ export type SubscriptionStatus = {
 export type DemoPayment = {
   id: number
   amount: number
+  currency?: string | null
   paidDatetime: string | null
   payMethod: string | null
   payStatus: string | null
@@ -32,12 +33,24 @@ export type DemoPayment = {
 export type PlanChoice = 'MONTHLY' | 'YEARLY'
 export type DemoPaymentInput = { cardNumber: string; expiry: string; cardholderName: string }
 export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | string
+export type RefundCategory = 'ACCIDENTAL_PURCHASE' | 'TECHNICAL_ISSUE' | 'DUPLICATE_PURCHASE' | 'SERVICE_DISSATISFACTION' | 'OTHER'
+export const REFUND_CATEGORIES: { value: RefundCategory; label: string }[] = [
+  { value: 'ACCIDENTAL_PURCHASE', label: 'Accidental purchase' },
+  { value: 'TECHNICAL_ISSUE', label: 'Technical issue' },
+  { value: 'DUPLICATE_PURCHASE', label: 'Duplicate purchase' },
+  { value: 'SERVICE_DISSATISFACTION', label: 'Service dissatisfaction' },
+  { value: 'OTHER', label: 'Other' },
+]
 export type RefundRequest = {
   id: number
   paymentId: number
   subscriptionId: number | null
   planName: string | null
   amount: number | null
+  currency: string | null
+  category: RefundCategory | string
+  simulation: boolean
+  eligibleUntil: string | null
   reason: string
   status: RefundStatus
   requestedAt: string
@@ -48,6 +61,31 @@ export type RefundRequest = {
   processingNote: string | null
   username: string | null
   email: string | null
+}
+export type RefundEligibility = {
+  eligible: boolean
+  reason: string
+  windowDays: number
+  eligibleUntil?: string | null
+}
+export type RefundHistoryEntry = {
+  id?: number
+  refundId?: number
+  fromStatus: string | null
+  toStatus: string
+  changedById?: number | null
+  changedByUsername?: string | null
+  note?: string | null
+  changedAt?: string | null
+}
+export type AdminRefundFilters = { status: string; category: string; q: string; from?: string; to?: string; page: number; size: number }
+export type RefundPage = {
+  content: RefundRequest[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  hasNext: boolean
 }
 export type AdminSubscription = {
   userId: number
@@ -102,6 +140,26 @@ export function validateRefundReason(reason: string) {
   return null
 }
 
+export function validateRefundDecision(decision: 'APPROVED' | 'REJECTED', note: string) {
+  if (decision === 'REJECTED' && !note.trim()) return 'A rejection note is required.'
+  if (note.trim().length > 500) return 'Keep the decision note under 500 characters.'
+  return null
+}
+
+export function buildAdminRefundQuery(filters: AdminRefundFilters, includePaging = true) {
+  const query = new URLSearchParams()
+  if (filters.status) query.set('status', filters.status)
+  if (filters.category) query.set('category', filters.category)
+  if (filters.q.trim()) query.set('q', filters.q.trim())
+  if (filters.from) query.set('requestedFrom', filters.from)
+  if (filters.to) query.set('requestedTo', filters.to)
+  if (includePaging) {
+    query.set('page', String(Math.max(0, Math.floor(filters.page))))
+    query.set('size', String(Math.max(1, Math.floor(filters.size))))
+  }
+  return query.toString()
+}
+
 export function normalizeUnreadCount(payload: unknown) {
   if (typeof payload === 'number') return Math.max(0, Math.floor(payload))
   if (payload && typeof payload === 'object' && typeof (payload as { count?: unknown }).count === 'number') {
@@ -129,17 +187,28 @@ export const billing = {
     return request<unknown>('/api/billing/change-plan', { method: 'POST', actorId, body: { planName } })
   },
   refunds: (actorId: number, signal?: AbortSignal) => request<RefundRequest[]>('/api/billing/refunds', { actorId, signal }),
-  requestRefund: (paymentId: number, reason: string, actorId: number) => {
+  refundEligibility: (paymentId: number, actorId: number, signal?: AbortSignal) => request<RefundEligibility>(`/api/billing/payments/${paymentId}/refund-eligibility`, { actorId, signal }),
+  requestRefund: (paymentId: number, category: RefundCategory, reason: string, actorId: number) => {
     if (!Number.isInteger(paymentId) || paymentId <= 0) throw new Error('Choose a valid payment.')
+    if (!REFUND_CATEGORIES.some((item) => item.value === category)) throw new Error('Choose a refund category.')
     const error = validateRefundReason(reason)
     if (error) throw new Error(error)
     return request<RefundRequest>(`/api/billing/payments/${paymentId}/refunds`, { method: 'POST', actorId, body: {
+      category,
       reason: reason.trim().replace(/\s+/g, ' '),
     } })
   },
+  cancelRefund: (id: number, actorId: number) => request<RefundRequest>(`/api/billing/refunds/${id}/cancel`, { method: 'POST', actorId }),
+  refundHistory: (id: number, actorId: number, signal?: AbortSignal) => request<RefundHistoryEntry[]>(`/api/billing/refunds/${id}/history`, { actorId, signal }),
   adminUsers: (signal?: AbortSignal) => request<AdminSubscription[]>('/api/billing/admin/users', { signal }),
-  adminRefunds: (signal?: AbortSignal) => request<RefundRequest[]>('/api/billing/admin/refunds', { signal }),
-  decideRefund: (id: number, status: 'APPROVED' | 'REJECTED', decisionNote: string) => request<RefundRequest>(`/api/billing/admin/refunds/${id}/decision`, {
-    method: 'POST', body: { decision: status, note: decisionNote.trim() || null },
-  }),
+  adminRefunds: (filters: AdminRefundFilters, signal?: AbortSignal) => request<RefundPage>(`/api/billing/admin/refunds?${buildAdminRefundQuery(filters)}`, { signal }),
+  pendingRefundCount: async (signal?: AbortSignal) => normalizeUnreadCount(await request<unknown>('/api/billing/admin/refunds/pending-count', { signal })),
+  exportRefunds: (filters: AdminRefundFilters, signal?: AbortSignal) => requestBlob(`/api/billing/admin/refunds/export.csv?${buildAdminRefundQuery(filters, false)}`, { signal }),
+  decideRefund: async (id: number, status: 'APPROVED' | 'REJECTED', decisionNote: string) => {
+    const error = validateRefundDecision(status, decisionNote)
+    if (error) throw new Error(error)
+    return request<RefundRequest>(`/api/billing/admin/refunds/${id}/decision`, {
+      method: 'POST', body: { decision: status, note: decisionNote.trim() || null },
+    })
+  },
 }

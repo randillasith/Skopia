@@ -15,6 +15,10 @@ spring:
       max-file-size: 250MB
       max-request-size: 260MB
 skopia:
+  billing:
+    demo-enabled: ${SKOPIA_BILLING_DEMO_ENABLED:false}
+    # Refunds are simulated only; no payment gateway or money movement occurs.
+    refund-window-days: ${SKOPIA_BILLING_REFUND_WINDOW_DAYS:30}
   auth:
     secret: ${SKOPIA_AUTH_SECRET:}
     ttl-seconds: ${SKOPIA_AUTH_TTL_SECONDS:3600}

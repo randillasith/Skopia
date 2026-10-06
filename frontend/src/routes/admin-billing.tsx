@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Megaphone, Receipt } from 'lucide-react'
+import { FileDown, Megaphone, Receipt } from 'lucide-react'
 import { BackOfHouse } from '@/components/Shell'
-import { Button, EmptyState, Field, Input, Modal, Select, Table, Td, Textarea, Th, Tr, useToast } from '@/components/primitives'
+import { Button, EmptyState, Field, Input, Modal, SearchInput, Select, Table, Td, Textarea, Th, Tr, useToast } from '@/components/primitives'
 import { Letterboard } from '@/components/world'
-import { billing, type AdminSubscription, type RefundRequest } from '@/lib/billing'
+import { billing, REFUND_CATEGORIES, validateRefundDecision, type AdminRefundFilters, type AdminSubscription, type RefundPage, type RefundRequest } from '@/lib/billing'
 import { announcements, validateAnnouncement, type Announcement, type AnnouncementInput } from '@/lib/notifications'
 
 const date = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : '—'
@@ -30,36 +30,87 @@ export function AdminPlans() {
   </BackOfHouse>
 }
 
+const DEFAULT_REFUND_FILTERS: AdminRefundFilters = { status: '', category: '', q: '', from: '', to: '', page: 0, size: 25 }
+
 export function AdminRefunds() {
-  const [rows, setRows] = useState<RefundRequest[]>([])
+  const [result, setResult] = useState<RefundPage | null>(null)
+  const [filters, setFilters] = useState<AdminRefundFilters>(DEFAULT_REFUND_FILTERS)
+  const [draft, setDraft] = useState<AdminRefundFilters>(DEFAULT_REFUND_FILTERS)
+  const [pendingCount, setPendingCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<RefundRequest | null>(null)
   const [decision, setDecision] = useState<'APPROVED' | 'REJECTED'>('APPROVED')
   const [note, setNote] = useState('')
+  const [noteError, setNoteError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [revision, setRevision] = useState(0)
   const toast = useToast()
   useEffect(() => {
     const abort = new AbortController(); setLoading(true); setError(null)
-    billing.adminRefunds(abort.signal).then(setRows).catch((cause) => { if (!abort.signal.aborted) setError(errorText(cause)) }).finally(() => { if (!abort.signal.aborted) setLoading(false) })
+    Promise.all([billing.adminRefunds(filters, abort.signal), billing.pendingRefundCount(abort.signal)])
+      .then(([nextResult, count]) => { setResult(nextResult); setPendingCount(count) })
+      .catch((cause) => { if (!abort.signal.aborted) setError(errorText(cause)) })
+      .finally(() => { if (!abort.signal.aborted) setLoading(false) })
     return () => abort.abort()
-  }, [revision])
+  }, [filters, revision])
+  useEffect(() => {
+    const refresh = () => setRevision((value) => value + 1)
+    window.addEventListener('skopia:refunds-changed', refresh)
+    return () => window.removeEventListener('skopia:refunds-changed', refresh)
+  }, [])
+  const changed = () => {
+    window.dispatchEvent(new Event('skopia:refunds-changed'))
+    window.dispatchEvent(new Event('skopia:notifications-changed'))
+  }
   const decide = async () => {
     if (!selected || saving) return
+    const validation = validateRefundDecision(decision, note)
+    setNoteError(validation)
+    if (validation) return
     setSaving(true)
-    try { await billing.decideRefund(selected.id, decision, note); toast({ title: `Refund ${decision.toLowerCase()}`, tone: decision === 'APPROVED' ? 'ok' : 'info' }); setSelected(null); setRevision((n) => n + 1) }
-    catch (cause) { toast({ title: errorText(cause), tone: 'bad' }) }
+    try {
+      await billing.decideRefund(selected.id, decision, note)
+      toast({ title: `Refund ${decision.toLowerCase()}`, tone: decision === 'APPROVED' ? 'ok' : 'info' })
+      setSelected(null); changed()
+    } catch (cause) { toast({ title: errorText(cause), tone: 'bad' }) }
     finally { setSaving(false) }
   }
-  return <BackOfHouse title="Refund requests">
-    <p className="mb-5 max-w-3xl text-sm text-ink-300">Review requests against their owned simulated payment. Decisions are final in this console; an optional note is shown to the requester.</p>
-    {loading ? <p role="status">Loading refund requests…</p> : error ? <p role="alert" className="text-danger-400">{error}</p> : rows.length === 0 ? <EmptyState icon={<Receipt className="size-7" />} title="No refund requests" body="Submitted demo refund requests will appear here." /> :
-      <div className="rounded-lg border border-ink-700 bg-ink-850"><Table labels={['Request', 'Payment', 'Reason', 'Requested', 'Status', '']}><thead><Tr><Th>Request</Th><Th>Payment</Th><Th>Reason</Th><Th>Requested</Th><Th>Status</Th><Th /></Tr></thead><tbody>{rows.map((row) => <Tr key={row.id}>
-        <Td><span className="block text-fg">{row.username ? `@${row.username}` : `Request #${row.id}`}</span><span className="block text-xs text-ink-300">{row.email ?? `Subscription #${row.subscriptionId ?? '—'}`}</span></Td><Td>#{row.paymentId}{row.planName ? ` · ${row.planName}` : ''}{row.amount != null ? ` · ${row.amount}` : ''}</Td><Td className="max-w-sm whitespace-normal">{row.reason}{row.processingNote && <span className="mt-1 block text-xs text-ink-300">Decision: {row.processingNote}</span>}</Td><Td>{date(row.requestedAt)}</Td><Td><Letterboard tone={tone(row.status)}>{row.status}</Letterboard></Td><Td>{row.status === 'PENDING' && <Button size="sm" onClick={() => { setSelected(row); setDecision('APPROVED'); setNote('') }}>Decide</Button>}</Td>
+  const exportCsv = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const blob = await billing.exportRefunds(filters)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url; anchor.download = `skopia-refunds-${new Date().toISOString().slice(0, 10)}.csv`; anchor.click()
+      URL.revokeObjectURL(url)
+      toast({ title: 'Refund CSV exported', tone: 'ok' })
+    } catch (cause) { toast({ title: errorText(cause), tone: 'bad' }) }
+    finally { setExporting(false) }
+  }
+  const rows = result?.content ?? []
+  return <BackOfHouse title="Refund requests" actions={<div className="flex items-center gap-2"><span className="rounded-full border border-gold-400/40 px-3 py-1 text-xs text-tone-gold-300">{pendingCount} pending</span><Button size="sm" icon={<FileDown className="size-4" />} loading={exporting} onClick={() => void exportCsv()}>Export CSV</Button></div>}>
+    <p className="mb-5 max-w-3xl text-sm text-ink-300">Review categorized requests against their owned simulated payment. Rejections require a note shown to the requester.</p>
+    <form className="mb-5 grid gap-3 rounded-lg border border-ink-700 bg-ink-850 p-4 md:grid-cols-2 xl:grid-cols-7" onSubmit={(event) => { event.preventDefault(); setFilters({ ...draft, q: draft.q.trim(), page: 0 }) }}>
+      <Field label="Search"><SearchInput value={draft.q} onChange={(event) => setDraft({ ...draft, q: event.target.value })} placeholder="Username, email, payment or request" /></Field>
+      <Field label="Status"><Select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })}><option value="">All statuses</option>{['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].map((status) => <option key={status}>{status}</option>)}</Select></Field>
+      <Field label="Category"><Select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}><option value="">All categories</option>{REFUND_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Select></Field>
+      <Field label="From"><Input type="date" value={draft.from ?? ''} onChange={(event) => setDraft({ ...draft, from: event.target.value })} /></Field>
+      <Field label="To"><Input type="date" value={draft.to ?? ''} onChange={(event) => setDraft({ ...draft, to: event.target.value })} /></Field>
+      <Field label="Page size"><Select value={draft.size} onChange={(event) => setDraft({ ...draft, size: Number(event.target.value), page: 0 })}>{[25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}</Select></Field>
+      <div className="flex items-end gap-2"><Button type="submit">Apply</Button><Button type="button" variant="quiet" onClick={() => { setDraft(DEFAULT_REFUND_FILTERS); setFilters(DEFAULT_REFUND_FILTERS) }}>Reset</Button></div>
+    </form>
+    {loading ? <p role="status">Loading refund requests…</p> : error ? <p role="alert" className="text-danger-400">{error}</p> : rows.length === 0 ? <EmptyState icon={<Receipt className="size-7" />} title="No refund requests" body="No requests match the current filters." /> :
+      <div className="rounded-lg border border-ink-700 bg-ink-850"><Table labels={['Request', 'Payment', 'Category & reason', 'Requested', 'Status', '']}><thead><Tr><Th>Request</Th><Th>Payment</Th><Th>Category & reason</Th><Th>Requested</Th><Th>Status</Th><Th /></Tr></thead><tbody>{rows.map((row) => <Tr key={row.id}>
+        <Td><span className="block text-fg">{row.username ? `@${row.username}` : `Request #${row.id}`}</span><span className="block text-xs text-ink-300">{row.email ?? `Subscription #${row.subscriptionId ?? '—'}`}</span><span className="block font-mono text-[11px] text-ink-400">Refund #{row.id}</span></Td>
+        <Td>#{row.paymentId}{row.planName ? ` · ${row.planName}` : ''}<span className="block text-xs text-ink-300">{row.amount != null ? `${row.amount} ${row.currency ?? ''}` : 'Amount unavailable'}{row.simulation ? ' · simulated' : ''}</span></Td>
+        <Td className="max-w-sm whitespace-normal"><span className="letterboard text-[10px] text-tone-cyan-300">{row.category?.replaceAll('_', ' ') ?? 'UNCATEGORIZED'}</span><span className="mt-1 block">{row.reason}</span>{row.processingNote && <span className="mt-1 block text-xs text-ink-300">Decision: {row.processingNote}</span>}</Td><Td>{date(row.requestedAt)}{row.eligibleUntil && <span className="block text-xs text-ink-300">Eligible until {date(row.eligibleUntil)}</span>}</Td><Td><Letterboard tone={tone(row.status)}>{row.status}</Letterboard></Td><Td>{row.status === 'PENDING' && <Button size="sm" onClick={() => { setSelected(row); setDecision('APPROVED'); setNote(''); setNoteError(null) }}>Decide</Button>}</Td>
       </Tr>)}</tbody></Table></div>}
+    {result && result.totalPages > 1 && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-300"><span>Page {result.page + 1} of {result.totalPages} · {result.totalElements} requests</span><div className="flex gap-2"><Button size="sm" variant="quiet" disabled={result.page === 0 || loading} onClick={() => setFilters((current) => ({ ...current, page: current.page - 1 }))}>Previous</Button><Button size="sm" variant="quiet" disabled={!result.hasNext || loading} onClick={() => setFilters((current) => ({ ...current, page: current.page + 1 }))}>Next</Button></div></div>}
     <Modal open={selected != null} onClose={() => !saving && setSelected(null)} title="Decide refund request" description={selected ? `Request #${selected.id} for payment #${selected.paymentId}` : undefined} footer={<><Button variant="quiet" disabled={saving} onClick={() => setSelected(null)}>Cancel</Button><Button variant={decision === 'REJECTED' ? 'danger' : 'primary'} loading={saving} onClick={() => void decide()}>{decision === 'APPROVED' ? 'Approve refund' : 'Reject request'}</Button></>}>
-      <div className="space-y-4"><Field label="Decision"><Select value={decision} onChange={(event) => setDecision(event.target.value as 'APPROVED' | 'REJECTED')}><option value="APPROVED">Approve</option><option value="REJECTED">Reject</option></Select></Field><Field label="Decision note" hint="Optional"><Textarea maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Explain the decision to the requester." /></Field></div>
+      <div className="space-y-4"><Field label="Decision"><Select value={decision} onChange={(event) => { setDecision(event.target.value as 'APPROVED' | 'REJECTED'); setNoteError(null) }}><option value="APPROVED">Approve</option><option value="REJECTED">Reject</option></Select></Field><Field label="Decision note" required={decision === 'REJECTED'} hint={decision === 'APPROVED' ? 'Optional' : undefined} error={noteError ?? undefined}><Textarea maxLength={500} value={note} onChange={(event) => { setNote(event.target.value); setNoteError(null) }} placeholder={decision === 'REJECTED' ? 'Explain why this request is rejected.' : 'Add an optional note for the requester.'} /></Field></div>
     </Modal>
   </BackOfHouse>
 }

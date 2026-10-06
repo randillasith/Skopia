@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { Button, Field, Input, Modal, Textarea, useToast } from '@/components/primitives'
-import { billing, DEMO_TEST_CARD, validateDemoPayment, validateRefundReason, type DemoPayment, type RefundRequest, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
+import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/primitives'
+import { billing, DEMO_TEST_CARD, REFUND_CATEGORIES, validateDemoPayment, validateRefundReason, type DemoPayment, type RefundCategory, type RefundEligibility, type RefundHistoryEntry, type RefundRequest, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
 import { actorId as actorIdOf } from '@/lib/session'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
@@ -187,27 +187,44 @@ export function BillingHistory() {
   const toast = useToast()
   const [payments, setPayments] = useState<DemoPayment[] | null>(null)
   const [refunds, setRefunds] = useState<RefundRequest[] | null>(null)
+  const [eligibility, setEligibility] = useState<Record<number, RefundEligibility>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [selected, setSelected] = useState<DemoPayment | null>(null)
+  const [category, setCategory] = useState<RefundCategory>('ACCIDENTAL_PURCHASE')
   const [reason, setReason] = useState('')
   const [reasonError, setReasonError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [historyFor, setHistoryFor] = useState<RefundRequest | null>(null)
+  const [history, setHistory] = useState<RefundHistoryEntry[] | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   useEffect(() => {
     if (actor == null) return
     const abort = new AbortController()
     setLoading(true); setError(null)
     Promise.all([billing.payments(actor, abort.signal), billing.refunds(actor, abort.signal)])
-      .then(([nextPayments, nextRefunds]) => { setPayments(nextPayments); setRefunds(nextRefunds) })
+      .then(async ([nextPayments, nextRefunds]) => {
+        const checks = await Promise.all(nextPayments.map(async (payment) => {
+          try { return [payment.id, await billing.refundEligibility(payment.id, actor, abort.signal)] as const }
+          catch { return [payment.id, { eligible: false, reason: 'UNAVAILABLE', windowDays: 0 }] as const }
+        }))
+        if (!abort.signal.aborted) {
+          setPayments(nextPayments); setRefunds(nextRefunds); setEligibility(Object.fromEntries(checks))
+        }
+      })
       .catch((cause) => { if (!abort.signal.aborted) setError(message(cause)) })
       .finally(() => { if (!abort.signal.aborted) setLoading(false) })
     return () => abort.abort()
   }, [actor, revision])
 
+  const notifyRefundChange = () => {
+    window.dispatchEvent(new Event('skopia:refunds-changed'))
+    window.dispatchEvent(new Event('skopia:notifications-changed'))
+  }
   const openRefund = (payment: DemoPayment) => {
-    setSelected(payment); setReason(''); setReasonError(null)
+    setSelected(payment); setCategory('ACCIDENTAL_PURCHASE'); setReason(''); setReasonError(null)
   }
   const submitRefund = async () => {
     if (actor == null || selected == null || saving) return
@@ -216,44 +233,69 @@ export function BillingHistory() {
     if (validation) return
     setSaving(true)
     try {
-      await billing.requestRefund(selected.id, reason, actor)
+      await billing.requestRefund(selected.id, category, reason, actor)
       toast({ title: 'Refund request submitted', tone: 'ok' })
-      setSelected(null); setRevision((n) => n + 1)
+      setSelected(null); notifyRefundChange(); setRevision((n) => n + 1)
     } catch (cause) { setReasonError(message(cause)) }
     finally { setSaving(false) }
+  }
+  const cancelRefund = async (request: RefundRequest) => {
+    if (actor == null || saving || !window.confirm('Cancel this pending refund request? It cannot be resubmitted for this payment.')) return
+    setSaving(true)
+    try {
+      await billing.cancelRefund(request.id, actor)
+      toast({ title: 'Refund request cancelled', tone: 'ok' })
+      notifyRefundChange(); setRevision((n) => n + 1)
+    } catch (cause) { toast({ title: message(cause), tone: 'bad' }) }
+    finally { setSaving(false) }
+  }
+  const showHistory = async (request: RefundRequest) => {
+    if (actor == null) return
+    setHistoryFor(request); setHistory(null); setHistoryError(null)
+    try { setHistory(await billing.refundHistory(request.id, actor)) }
+    catch (cause) { setHistoryError(message(cause)) }
   }
 
   return <Page title="Demo billing history">
     {loading && <p role="status">Loading demo records…</p>}
     <Feedback error={error} retry={() => setRevision((n) => n + 1)} />
     {!loading && payments && refunds && (payments.length === 0 ? <p>No demo payment records yet.</p> : <ul className="space-y-3">{payments.map((payment) => {
-      const request = refunds.find((item) => item.paymentId === payment.id && !['REJECTED', 'CANCELLED'].includes(item.status))
-      const refundable = ['PAID', 'SUCCESS', 'SETTLED', 'SIMULATED'].includes(payment.payStatus ?? '')
+      const request = refunds.find((item) => item.paymentId === payment.id)
+      const check = eligibility[payment.id]
       return <li key={payment.id} className={box}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="font-semibold text-fg">{payment.planName ?? 'Demo pass'} · {payment.payStatus ?? 'Status unknown'}</p>
-            <p className="mt-2 text-sm text-ink-300">Demo amount: {payment.amount} (currency not specified)</p>
+            <p className="mt-2 text-sm text-ink-300">Demo amount: {payment.amount} {request?.currency ?? payment.currency ?? 'currency not specified'}</p>
             <p className="text-sm text-ink-300">{date(payment.paidDatetime)} · {payment.payMethod ?? 'Method not specified'}</p>
             {(payment.cardBrand || payment.cardLast4) && <p className="text-sm text-ink-300">Synthetic {payment.cardBrand ?? 'card'} ending {payment.cardLast4 ?? '—'}</p>}
+            {!request && check && <p className={`mt-2 text-xs ${check.eligible ? 'text-tone-cyan-300' : 'text-ink-400'}`}>{check.eligible ? `Eligible for ${check.windowDays} days${check.eligibleUntil ? `, until ${date(check.eligibleUntil)}` : ''}.` : `Not eligible: ${check.reason.replaceAll('_', ' ').toLowerCase()}.`}</p>}
           </div>
           {request ? <span className="letterboard rounded border border-gold-400/40 px-2 py-1 text-tone-gold-300">Refund {request.status}</span>
-            : <Button size="sm" disabled={!refundable} title={!refundable ? 'Only settled demo payments can be refunded.' : undefined} onClick={() => openRefund(payment)}>Request refund</Button>}
+            : <Button size="sm" disabled={!check?.eligible} title={!check?.eligible ? 'This payment is not eligible for a refund.' : undefined} onClick={() => openRefund(payment)}>Request refund</Button>}
         </div>
         {request && <div className="mt-4 border-t border-ink-700 pt-3 text-sm text-ink-300">
+          <p><span className="text-ink-100">Category:</span> {request.category?.replaceAll('_', ' ') ?? 'Not specified'}</p>
           <p><span className="text-ink-100">Reason:</span> {request.reason}</p>
+          <p><span className="text-ink-100">Amount:</span> {request.amount ?? payment.amount} {request.currency ?? ''} {request.simulation && '· simulated'}</p>
+          {request.eligibleUntil && <p><span className="text-ink-100">Eligible until:</span> {date(request.eligibleUntil)}</p>}
           {request.processingNote && <p className="mt-1"><span className="text-ink-100">Decision note:</span> {request.processingNote}</p>}
+          <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="quiet" onClick={() => void showHistory(request)}>View history</Button>{request.status === 'PENDING' && <Button size="sm" variant="danger" loading={saving} onClick={() => void cancelRefund(request)}>Cancel request</Button>}</div>
         </div>}
       </li>
     })}</ul>)}
-    <Modal open={selected != null} onClose={() => !saving && setSelected(null)} title="Request a demo refund" description="The request is tied to this payment. A second open request for the same payment is not allowed."
+    <Modal open={selected != null} onClose={() => !saving && setSelected(null)} title="Request a demo refund" description="Choose the category that best describes the request. Each payment can have only one refund request, even after cancellation."
       footer={<><Button variant="quiet" disabled={saving} onClick={() => setSelected(null)}>Cancel</Button><Button loading={saving} onClick={() => void submitRefund()}>Submit request</Button></>}>
-      {selected && <div>
-        <p className="mb-4 text-sm text-ink-300">Payment #{selected.id} · {selected.planName ?? 'Demo pass'} · amount {selected.amount}</p>
+      {selected && <div className="space-y-4">
+        <p className="text-sm text-ink-300">Payment #{selected.id} · {selected.planName ?? 'Demo pass'} · amount {selected.amount}</p>
+        <Field label="Category" required><Select value={category} onChange={(event) => setCategory(event.target.value as RefundCategory)}>{REFUND_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Select></Field>
         <Field label="Reason" required error={reasonError ?? undefined} hint={`${reason.trim().length}/255`}>
           <Textarea maxLength={255} value={reason} onChange={(event) => { setReason(event.target.value); setReasonError(null) }} placeholder="Explain why this demo payment should be refunded." />
         </Field>
       </div>}
+    </Modal>
+    <Modal open={historyFor != null} onClose={() => setHistoryFor(null)} title="Refund history" description={historyFor ? `Request #${historyFor.id} for payment #${historyFor.paymentId}` : undefined} footer={<Button onClick={() => setHistoryFor(null)}>Close</Button>}>
+      {historyError ? <p role="alert" className="text-tone-danger-400">{historyError}</p> : history == null ? <p role="status">Loading history…</p> : history.length === 0 ? <p>No history entries were returned.</p> : <ol className="space-y-3">{history.map((entry, index) => <li key={entry.id ?? index} className="rounded border border-ink-700 p-3 text-sm"><p className="font-medium text-fg">{entry.fromStatus ? `${entry.fromStatus} → ` : ''}{entry.toStatus}</p><p className="mt-1 text-ink-300">{date(entry.changedAt ?? null)}{entry.changedByUsername ? ` · by @${entry.changedByUsername}` : ''}</p>{entry.note && <p className="mt-1 text-ink-200">{entry.note}</p>}</li>)}</ol>}
     </Modal>
   </Page>
 }

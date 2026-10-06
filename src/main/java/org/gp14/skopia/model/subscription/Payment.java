@@ -36,6 +36,10 @@ public class Payment {
     @Column(name = "pay_status", nullable = false, length = 20)
     private String payStatus = "COMPLETED";
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency", nullable = false, length = 3)
+    private Currency currency = Currency.USD;
+
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
 
@@ -44,6 +48,7 @@ public class Payment {
         if (paidDatetime == null) {
             paidDatetime = LocalDateTime.now();
         }
+        if (currency == null) currency = Currency.USD;
     }
 
     /** Payments are ledger entries, not mutable account state. Corrections require a new record. */

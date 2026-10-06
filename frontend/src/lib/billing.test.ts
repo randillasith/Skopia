@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { billing, normalizePlans, validateDemoPayment, validateRefundReason } from './billing'
+import { billing, buildAdminRefundQuery, normalizePlans, validateDemoPayment, validateRefundDecision, validateRefundReason } from './billing'
 import { catalogue } from './catalogue'
 import { writeSession } from './auth-storage'
 
@@ -78,14 +78,51 @@ describe('demo billing client', () => {
     expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBe('POST')
   })
 
-  it('validates and normalizes refund requests before sending', async () => {
+  it('validates and normalizes categorized refund requests before sending', async () => {
     expect(validateRefundReason('too short')).toBeTruthy()
     expect(validateRefundReason('  A clear reason for this request.  ')).toBeNull()
-    await billing.requestRefund(12, '  Duplicate demo purchase   made by mistake. ', 7)
+    await billing.requestRefund(12, 'ACCIDENTAL_PURCHASE', '  Duplicate demo purchase   made by mistake. ', 7)
     const [path, init] = vi.mocked(fetch).mock.calls[0]
     expect(path).toBe('/api/billing/payments/12/refunds')
     expect(init?.method).toBe('POST')
-    expect(JSON.parse(String(init?.body))).toEqual({ reason: 'Duplicate demo purchase made by mistake.' })
+    expect(JSON.parse(String(init?.body))).toEqual({ category: 'ACCIDENTAL_PURCHASE', reason: 'Duplicate demo purchase made by mistake.' })
+  })
+
+  it('uses eligibility, cancellation and history contracts', async () => {
+    await billing.refundEligibility(12, 7)
+    await billing.cancelRefund(9, 7)
+    await billing.refundHistory(9, 7)
+    const calls = vi.mocked(fetch).mock.calls
+    expect(calls.map(([path]) => path)).toEqual([
+      '/api/billing/payments/12/refund-eligibility',
+      '/api/billing/refunds/9/cancel',
+      '/api/billing/refunds/9/history',
+    ])
+    expect(calls[1][1]?.method).toBe('POST')
+    expect(calls[0][1]?.headers).toMatchObject({ 'X-User-Id': '7' })
+  })
+
+  it('builds filtered paginated admin requests and reads pending counts', async () => {
+    expect(buildAdminRefundQuery({ status: 'PENDING', category: 'TECHNICAL_ISSUE', q: '  ada viewer ', page: 2, size: 25 }))
+      .toBe('status=PENDING&category=TECHNICAL_ISSUE&q=ada+viewer&page=2&size=25')
+    await billing.adminRefunds({ status: 'PENDING', category: 'TECHNICAL_ISSUE', q: 'ada', page: 0, size: 25 })
+    await billing.pendingRefundCount()
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/billing/admin/refunds?status=PENDING&category=TECHNICAL_ISSUE&q=ada&page=0&size=25')
+    expect(vi.mocked(fetch).mock.calls[1][0]).toBe('/api/billing/admin/refunds/pending-count')
+  })
+
+  it('requires a rejection note before sending a decision', async () => {
+    expect(validateRefundDecision('APPROVED', '')).toBeNull()
+    expect(validateRefundDecision('REJECTED', '   ')).toContain('required')
+    await expect(billing.decideRefund(9, 'REJECTED', '   ')).rejects.toThrow('required')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('downloads the CSV export with active filters', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('id,status\n9,REJECTED', { headers: { 'Content-Type': 'text/csv' } })))
+    const blob = await billing.exportRefunds({ status: 'REJECTED', category: '', q: 'ada', page: 0, size: 25 })
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/billing/admin/refunds/export.csv?status=REJECTED&q=ada')
+    expect(await blob.text()).toContain('REJECTED')
   })
 
   it('uses the immediate plan-change and admin decision contracts', async () => {
