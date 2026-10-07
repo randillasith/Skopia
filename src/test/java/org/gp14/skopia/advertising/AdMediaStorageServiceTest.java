@@ -79,7 +79,7 @@ class AdMediaStorageServiceTest {
     @DisplayName("a traversal attempt in the filename is just a name")
     void ignoresTraversalInTheFilename() {
         UploadedMediaResponse stored = media.store(actor, new MockMultipartFile(
-                "file", "../../../../etc/passwd.png", "image/png", PNG));
+                "file", "../../../../outside/fixture.png", "image/png", PNG));
 
         assertThat(stored.mediaUrl()).doesNotContain("..");
         assertThat(stored.mediaUrl()).startsWith("/uploads/ads/");

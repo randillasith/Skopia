@@ -54,7 +54,7 @@ async function prepare() {
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1EAAAAASUVORK5CYII=', 'base64'))
 
   for (const [role, username] of Object.entries({ marketing: 'm.madhusara', admin: 'p.punsara', creator: 'meridian' })) sessions[role] = await api('/api/auth/login', null, 'POST', { identifier: username, password: 'skopia' })
-  sessions.viewer = await api('/api/auth/register', null, 'POST', { username: 'fr5_' + Date.now(), email: tag + '@example.test', password: 'Fr5Test2026', firstName: 'FR5', lastName: 'Viewer' })
+  sessions.viewer = await api('/api/auth/register', null, 'POST', { username: 'fr5_' + Date.now(), email: tag + '@example.test', password: require('node:crypto').randomBytes(24).toString('hex'), firstName: 'FR5', lastName: 'Viewer' })
   category = (await api('/api/categories'))[0]
   const form = new FormData()
   form.append('title', tag + ' Feature'); form.append('categoryId', String(category.id)); form.append('accessType', 'FREE'); form.append('status', 'PUBLISHED'); form.append('durationSeconds', '24')
