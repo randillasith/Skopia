@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("test")
 @Transactional
 class AdMediaStorageServiceTest {
+    static final byte[] PNG = {(byte)137, 80, 78, 71, 13, 10, 26, 10};
+    static final byte[] MP4 = {0, 0, 0, 16, 102, 116, 121, 112, 105, 115, 111, 109};
 
     @Autowired AdMediaStorageService media;
     @Autowired AdvertisingFixture fixture;
@@ -33,7 +35,7 @@ class AdMediaStorageServiceTest {
     @DisplayName("a video is stored under a generated name and typed from the file")
     void storesAVideo() {
         UploadedMediaResponse stored = media.store(actor, new MockMultipartFile(
-                "file", "autumn-trailer.mp4", "video/mp4", new byte[] { 1, 2, 3 }));
+                "file", "autumn-trailer.mp4", "video/mp4", MP4));
 
         assertThat(stored.adType()).isEqualTo(AdType.VIDEO);
         assertThat(stored.originalFilename()).isEqualTo("autumn-trailer.mp4");
@@ -47,7 +49,7 @@ class AdMediaStorageServiceTest {
     @DisplayName("an image is recognised as one, so nobody has to restate it")
     void storesAnImage() {
         assertThat(media.store(actor, new MockMultipartFile(
-                "file", "standee.png", "image/png", new byte[] { 1 })).adType())
+                "file", "standee.png", "image/png", PNG)).adType())
                 .isEqualTo(AdType.IMAGE);
     }
 
@@ -77,7 +79,7 @@ class AdMediaStorageServiceTest {
     @DisplayName("a traversal attempt in the filename is just a name")
     void ignoresTraversalInTheFilename() {
         UploadedMediaResponse stored = media.store(actor, new MockMultipartFile(
-                "file", "../../../../etc/passwd.png", "image/png", new byte[] { 1 }));
+                "file", "../../../../etc/passwd.png", "image/png", PNG));
 
         assertThat(stored.mediaUrl()).doesNotContain("..");
         assertThat(stored.mediaUrl()).startsWith("/uploads/ads/");
@@ -106,5 +108,25 @@ class AdMediaStorageServiceTest {
         assertThatThrownBy(() -> media.store(viewer, new MockMultipartFile(
                 "file", "trailer.mp4", "video/mp4", new byte[] { 1 })))
                 .isInstanceOf(AdvertisingException.class);
+    }
+
+    @Test void rejectsSpoofedContentsEvenWithMatchingExtensionAndMime() {
+        assertThatThrownBy(() -> media.store(actor, new MockMultipartFile(
+                "file", "script.png", "image/png", "#!/bin/sh".getBytes())))
+                .isInstanceOf(AdvertisingException.class).hasMessageContaining("file contents");
+        assertThatThrownBy(() -> media.store(actor, new MockMultipartFile(
+                "file", "image.mp4", "video/mp4", PNG)))
+                .isInstanceOf(AdvertisingException.class).hasMessageContaining("file contents");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "jpg,image/jpeg,ffd8ff", "jpeg,image/jpeg,ffd8ff",
+            "gif,image/gif,474946383961", "webp,image/webp,524946460000000057454250",
+            "webm,video/webm,1a45dfa3", "mov,video/quicktime,000000106674797071742020"
+    })
+    void acceptsSupportedContainerSignatures(String extension, String mime, String hex) {
+        assertThat(media.store(actor, new MockMultipartFile("file", "creative." + extension, mime,
+                java.util.HexFormat.of().parseHex(hex))).mediaUrl()).endsWith("." + extension);
     }
 }

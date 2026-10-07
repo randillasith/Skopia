@@ -37,6 +37,9 @@ export type PlayerProps = {
   onReport: () => void
   /** Lets the page offer "share from here". */
   onTimeChange?: (t: number) => void
+  /** Pause for a blocking advertisement without losing the feature's position. */
+  interrupted?: boolean
+  onPlayingChange?: (playing: boolean) => void
 }
 
 function IconBtn({
@@ -78,6 +81,8 @@ export function Player({
   onEnded,
   onReport,
   onTimeChange,
+  interrupted = false,
+  onPlayingChange,
 }: PlayerProps) {
   const total = seconds(video.runtime)
   const chapters = chaptersFor(video.id)
@@ -109,6 +114,22 @@ export function Player({
    */
   const media = useRef<HTMLVideoElement>(null)
   const hasMedia = !!video.mediaUrl
+  const resumeAfterBreak = useRef(false)
+  const simulatedEndNotified = useRef(false)
+
+  useEffect(() => { onPlayingChange?.(playing) }, [playing, onPlayingChange])
+
+  useEffect(() => {
+    if (interrupted) {
+      resumeAfterBreak.current = media.current ? !media.current.paused : playing
+      media.current?.pause()
+    } else if (resumeAfterBreak.current) {
+      resumeAfterBreak.current = false
+      media.current?.play().catch(() => setPlaying(false))
+    }
+    // Preserve whether playback was running at the start of this interruption.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interrupted])
 
   useEffect(() => {
     onTimeChange?.(time)
@@ -152,20 +173,28 @@ export function Player({
   // Skipped entirely when a file is playing — there the file keeps the time.
   useEffect(() => {
     if (hasMedia) return
-    if (!playing || failed) return
+    if (!playing || failed || interrupted) return
     const id = window.setInterval(() => {
       setTime((t) => {
         if (t + speed >= total) {
           window.clearInterval(id)
           setPlaying(false)
-          onEnded?.()
           return total
         }
         return t + speed
       })
     }, 1000)
     return () => window.clearInterval(id)
-  }, [playing, speed, total, failed, onEnded])
+  }, [playing, speed, total, failed, onEnded, interrupted, hasMedia])
+
+  useEffect(() => {
+    if (hasMedia) return
+    if (time < total) simulatedEndNotified.current = false
+    else if (total > 0 && !simulatedEndNotified.current) {
+      simulatedEndNotified.current = true
+      onEnded?.()
+    }
+  }, [time, total, hasMedia, onEnded])
 
   // A seek moves the element when there is one, and the element's timeupdate
   // brings the state back. Setting both keeps the bar responsive while the
@@ -180,7 +209,8 @@ export function Player({
   )
 
   const toggleFull = useCallback(() => {
-    const el = shell.current
+    // Include the advertising surface so a mid-roll remains visible in fullscreen.
+    const el = shell.current?.closest<HTMLElement>('[data-ad-playback]') ?? shell.current
     if (!el) return
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
     else el.requestFullscreen?.().catch(() => {})
@@ -199,8 +229,10 @@ export function Player({
    */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (interrupted) return
       const el = e.target as HTMLElement | null
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return
+      if (el && /^(BUTTON|A)$/.test(el.tagName) && e.key === ' ') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
 
       const k = e.key
@@ -229,7 +261,7 @@ export function Player({
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [time, seek, toggle, toggleFull, theater, onTheater, total])
+  }, [time, seek, toggle, toggleFull, theater, onTheater, total, interrupted])
 
   const pct = (t: number) => (total === 0 ? 0 : (t / total) * 100)
   const current = chapters.filter((c) => c.at <= time).pop()

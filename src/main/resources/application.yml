@@ -25,6 +25,8 @@ skopia:
   cors:
     allowed-origins: ${SKOPIA_CORS_ALLOWED_ORIGINS:http://localhost:5175,http://localhost:5173}
   ads:
+    # Strategy implementation: rotation (default) or stable (deterministic ties).
+    selection: ${SKOPIA_AD_SELECTION:rotation}
     media:
       storage-dir: ${SKOPIA_ADS_MEDIA_STORAGE_DIR:uploads/ads}
       public-base: ${SKOPIA_ADS_MEDIA_PUBLIC_BASE:/uploads/ads}

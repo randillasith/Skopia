@@ -55,6 +55,26 @@ describe('authenticated API requests', () => {
     })
   })
 
+  it('downloads campaign CSV with authentication and the displayed inclusive date range', async () => {
+    writeSession({ token: 'signed-token', userId: 42 })
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('day,impressions,clicks\n2026-10-08,2,1', {
+      headers: { 'Content-Type': 'text/csv' },
+    }))
+    const csv = await ads.campaigns.csv(42, 7, '2026-10-01', '2026-10-08')
+    expect(await csv.text()).toContain('2026-10-08,2,1')
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/ad-campaigns/7/metrics.csv?from=2026-10-01&to=2026-10-08')
+    expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ Authorization: 'Bearer signed-token' })
+  })
+
+  it('requests every advertisement position with cancellation support', async () => {
+    const controller = new AbortController()
+    for (const slot of ['PREROLL', 'MIDROLL', 'POSTROLL', 'OVERLAY', 'LOBBY'] as const) {
+      await ads.serving.active(7, slot, { signal: controller.signal })
+      expect(vi.mocked(fetch).mock.lastCall?.[0]).toContain(`slot=${slot}`)
+      expect(vi.mocked(fetch).mock.lastCall?.[1]?.signal).toBe(controller.signal)
+    }
+  })
+
   it('adds bearer headers to upload and multipart requests without setting content type', async () => {
     writeSession({ token: 'signed-token', userId: 42 })
     await upload('/api/advertisements/media', new File(['x'], 'x.png'), 42)
