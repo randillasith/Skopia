@@ -59,7 +59,7 @@ export function validateSlip(slip: File | null): string | null {
 function cleanBilling(input: BillingContact) {
   const errors = validateBilling(input)
   if (Object.keys(errors).length) throw new Error(Object.values(errors)[0])
-  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value.trim()])) as BillingContact
+  return Object.fromEntries((['fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'city', 'postalCode', 'country'] as const).map((key) => [key, input[key].trim()])) as BillingContact
 }
 export type SubscriptionStatus = {
   adFree: boolean
@@ -197,6 +197,11 @@ export function normalizeUnreadCount(payload: unknown) {
 export const billing = {
   plans: async (signal?: AbortSignal) => normalizePlans(await request<DemoPlan[] | { demoEnabled?: boolean; previewMode?: boolean; currency?: string; plans: DemoPlan[] }>('/api/billing/plans', { signal })),
   orders: (actorId: number, signal?: AbortSignal) => request<OrderView[]>('/api/billing/orders', { actorId, signal }),
+  demoCard: (contact: BillingContact, brand: 'VISA' | 'MASTERCARD', actorId: number) => {
+    if (!['VISA', 'MASTERCARD'].includes(brand)) throw new Error('Unsupported test-card brand.')
+    return request<OrderView>('/api/billing/orders/demo-card', { method: 'POST', actorId,
+      body: { planName: 'MONTHLY', brand, billing: cleanBilling(contact) } })
+  },
   complimentary: (contact: BillingContact, actorId: number) =>
     request<OrderView>('/api/billing/orders/complimentary', { method: 'POST', actorId,
       body: { planName: 'MONTHLY', billing: cleanBilling(contact) } }),

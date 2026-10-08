@@ -70,7 +70,14 @@ public class SimulatedOrderService {
     /** No-charge test-card UX: only a derived network brand reaches the server. No payment is recorded. */
     @Transactional
     public BillingDtos.OrderView noChargeCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
-        checkLegacyOrdersEnabled(); checkEnabled(); checkPlan(plan);
+        checkLegacyOrdersEnabled();
+        return demoCard(id, plan, brand, contact);
+    }
+
+    /** Explicitly gated demo checkout: receives only the derived network, never card credentials. */
+    @Transactional
+    public BillingDtos.OrderView demoCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
+        checkEnabled(); checkPlan(plan);
         if (!List.of("VISA", "MASTERCARD").contains(brand)) bad("Unsupported test-card brand");
         Viewer owner=lockViewer(id);
         BillingOrder order=create(owner,plan,"NO_CHARGE_TEST_CARD",brand,contact);
