@@ -133,18 +133,6 @@ public class UserManagementService {
         return response(user);
     }
 
-    public UserResponse assignStaff(User actor, Long userId, AssignStaffRequest request, String ipAddress) {
-        User user = userRepository.findByIdForStaffAssignment(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with ID: " + userId));
-        if (staffRoles.staffType(userId).isPresent())
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Account already has staff access");
-        saveAssignment(user, request, null);
-        user.setAuthVersion((user.getAuthVersion() == null ? 0L : user.getAuthVersion()) + 1L);
-        userRepository.save(user);
-        logActivity(actor, user, "STAFF_ACCESS_ASSIGNED", "staff type: " + request.getStaffType(), ipAddress);
-        return response(user);
-    }
-
     public UserResponse updateStaffProfile(User actor, Long userId, UpdateStaffProfileRequest request, String ipAddress) {
         User user = userRepository.findByIdForStaffAssignment(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with ID: " + userId));
