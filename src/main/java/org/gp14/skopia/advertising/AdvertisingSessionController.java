@@ -2,7 +2,8 @@ package org.gp14.skopia.advertising;
 
 import org.gp14.skopia.advertising.dto.AdvertisingSessionResponse;
 import org.gp14.skopia.model.user.User;
-import org.gp14.skopia.repository.MarketingOfficerRepository;
+import org.gp14.skopia.model.user.StaffType;
+import org.gp14.skopia.user.StaffRoleService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,20 +25,19 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/advertising")
 public class AdvertisingSessionController {
 
-    private final MarketingOfficerRepository officers;
     private final AdvertisingAccess access;
+    private final StaffRoleService staffRoles;
 
-    public AdvertisingSessionController(MarketingOfficerRepository officers,
-                                        AdvertisingAccess access) {
-        this.officers = officers;
+    public AdvertisingSessionController(AdvertisingAccess access, StaffRoleService staffRoles) {
         this.access = access;
+        this.staffRoles = staffRoles;
     }
 
     @GetMapping("/session")
     public AdvertisingSessionResponse session(@AuthenticationPrincipal User principal) {
         User user = access.require(AdvertisingAccess.idOf(principal));
 
-        boolean isOfficer = officers.existsById(user.getId());
+        boolean isOfficer = staffRoles.hasRole(user.getId(), StaffType.MARKETING_OFFICER);
         return new AdvertisingSessionResponse(
                 user.getId(),
                 user.getUsername(),

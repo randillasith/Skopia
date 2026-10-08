@@ -5,7 +5,7 @@ import org.gp14.skopia.advertising.dto.CampaignResponse;
 import org.gp14.skopia.advertising.dto.CampaignTotalsRow;
 import org.gp14.skopia.advertising.dto.PlacementResponse;
 import org.gp14.skopia.model.advertisement.AdCampaign;
-import org.gp14.skopia.model.user.MarketingOfficer;
+import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.repository.AdCampaignRepository;
 import org.gp14.skopia.repository.AdImpressionRepository;
 import org.gp14.skopia.repository.AdPlacementRepository;
@@ -114,7 +114,7 @@ public class AdCampaignService {
 
     @Transactional
     public CampaignResponse create(Long actorId, CampaignRequest request) {
-        MarketingOfficer officer = access.actingOfficer(actorId);
+        User officer = access.actingOfficer(actorId);
         checkWindow(request.startDate(), request.endDate());
 
         AdCampaign campaign = new AdCampaign();
@@ -310,7 +310,7 @@ public class AdCampaignService {
                 .sorted(Comparator.comparing(PlacementResponse::targetLabel))
                 .forEach(p -> targets.add(p.targetLabel()));
 
-        MarketingOfficer owner = c.getCreatedBy();
+        User owner = c.getCreatedBy();
         return new CampaignResponse(
                 c.getId(),
                 c.getCampaignName(),
@@ -331,7 +331,7 @@ public class AdCampaignService {
                 ctr(shown, clicked));
     }
 
-    private static String displayName(MarketingOfficer officer) {
+    private static String displayName(User officer) {
         String first = officer.getFirstName() == null ? "" : officer.getFirstName();
         String last = officer.getLastName() == null ? "" : officer.getLastName();
         String full = (first + " " + last).trim();
