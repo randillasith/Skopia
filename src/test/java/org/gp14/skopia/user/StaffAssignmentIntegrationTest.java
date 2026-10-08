@@ -67,7 +67,36 @@ class StaffAssignmentIntegrationTest {
         assertEquals(User.class, created.getClass());
         assertFalse(legacyStaff.existsById(created.getId()));
         assertEquals(StaffType.SUPPORT_OFFICER, assignments.findById(created.getId()).orElseThrow().getStaffType());
+        assertEquals("Support Officer", assignments.findById(created.getId()).orElseThrow().getDesignation());
         assertEquals("SUPPORT_OFFICER", response.getStaffType());
+    }
+
+    @Test
+    void generatesCanonicalMarketingDesignationAndSequentialOfficerCodes() {
+        User actor = user("marketing_actor", "marketing-actor@example.test");
+        User first = user("marketing_one", "marketing-one@example.test");
+        User second = user("marketing_two", "marketing-two@example.test");
+
+        AssignStaffRequest request = new AssignStaffRequest();
+        request.setStaffType(StaffType.MARKETING_OFFICER);
+        request.setDesignation("Ignored custom title");
+        request.setOfficerCode("IGNORED-999");
+        request.setHireDate(LocalDate.of(2026, 10, 8));
+        request.setDepartment(MarketingDepartment.MARKETING);
+
+        management.assignStaff(actor, first.getId(), request, "127.0.0.1");
+        management.assignStaff(actor, second.getId(), request, "127.0.0.1");
+
+        StaffAssignment firstAssignment = assignments.findById(first.getId()).orElseThrow();
+        StaffAssignment secondAssignment = assignments.findById(second.getId()).orElseThrow();
+        assertEquals("Marketing Officer", firstAssignment.getDesignation());
+        assertEquals("Marketing Officer", secondAssignment.getDesignation());
+        assertTrue(firstAssignment.getOfficerCode().matches("MKT-\\d{3,}"));
+        assertTrue(secondAssignment.getOfficerCode().matches("MKT-\\d{3,}"));
+        assertNotEquals(firstAssignment.getOfficerCode(), secondAssignment.getOfficerCode());
+        long firstNumber = Long.parseLong(firstAssignment.getOfficerCode().substring(4));
+        long secondNumber = Long.parseLong(secondAssignment.getOfficerCode().substring(4));
+        assertEquals(firstNumber + 1, secondNumber);
     }
 
     @Test

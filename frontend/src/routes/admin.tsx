@@ -33,7 +33,7 @@ import {
   type Account, type StaffRole,
 } from '@/lib/session'
 import {
-  buildStaffAssignmentPayload, passwordValidationMessage,
+  buildStaffAssignmentPayload, designationForStaffType, passwordValidationMessage,
   type StaffCatalog, type StaffFormValues, type StaffType,
 } from '@/lib/staff'
 
@@ -225,7 +225,7 @@ export function AdminDashboard() {
 /* ============================================================== accounts */
 
 const EMPTY_DETAILS: StaffFormValues = {
-  staffType: 'SUPPORT_OFFICER', designation: '', hireDate: '',
+  staffType: 'SUPPORT_OFFICER', designation: 'Support Officer', hireDate: '',
   supportLevel: '', shift: '', adminLevel: '', officerCode: '', department: '',
 }
 
@@ -239,11 +239,14 @@ function StaffFields({ value, onChange, catalog }: {
     (items ?? []).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)
   return <>
     <Field label="Staff type" required>
-      <Select value={value.staffType} onChange={(e) => onChange({ ...EMPTY_DETAILS, designation: value.designation, hireDate: value.hireDate, staffType: e.target.value as StaffType })}>
+      <Select value={value.staffType} onChange={(e) => {
+        const staffType = e.target.value as StaffType
+        onChange({ ...EMPTY_DETAILS, designation: designationForStaffType(staffType), hireDate: value.hireDate, staffType })
+      }}>
         {options(catalog?.staffTypes)}
       </Select>
     </Field>
-    <Field label="Designation" required><Input required value={value.designation} onChange={(e) => set('designation', e.target.value)} /></Field>
+    <Field label="Designation" hint="Automatic"><Input readOnly value={designationForStaffType(value.staffType)} /></Field>
     <Field label="Hire date" required><Input required type="date" value={value.hireDate} onChange={(e) => set('hireDate', e.target.value)} /></Field>
     {value.staffType === 'ADMINISTRATOR' && <Field label="Admin level" required><Select required value={value.adminLevel ?? ''} onChange={(e) => set('adminLevel', e.target.value)}><option value="">Select a level</option>{options(catalog?.adminLevels)}</Select></Field>}
     {value.staffType === 'SUPPORT_OFFICER' && <>
@@ -251,7 +254,7 @@ function StaffFields({ value, onChange, catalog }: {
       <Field label="Shift" required><Select required value={value.shift ?? ''} onChange={(e) => set('shift', e.target.value)}><option value="">Select a shift</option>{options(catalog?.supportShifts)}</Select></Field>
     </>}
     {value.staffType === 'MARKETING_OFFICER' && <>
-      <Field label="Officer code" required><Input required value={value.officerCode ?? ''} onChange={(e) => set('officerCode', e.target.value)} /></Field>
+      <Field label="Officer code" hint="Automatic"><Input readOnly value={value.officerCode ?? ''} placeholder="Generated when saved" /></Field>
       <Field label="Department" required><Select required value={value.department ?? ''} onChange={(e) => set('department', e.target.value)}><option value="">Select a department</option>{options(catalog?.marketingDepartments)}</Select></Field>
     </>}
   </>
@@ -685,7 +688,7 @@ export function AdminAccounts() {
 
 const EMPTY_STAFF: CreateStaffInput = {
   username: '', email: '', password: '', firstName: '', lastName: '',
-  designation: '', hireDate: '', staffType: 'SUPPORT_OFFICER', supportLevel: '', shift: '',
+  designation: 'Support Officer', hireDate: '', staffType: 'SUPPORT_OFFICER', supportLevel: '', shift: '',
 }
 
 export function AdminRoles() {
