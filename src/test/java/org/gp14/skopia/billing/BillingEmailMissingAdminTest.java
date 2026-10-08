@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest @ActiveProfiles("test")
-@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.mail.enabled=true", "skopia.mail.cron=-",
+@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.billing.legacy-orders-enabled=true", "skopia.mail.enabled=true", "skopia.mail.cron=-",
         "skopia.mail.from=sender@example.test", "skopia.mail.host=mail.example.test",
         "skopia.mail.username=test-user", "skopia.mail.password=test-only",
         "skopia.mail.main-admin-username=billing-mail-test-admin"})

@@ -20,13 +20,17 @@ public class BillingMailService {
     @Transactional(propagation=Propagation.MANDATORY)
     public void receipt(BillingOrder order) {
         Subscription s=order.getSubscription();
-        String body="Skopia no-charge subscription receipt / access confirmation\n\n"
+        boolean complimentary="COMPLIMENTARY".equals(order.getMethod());
+        String body=(complimentary ? "Skopia complimentary access confirmation\n\n" : "Skopia no-charge subscription receipt / access confirmation\n\n")
                 +"Order reference: "+order.getReference()+"\nPlan: "+order.getPlanName()
                 +"\nAccess: 30-day, nonrenewing pass\nStarts: "+s.getStartDate()
-                +"\nEnds: "+s.getEndDate()+"\nTotal due: LKR 0\n"
-                +"This checkout used a test card. No payment was made, no money was charged, and there is no automatic renewal.\n";
-        enqueue("NO_CHARGE_RECEIPT:"+order.getId(),order.getEmail(),"Skopia no-charge access confirmation",body);
-        enqueue("NO_CHARGE_RECEIPT:"+order.getId(),MAIN_ADMIN_RECIPIENT,"Skopia no-charge access confirmation",body);
+                +"\nEnds: "+s.getEndDate()+"\nListed monthly price: LKR 500\nAmount due: LKR 0\n"
+                +(complimentary ? "Complimentary activation; no payment was made and there is no automatic renewal.\n"
+                        : "This checkout used a test card. No payment was made, no money was charged, and there is no automatic renewal.\n");
+        String event=(complimentary ? "COMPLIMENTARY_RECEIPT:" : "NO_CHARGE_RECEIPT:")+order.getId();
+        String subject=complimentary ? "Skopia complimentary access confirmation" : "Skopia no-charge access confirmation";
+        enqueue(event,order.getEmail(),subject,body);
+        enqueue(event,MAIN_ADMIN_RECIPIENT,subject,body);
     }
     @Transactional(propagation=Propagation.MANDATORY)
     public void refund(Refund refund) {

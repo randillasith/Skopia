@@ -37,14 +37,19 @@ public class SimulatedOrderService {
     private final EntityManager em;
     private final BillingMailService billingMail;
     private final boolean enabled;
+    // Off by default even when complimentary billing is enabled. The opt-in supports
+    // isolated compatibility tests; do not enable it for ordinary checkout.
+    private final boolean legacyOrdersEnabled;
     private final Path storage;
 
     public SimulatedOrderService(BillingOrderRepository orders, UserRepository users, SubscriptionPlanRepository plans,
             SubscriptionRepository subscriptions, PaymentRepository payments, EntityManager em, BillingMailService billingMail,
             @Value("${skopia.billing.demo-enabled:false}") boolean enabled,
+            @Value("${skopia.billing.legacy-orders-enabled:false}") boolean legacyOrdersEnabled,
             @Value("${skopia.billing.private-storage-dir:${user.home}/.skopia/private-billing-slips}") String storage) {
         this.orders=orders; this.users=users; this.plans=plans; this.subscriptions=subscriptions;
         this.payments=payments; this.em=em; this.billingMail=billingMail; this.enabled=enabled;
+        this.legacyOrdersEnabled=legacyOrdersEnabled;
         this.storage=Path.of(storage).toAbsolutePath().normalize();
         if (this.storage.startsWith(Path.of("uploads").toAbsolutePath().normalize()) ||
                 this.storage.startsWith(Path.of("src/main/resources/static").toAbsolutePath().normalize()))
@@ -53,7 +58,7 @@ public class SimulatedOrderService {
 
     @Transactional
     public BillingDtos.OrderView card(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
-        checkEnabled(); checkPlan(plan);
+        checkLegacyOrdersEnabled(); checkEnabled(); checkPlan(plan);
         if (!List.of("VISA","MASTERCARD","AMEX").contains(brand)) bad("Unsupported preview brand");
         Viewer owner=lockViewer(id);
         BillingOrder o=create(owner,plan,"CARD_PREVIEW",brand,contact);
@@ -65,7 +70,7 @@ public class SimulatedOrderService {
     /** No-charge test-card UX: only a derived network brand reaches the server. No payment is recorded. */
     @Transactional
     public BillingDtos.OrderView noChargeCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
-        checkEnabled(); checkPlan(plan);
+        checkLegacyOrdersEnabled(); checkEnabled(); checkPlan(plan);
         if (!List.of("VISA", "MASTERCARD").contains(brand)) bad("Unsupported test-card brand");
         Viewer owner=lockViewer(id);
         BillingOrder order=create(owner,plan,"NO_CHARGE_TEST_CARD",brand,contact);
@@ -79,10 +84,24 @@ public class SimulatedOrderService {
         return view(order);
     }
 
+    /** Complimentary access has no card, payment, or automatic renewal. */
+    @Transactional
+    public BillingDtos.OrderView complimentary(Long id, String plan, BillingDtos.BillingContact contact) {
+        checkEnabled(); checkPlan(plan);
+        Viewer owner=lockViewer(id);
+        BillingOrder order=create(owner,plan,"COMPLIMENTARY",null,contact);
+        order.setReference("COMP-"+UUID.randomUUID());
+        order.setAmount(BigDecimal.ZERO);
+        order.setStatus("NO_CHARGE_ACTIVE");
+        order.setSubscription(issueEntitlement(owner));
+        order=orders.saveAndFlush(order);
+        billingMail.receipt(order);
+        return view(order);
+    }
     @Transactional
     public BillingDtos.OrderView bank(Long id, String plan, BillingDtos.BillingContact contact,
                                        String reference, MultipartFile slip) {
-        checkEnabled(); checkPlan(plan);
+        checkLegacyOrdersEnabled(); checkEnabled(); checkPlan(plan);
         Viewer owner=lockViewer(id);
         byte[] bytes;
         try {
@@ -199,13 +218,15 @@ public class SimulatedOrderService {
     }
     private BillingDtos.OrderView view(BillingOrder o) {
         return new BillingDtos.OrderView(o.getId(),o.getOwner().getId(),o.getOwner().getUsername(),o.getReference(),o.getPlanName(),o.getAmount(),o.getCurrency(),
-                o.getMethod(),o.getBrand(),o.getStatus(),true,o.getSubmittedAt(),
+                o.getMethod(),o.getBrand(),o.getStatus(),!"COMPLIMENTARY".equals(o.getMethod()),o.getSubmittedAt(),
                 new BillingDtos.BillingContact(o.getFullName(),o.getEmail(),o.getPhone(),o.getAddressLine1(),
                     o.getAddressLine2(),o.getCity(),o.getPostalCode(),o.getCountry()),
                 o.getTransferReference(),o.getDecidedBy()==null?null:o.getDecidedBy().getId(),o.getDecidedAt(),
                 o.getDecisionNote(),o.getSubscription()==null?null:o.getSubscription().getId(),
                 o.getPayment()==null?null:o.getPayment().getId(),
-                "NO_CHARGE_TEST_CARD".equals(o.getMethod())
+                "COMPLIMENTARY".equals(o.getMethod())
+                    ? "Complimentary 30-day access. Listed monthly price LKR 500; amount due LKR 0. No automatic renewal."
+                    : "NO_CHARGE_TEST_CARD".equals(o.getMethod())
                     ? "No charge · test cards only · no payment. A 30-day nonrenewing access pass was issued."
                     : "TEST ONLY: preview amount; no actual payment, bank transfer verification, or money movement.");
     }
@@ -221,6 +242,9 @@ public class SimulatedOrderService {
             throw new ResponseStatusException(actor==null?HttpStatus.UNAUTHORIZED:HttpStatus.FORBIDDEN);
     }
     private void checkEnabled() { if(!enabled) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Preview billing disabled"); }
+    public void checkLegacyOrdersEnabled() {
+        if (!legacyOrdersEnabled) throw new ResponseStatusException(HttpStatus.GONE,"Legacy order creation retired");
+    }
     private void checkPlan(String plan) { if(!"MONTHLY".equals(plan)) bad("Only MONTHLY is available"); }
     private String text(String value,int max,String field) {
         if(value==null || value.isBlank() || value.trim().length()>max || value.chars().anyMatch(c->c<32 || c==127)) bad("Invalid "+field);
@@ -231,8 +255,7 @@ public class SimulatedOrderService {
         var matches=CARD_CANDIDATE.matcher(value);
         while (matches.find()) {
             String digits=matches.group().replaceAll("[ .-]", "");
-            // Plausible network prefix plus checksum; short phone numbers/postcodes do not qualify.
-            if (!digits.matches("(?:4|5[1-5]|2[2-7]|3[47]|6(?:0|4|5))[0-9]*")) continue;
+            // Any 13–19 digit Luhn-valid sequence, regardless of network prefix.
             int sum=0;
             for (int i=digits.length()-1, position=0; i>=0; i--, position++) {
                 int digit=digits.charAt(i)-'0';

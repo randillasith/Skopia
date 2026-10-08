@@ -68,7 +68,7 @@ public class BillingService {
                 .map(p -> new BillingDtos.Plan(p.getId(), p.getPlanName(), 30, new BigDecimal("500.00"),
                         p.getBenefit(), SubscriptionBenefits.isAdFree(p.getPlanName())))
                 .sorted(Comparator.comparing(BillingDtos.Plan::durationDays)).toList(), Currency.LKR,
-                demoEnabled, false, "TEST ONLY: no card details, actual payment, transfer verification, or money movement.",
+                demoEnabled, false, "Complimentary monthly access: listed price LKR 500, amount due LKR 0, no automatic renewal.",
                 "SAMPLE ONLY: no receiving bank account. Do not transfer money. Upload a sample slip for review simulation.");
     }
 
