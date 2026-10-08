@@ -59,15 +59,6 @@ public class AdminUserController {
         return StaffCatalogResponse.canonical();
     }
 
-    @PostMapping("/{id}/staff-assignment")
-    public ResponseEntity<UserResponse> assignStaff(@PathVariable Long id,
-                                                     @Valid @RequestBody AssignStaffRequest request,
-                                                     Authentication authentication,
-                                                     HttpServletRequest httpRequest) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(userManagementService.assignStaff(authenticatedActor(authentication), id, request, clientIp(httpRequest)));
-    }
-
     @PatchMapping("/{id}/staff-assignment")
     public UserResponse updateStaffAssignment(@PathVariable Long id,
                                               @Valid @RequestBody UpdateStaffProfileRequest request,
