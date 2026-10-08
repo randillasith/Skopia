@@ -37,7 +37,7 @@ class ChannelCreationUnavailableIntegrationTest {
         RegisteredViewer viewer = new RegisteredViewer();
         viewer.setUsername("channel_viewer");
         viewer.setEmail("channel_viewer@example.test");
-        viewer.setPasswordHash(passwords.encode("correct-horse"));
+        viewer.setPasswordHash(passwords.encode(java.util.UUID.randomUUID().toString()));
         viewer.setAccountStatus("ACTIVE");
         viewer = viewers.saveAndFlush(viewer);
         Long id = viewer.getId();
