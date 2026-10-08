@@ -19,7 +19,7 @@ export function createThemeStore(browser: Window) {
     root.style.colorScheme = resolved
     root.classList.toggle('dark', resolved === 'dark')
     browser.document.querySelector('meta[name="theme-color"]')?.setAttribute(
-      'content', resolved === 'dark' ? '#080d1c' : '#ffffff',
+      'content', resolved === 'dark' ? '#080d1c' : '#dcd9e7',
     )
   }
   const notify = () => { apply(); listeners.forEach((listener) => listener()) }

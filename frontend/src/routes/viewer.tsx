@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Play, Bookmark, Share2, Flag, ThumbsUp, ThumbsDown, Trash2, SearchX, Clock,
-  Bell, LifeBuoy, ChevronRight, X, ListEnd, Download, Hash, Pin,
+  Bell, LifeBuoy, ChevronRight, X, ListEnd, Hash, Pin,
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, Toggle, EmptyState,
@@ -13,7 +13,7 @@ import { ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import { AdPlayback } from '@/components/AdPlayback'
 import {
-  GENRES, fmt, clock, seconds, isVerified, tagsFor, type Video,
+  fmt, clock, seconds, isVerified, tagsFor, type Video,
 } from '@/lib/data'
 import { useCatalogue, useVideo, useVideoSearch, useComments } from '@/lib/useCatalogue'
 import { catalogue, videoIdOf } from '@/lib/catalogue'
@@ -25,7 +25,7 @@ import {
 } from '@/lib/reports'
 import { profile } from '@/lib/accounts'
 import { Resolve } from '@/components/Loading'
-import { CHANNELS, channelByName } from '@/lib/session'
+import { CHANNELS, channelById } from '@/lib/session'
 import { useLibrary } from '@/lib/library'
 import { SearchBox } from '@/components/search'
 import { VerifiedMark } from './discover'
@@ -82,8 +82,7 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             onClick={(e) => {
               e.preventDefault()
               if (!viewer) return nav('/login')
-              toggleWatchLater(v.id)
-              toast({ title: saved ? 'Removed from Watch later' : 'Saved to Watch later' })
+              void toggleWatchLater(v.id).then(active => toast({ title: active ? 'Saved to Watch later' : 'Removed from Watch later' })).catch(cause => toast({ title: cause instanceof Error ? cause.message : 'Could not save the title.', tone: 'bad' }))
             }}
             aria-label={saved ? `Remove ${v.title} from Watch later` : `Save ${v.title} to Watch later`}
             title={saved ? 'Remove from Watch later' : 'Watch later'}
@@ -136,12 +135,12 @@ export function Tile({ v, size = 'md' }: { v: Video; size?: 'lg' | 'md' | 'sm' }
             a dead end that only leads to single videos. */}
         <p className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[13px] text-ink-300">
           <Link
-            to={`/channel/${channelByName(v.creator)?.handle ?? ''}`}
+            to={`/channel/${channelById(String(v.creatorId))?.handle ?? ''}`}
             className="truncate transition-colors hover:text-ink-100"
           >
             {v.creator}
           </Link>
-          {isVerified(v.creator) && <VerifiedMark />}
+          {isVerified(v.creator, v.creatorId) && <VerifiedMark />}
           <span aria-hidden>·</span>
           <span className="shrink-0 font-mono tabular-nums">{fmt(v.views)}</span>
         </p>
@@ -181,8 +180,7 @@ export function Browse() {
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="letterboard text-ink-300">Tonight’s programme</p>
-            <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-fg">
+                        <h1 className="font-marquee mt-1 text-[clamp(1.9rem,4vw,2.6rem)] font-extrabold tracking-[-0.03em] text-fg">
               The Lobby
             </h1>
           </div>
@@ -204,7 +202,7 @@ export function Browse() {
           {([['all', 'All titles'], ['free', 'Free videos'], ['premium', 'Premium videos']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setAccessFilter(key)} aria-pressed={accessFilter === key}
               className={cn('rounded-sm border px-3 py-1.5 text-[13px] font-medium transition-colors',
-                accessFilter === key ? 'border-gold-400 bg-gold-400/10 text-gold-200' : 'border-ink-700 text-ink-300 hover:text-white')}>
+                accessFilter === key ? 'border-gold-400 bg-gold-400/10 text-tone-gold-400' : 'border-ink-700 text-ink-300 hover:text-white')}>
               {label}
             </button>
           ))}
@@ -282,8 +280,7 @@ export function Browse() {
                   <Button
                     icon={<Bookmark className={cn('size-4', isSaved(lead.id) && 'fill-current')} />}
                     onClick={() => {
-                      const added = toggleWatchLater(lead.id)
-                      toast({ title: added ? 'Saved to Watch later' : 'Removed from Watch later' })
+                      void toggleWatchLater(lead.id).then(active => toast({ title: active ? 'Saved to Watch later' : 'Removed from Watch later' })).catch(cause => toast({ title: cause instanceof Error ? cause.message : 'Could not save the title.', tone: 'bad' }))
                     }}
                   >
                     {isSaved(lead.id) ? 'Saved' : 'Watch later'}
@@ -381,7 +378,7 @@ export function SearchPage() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const { recordSearch } = useLibrary()
-  const { categories } = useCatalogue()
+  const { categories, videos } = useCatalogue()
   const [cat, setCat] = useState('All')
   const [genre, setGenre] = useState('All')
   const [sort, setSort] = useState<SearchSort>('relevance')
@@ -403,11 +400,12 @@ export function SearchPage() {
   // Channels match too — "harbour" is as likely to mean the studio as a word in
   // a synopsis, and sending somebody to a list of videos when they wanted the
   // channel is a small failure that repeats every session.
+  const directory = CHANNELS
   const channelHits = useMemo(() => {
     const t = q.trim().toLowerCase()
     if (!t) return []
-    return CHANNELS.filter((c) => `${c.name} ${c.handle} ${c.tagline}`.toLowerCase().includes(t)).slice(0, 3)
-  }, [q])
+    return directory.filter((c) => `${c.name} ${c.handle} ${c.tagline}`.toLowerCase().includes(t)).slice(0, 3)
+  }, [q, directory])
 
   const results = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -474,7 +472,7 @@ export function SearchPage() {
             className="w-auto min-w-32"
           >
             <option>All</option>
-            {GENRES.map((g) => <option key={g}>{g}</option>)}
+            {[...new Set(videos.map(v => v.genre).filter(Boolean))].map((g) => <option key={g}>{g}</option>)}
           </Select>
           <Select value={dur} onChange={(e) => setDur(e.target.value as Duration)} aria-label="Length" className="w-auto min-w-40">
             {(Object.keys(DURATION) as Duration[]).map((d) => (
@@ -527,7 +525,7 @@ export function SearchPage() {
                         {c.name}
                       </span>
                       <span className="block truncate text-[12px] text-ink-300">
-                        <span className="font-mono">@{c.handle}</span> · {fmt(c.subscribers)} following
+                        <span className="font-mono">@{c.handle}</span>
                       </span>
                       <span className="mt-0.5 block truncate text-[13px] text-ink-300">{c.tagline}</span>
                     </span>
@@ -616,7 +614,7 @@ export function Watch() {
   } = useComments(numericId)
   const {
     votes, vote, isSaved, recordWatch,
-    isQueued, toggleQueue, isDownloaded, toggleDownload, queue,
+    isQueued, toggleQueue, queue,
   } = useLibrary()
   const [reportOpen, setReportOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
@@ -706,7 +704,7 @@ export function Watch() {
     )
   }
 
-  const channel = channelByName(v.creator)
+  const channel = channelById(String(v.creatorId))
   // A like is the server's record. A dislike is not stored anywhere yet, so it
   // stays in the page and is not claimed to be more than that.
   const my = v.liked ? 'up' : votes[v.id] ?? null
@@ -724,7 +722,6 @@ export function Watch() {
   }
   const saved = isSaved(v.id)
   const queued = isQueued(v.id)
-  const downloaded = isDownloaded(v.id)
   const shareUrl = `${window.location.origin}/watch/${v.id}`
 
   const copy = (text: string, msg: string) => {
@@ -806,10 +803,10 @@ export function Watch() {
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg group-hover:text-tone-violet-200">
                         {v.creator}
-                        {isVerified(v.creator) && <VerifiedMark />}
+                        {isVerified(v.creator, v.creatorId) && <VerifiedMark />}
                       </span>
                       <span className="block truncate font-mono text-[11px] tabular-nums text-ink-300">
-                        {channel ? `${fmt(channel.subscribers)} following` : ''}
+                        {channel ? `@${channel.handle}` : ''}
                       </span>
                     </span>
                   </Link>
@@ -863,22 +860,6 @@ export function Watch() {
                       }}
                     >
                       {queued ? 'Queued' : 'Queue'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      icon={<Download className={cn('size-4', downloaded && 'text-tone-cyan-300')} />}
-                      onClick={() => {
-                        if (!viewer) return nav('/login')
-                        const on = toggleDownload(v.id)
-                        toast({
-                          title: on
-                            ? 'Taken for offline viewing'
-                            : 'Removed from offline titles',
-                          tone: on ? 'ok' : undefined,
-                        })
-                      }}
-                    >
-                      {downloaded ? 'Offline' : 'Download'}
                     </Button>
                     <Button size="sm" variant="ghost" icon={<Flag className="size-4" />} onClick={() => setReportOpen(true)}>
                       Report
@@ -1003,7 +984,7 @@ export function Watch() {
                             )}
                           >
                             {c.who}
-                            {isVerified(c.who) && <VerifiedMark />}
+
                           </span>
                           <span className="text-ink-300">{c.at}</span>
                         </p>
@@ -1338,8 +1319,7 @@ export function Watchlist() {
                     variant="ghost"
                     icon={<Trash2 className="size-4" />}
                     onClick={() => {
-                      toggleWatchLater(v.id)
-                      toast({ title: `${v.title} removed` })
+                      void toggleWatchLater(v.id).then(active => toast({ title: active ? 'Saved to Watch later' : `${v.title} removed` })).catch(cause => toast({ title: cause instanceof Error ? cause.message : 'Could not remove the title.', tone: 'bad' }))
                     }}
                   >
                     <span className="sr-only sm:not-sr-only">Remove</span>
@@ -1594,7 +1574,7 @@ export function NotificationPrefs() {
 export function Profile() {
   const toast = useToast()
   const nav = useNavigate()
-  const { viewer, signOut } = useSession()
+  const { viewer, signOut, refreshAccount } = useSession()
   const actor = actorIdOf(viewer)
   const blank = { firstName: '', lastName: '', displayName: '', email: '', bio: '', contactNo: '' }
   const [form, setForm] = useState(blank)
@@ -1635,6 +1615,7 @@ export function Profile() {
     setBusy(true)
     try {
       await profile.update(changes)
+      await refreshAccount()
       toast({ title: 'Profile updated', tone: 'ok' })
     } catch (cause) {
       toast({

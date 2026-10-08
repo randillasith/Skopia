@@ -4,7 +4,7 @@ import { Flame, Compass, ListEnd, Trash2, X, Play, GripVertical } from 'lucide-r
 import { Button, EmptyState, Section, useToast, Avatar } from '@/components/primitives'
 import { PosterPlate, Lightbox } from '@/components/world'
 import { FrontOfHouse } from '@/components/Shell'
-import { GENRES, LIVE, fmt, seconds, clock, isVerified, type Video } from '@/lib/data'
+import { LIVE, fmt, seconds, clock, isVerified, type Video } from '@/lib/data'
 import { useCatalogue } from '@/lib/useCatalogue'
 import { Resolve } from '@/components/Loading'
 import { CHANNELS, channelByName } from '@/lib/session'
@@ -87,7 +87,7 @@ export function Explore() {
         {/* Genre cuts across categories, which is the whole point of this page:
             Home ranks by billing, Explore lets you slice sideways. */}
         <div className="mt-5 flex flex-wrap gap-2">
-          {['All', ...GENRES].map((g) => (
+          {['All', ...new Set(videos.map(v => v.genre).filter(Boolean))].map((g) => (
             <button
               key={g}
               onClick={() => setGenre(g)}
@@ -119,10 +119,10 @@ export function Explore() {
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5 truncate text-[14px] font-medium text-fg group-hover:text-tone-violet-200">
                       {c.name}
-                      {isVerified(c.name) && <VerifiedMark />}
+                      {c.verified && <VerifiedMark />}
                     </span>
                     <span className="block truncate font-mono text-[11px] tabular-nums text-ink-300">
-                      {fmt(c.subscribers)} following
+                      {c.subscribers == null ? '@' + c.handle : fmt(c.subscribers) + ' following'}
                     </span>
                   </span>
                 </Link>
@@ -269,7 +269,7 @@ export function Trending() {
                     <Link to={`/channel/${channelByName(v.creator)?.handle ?? ''}`} className="truncate hover:text-ink-100">
                       {v.creator}
                     </Link>
-                    {isVerified(v.creator) && <VerifiedMark />}
+                    {isVerified(v.creator, v.creatorId) && <VerifiedMark />}
                   </p>
                   <p className="mt-0.5 font-mono text-[12px] tabular-nums text-ink-300">
                     {fmt(v.views)} views · {v.published}

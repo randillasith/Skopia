@@ -54,7 +54,7 @@ describe('appearance preference', () => {
     expect(h.root.dataset.theme).toBe(value)
     h.store.setPreference(value)
     expect(h.storage.setItem).toHaveBeenCalledWith(THEME_STORAGE_KEY, value)
-    expect(h.meta.setAttribute).toHaveBeenLastCalledWith('content', value === 'dark' ? '#080d1c' : '#ffffff')
+    expect(h.meta.setAttribute).toHaveBeenLastCalledWith('content', value === 'dark' ? '#080d1c' : '#dcd9e7')
     h.store.setPreference('system')
     expect(h.root.dataset.theme).toBe('light')
     h.os(true)

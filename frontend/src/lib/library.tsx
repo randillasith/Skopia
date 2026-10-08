@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react'
 import { catalogue } from './catalogue'
 import { actorId as actorIdOf } from './session'
 import { useSession } from './session-context'
@@ -58,7 +58,7 @@ type LibraryValue = {
 
   watchLater: string[]
   isSaved: (videoId: string) => boolean
-  toggleWatchLater: (videoId: string) => boolean
+  toggleWatchLater: (videoId: string) => Promise<boolean>
 
   votes: Record<string, Vote>
   vote: (videoId: string, v: Vote) => void
@@ -203,6 +203,7 @@ function AccountLibrary({ children, storageKey, actor, active }: {
 }) {
   const [s, setS] = useState<Stored>(() => active ? read(storageKey) : seed())
   const [hasLegacyLibrary] = useState(() => legacyAvailable())
+  const pendingSaves = useRef(new Map<string, Promise<boolean>>())
 
   useEffect(() => {
     if (active) write(storageKey, s)
@@ -321,32 +322,19 @@ function AccountLibrary({ children, storageKey, actor, active }: {
 
       watchLater: s.watchLater,
       isSaved: (id) => s.watchLater.includes(id),
-      // The list is moved at once so the control answers immediately, and the
-      // server's reply corrects it if the two disagree. A signed-out viewer has
-      // nowhere to save to, so nothing is claimed to have been saved.
+      // Success is reported only after the account API confirms the saved state.
       toggleWatchLater: (id) => {
-        if (actor == null) return false
-        const added = !s.watchLater.includes(id)
-        setS((p) => ({
-          ...p,
-          watchLater: setMembership(p.watchLater, id, added),
-        }))
+        if (actor == null) return Promise.reject(new Error('Sign in to save a title.'))
         const numeric = Number(id)
-        if (Number.isFinite(numeric)) {
-          catalogue
-            .toggleSaved(numeric, actor)
-            .then(({ active }) =>
-              setS((p) => ({
-                ...p,
-                watchLater: setMembership(p.watchLater, id, active),
-              })),
-            )
-            .catch(() => setS((p) => ({
-              ...p,
-              watchLater: setMembership(p.watchLater, id, !added),
-            })))
-        }
-        return added
+        if (!Number.isInteger(numeric) || numeric <= 0) return Promise.reject(new Error('This title cannot be saved.'))
+        const pending = pendingSaves.current.get(id)
+        if (pending) return pending
+        const saved = catalogue.toggleSaved(numeric, actor).then(({ active }) => {
+          setS(p => ({ ...p, watchLater: setMembership(p.watchLater, id, active) }))
+          return active
+        }).finally(() => pendingSaves.current.delete(id))
+        pendingSaves.current.set(id, saved)
+        return saved
       },
 
       votes: s.votes,

@@ -7,8 +7,8 @@
  * half-initialised at load time.
  */
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { type Account, type Viewer } from './session'
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { type Account, type Viewer, channelSnapshot, subscribeChannels } from './session'
 import { accounts, toAccount, type SignUpInput } from './accounts'
 import {
   clearSession, readSession, writeSession,
@@ -54,7 +54,10 @@ const SessionCtx = createContext<SessionValue>({
   },
 })
 
-export const useSession = () => useContext(SessionCtx)
+export const useSession = () => {
+  useSyncExternalStore(subscribeChannels, channelSnapshot, channelSnapshot)
+  return useContext(SessionCtx)
+}
 
 /**
  * What survives a refresh: a server account id, or a prototype identity.

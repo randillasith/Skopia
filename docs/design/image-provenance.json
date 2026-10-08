@@ -1,0 +1,26 @@
+[
+  {
+    "file": "frontend/public/images/screening-mountain.webp",
+    "source": "Generated with OpenAI image generation, 2026-10-08",
+    "prompt": "Create one standalone cinematic photographic landscape asset, 16:9 wide. Blue-hour violet dusk over a dramatic mountain range, dark jagged rock foreground, atmospheric receding peaks, muted indigo and pale lavender sky. Premium cinema still, realistic photographic texture, exquisite natural light, no typography, no borders, no UI, no collage, no watermark. Entire frame is photograph, intended for a large website screen showcase.",
+    "usage": "Decorative editorial imagery, not catalogue titles",
+    "width": 1440,
+    "height": 810
+  },
+  {
+    "file": "frontend/public/images/screening-city.webp",
+    "source": "Generated with OpenAI image generation, 2026-10-08",
+    "prompt": "Standalone cinematic photograph, 16:9 wide. A rain-soaked city at night, moody indigo architecture, reflections of restrained amber shop windows and streetlights across wet asphalt, distant human silhouettes, documentary cinema still with believable detail and atmospheric depth. No text, typography, borders, logos, UI, or collage. Entire frame is one immersive photograph.",
+    "usage": "Decorative editorial imagery, not catalogue titles",
+    "width": 1440,
+    "height": 810
+  },
+  {
+    "file": "frontend/public/images/screening-forest.webp",
+    "source": "Generated with OpenAI image generation, 2026-10-08",
+    "prompt": "Standalone cinematic photographic landscape, 16:9 wide. Looking into a lush forest canopy from a quiet trail, soft angled sunlight through fine morning mist, moss and ferns in foreground, rich restrained green hues, deep shaded trunks framing luminous space. Premium nature cinematography, believable photographic detail. No typography, UI, border, collage or watermark. Full frame photograph.",
+    "usage": "Decorative editorial imagery, not catalogue titles",
+    "width": 1440,
+    "height": 810
+  }
+]

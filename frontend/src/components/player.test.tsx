@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Player } from './player'
-import { VIDEOS } from '@/lib/data'
+import { VIDEOS } from '@/test/video-fixture'
 
 it('renders the feature transport without an unserved demo advertisement', () => {
   const html = renderToStaticMarkup(<Player video={VIDEOS[0]} theater={false}

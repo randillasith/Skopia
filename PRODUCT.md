@@ -75,7 +75,7 @@ Explicitly undecided (must not be invented as fact): plan names, prices, duratio
 - Logo PNG supplied directly by the user.
 - Spring Boot skeleton in this repository: `SkopiaApplication.java`, `pom.xml` (Spring Boot 4.1.1, Java 17, Lombok, MySQL connector), `application.properties` with datasource fields left blank.
 - A Google Stitch project of draft UI exists but **could not be reached** in this session (no Google session in the isolated browser, no Chrome extension connected). Nothing about its contents may be assumed.
-- **No real video content, user accounts, pricing, metrics or testimonials exist.** All catalogue titles, names, figures and performance numbers in the prototype are placeholders and must be presented as such.
+- **Runtime data comes from the Spring Boot APIs and configured database.** Catalogue records, account details, campaigns, notifications and billing records must use server responses. Frontend fixtures belong only in tests. The cinematic landing photographs are decorative brand imagery and never represent playable titles. Simulated checkout and refunds remain explicitly labeled; no real money movement is claimed. Missing or unavailable services show loading, empty or error states.
 
 ## Product Principles
 

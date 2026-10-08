@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Check, Users, Play, MapPin, CalendarDays } from 'lucide-react'
+import { Check, Users, Play, MapPin, CalendarDays } from 'lucide-react'
 import { Button, Tabs, EmptyState, Select, useToast, Avatar } from '@/components/primitives'
 import { PosterPlate, Lightbox, Letterboard, MarqueeRule } from '@/components/world'
 import { FrontOfHouse, useSession } from '@/components/Shell'
@@ -29,12 +29,11 @@ export function SubscribeButton({
   size?: 'sm' | 'md'
 }) {
   const { viewer } = useSession()
-  const { isSubscribed, toggleSubscribe, bells, toggleBell } = useLibrary()
+  const { isSubscribed, toggleSubscribe } = useLibrary()
   const toast = useToast()
   const nav = useNavigate()
   const channel = channelByHandle(handle)
   const on = isSubscribed(handle)
-  const belled = bells.includes(handle)
 
   if (!viewer) {
     return (
@@ -60,26 +59,9 @@ export function SubscribeButton({
           })
         }}
       >
-        {on ? 'Following' : 'Follow'}
+        {on ? 'Following on this device' : 'Follow on this device'}
       </Button>
-      {on && (
-        <Button
-          size={size}
-          variant="ghost"
-          aria-pressed={belled}
-          aria-label={belled ? 'Turn off new-release alerts' : 'Alert me to new releases'}
-          onClick={() => {
-            const nowOn = toggleBell(handle)
-            toast({
-              title: nowOn
-                ? 'You will be told about new releases'
-                : 'New-release alerts turned off',
-            })
-          }}
-        >
-          {belled ? <Bell className="size-4 fill-current" /> : <BellOff className="size-4" />}
-        </Button>
-      )}
+
     </span>
   )
 }
@@ -104,10 +86,10 @@ export function ChannelPage() {
   const { isSubscribed } = useLibrary()
   // Channels themselves have no backend, but their titles do — the shelf is the
   // catalogue filtered to what this channel published.
-  const { videos, loading, error, refresh } = useCatalogue()
+  const { videos, loading, error, channelError, refresh } = useCatalogue()
 
   const all = useMemo(
-    () => (channel ? videos.filter((v) => v.creator === channel.name) : []),
+    () => (channel ? videos.filter((v) => String(v.creatorId) === channel.id) : []),
     [videos, channel],
   )
   // A channel page is public, so it shows what a visitor could actually play.
@@ -117,6 +99,8 @@ export function ChannelPage() {
   )
   const sorted = useMemo(() => [...published].sort(SORTS[sort].cmp), [published, sort])
   const featured = sorted[0]
+
+  if (loading || error || channelError) return <FrontOfHouse><Resolve loading={loading} error={error || channelError} onRetry={refresh} what="Loading channel">{null}</Resolve></FrontOfHouse>
 
   if (!channel) {
     return (
@@ -156,7 +140,7 @@ export function ChannelPage() {
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-300">
               <span className="font-mono">@{channel.handle}</span>
               <span aria-hidden>·</span>
-              <span className="tabular-nums">{fmt(channel.subscribers)} following</span>
+              <span className="tabular-nums">@{channel.handle}</span>
               <span aria-hidden>·</span>
               <span className="tabular-nums">{published.length} videos</span>
             </p>
@@ -271,7 +255,7 @@ export function ChannelPage() {
               <div>
                 <dt className="letterboard text-ink-300">Following</dt>
                 <dd className="font-marquee mt-1 text-[24px] font-bold tabular-nums text-fg">
-                  {fmt(channel.subscribers)}
+                  {channel.subscribers == null ? '—' : fmt(channel.subscribers)}
                 </dd>
               </div>
               <div>
@@ -315,9 +299,9 @@ export function Subscriptions() {
 
   const channels = CHANNELS.filter((c) => subscriptions.includes(c.handle))
   const feed = useMemo(() => {
-    const names = channels.map((c) => c.name)
+    const creatorIds = new Set(channels.map((c) => c.id))
     return videos.filter(
-      (v) => names.includes(v.creator) && v.billing !== 'IN REVIEW' && v.billing !== 'PULLED',
+      (v) => creatorIds.has(String(v.creatorId)) && v.billing !== 'IN REVIEW' && v.billing !== 'PULLED',
     ).sort((a, b) => b.published.localeCompare(a.published))
   }, [videos, channels])
 

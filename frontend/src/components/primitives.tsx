@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { X, ChevronDown, Check, Search, Inbox, Construction } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -427,10 +428,10 @@ export function Modal({
     }
   }, [open])
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-6">
+        <div className="fixed inset-0 z-[110] flex items-end justify-center p-3 sm:items-center sm:p-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -450,13 +451,13 @@ export function Modal({
             exit={{ opacity: 0, y: 12, scale: 0.99 }}
             transition={{ duration: 0.34, ease: EASE }}
             className={cn(
-              'relative w-full rounded-t-2xl border border-ink-700 bg-ink-850 shadow-e4 sm:rounded-lg',
+              'relative flex max-h-[calc(100dvh-3rem)] w-full flex-col rounded-2xl border border-ink-700 bg-ink-850 shadow-e4 sm:rounded-lg',
               width === 'sm' && 'sm:max-w-md',
               width === 'md' && 'sm:max-w-xl',
               width === 'lg' && 'sm:max-w-3xl',
             )}
           >
-            <div className="flex items-start gap-4 border-b border-ink-700 px-5 py-4">
+            <div className="flex shrink-0 items-start gap-4 border-b border-ink-700 px-5 py-4">
               <div className="min-w-0 flex-1">
                 <h2 className="font-marquee text-[19px] font-bold text-fg">{title}</h2>
                 {description && <p className="mt-1 text-[13px] text-ink-300">{description}</p>}
@@ -469,16 +470,16 @@ export function Modal({
                 <X className="size-4.5" />
               </button>
             </div>
-            <div className="max-h-[65vh] overflow-y-auto px-5 py-4">{children}</div>
+            <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
             {footer && (
-              <div className="flex flex-wrap justify-end gap-2 border-t border-ink-700 px-5 py-3.5">
+              <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-ink-700 px-5 py-3.5">
                 {footer}
               </div>
             )}
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>, document.body
   )
 }
 

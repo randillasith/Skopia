@@ -1,5 +1,6 @@
 import { ThemeSelect } from './ThemeSelect'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useId } from 'react'
+import { Popover } from './Popover'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -59,6 +60,8 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
   const { viewer, signOut } = useSession()
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
+  const trigger = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
   const own = ownedChannel(viewer)
   const mod = moderatedChannels(viewer)
 
@@ -84,11 +87,14 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cn('relative', compact && 'w-full')}>
       <button
+        ref={trigger}
+        aria-label="Account menu"
+        aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
         className={cn(
-          'flex items-center gap-2.5 rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-ink-850',
+          'flex min-w-0 max-w-full items-center gap-2.5 rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-ink-850',
           compact && 'w-full border border-ink-600 px-2.5 py-2',
         )}
       >
@@ -103,21 +109,8 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
         </span>
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <motion.div
-              role="menu"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className={cn(
-                'absolute z-50 mt-2 w-[19rem] overflow-hidden rounded-sm border border-ink-600 bg-ink-850 shadow-e4',
-                compact ? 'bottom-full right-0 mb-2 mt-0' : 'right-0',
-              )}
-            >
+      {open && <Popover anchor={trigger} onClose={() => setOpen(false)} above={compact}
+        id={menuId} label="Account menu" width={320}>
               {/* who you are */}
               <div className="border-b border-ink-700 px-3.5 py-3">
                 <p className="truncate text-[14px] font-medium text-fg">{viewer.name}</p>
@@ -171,10 +164,7 @@ export function AccountMenu({ compact = false }: { compact?: boolean }) {
                 </MenuItem>
               </div>
 
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      </Popover>}
     </div>
   )
 }
@@ -276,7 +266,7 @@ function RailLink({
             <motion.span
               layoutId="rail-marker"
               transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
-              className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-cyan-400"
+              className="absolute inset-y-1 left-0 w-px rounded-full bg-cyan-400"
             />
           )}
           <Icon className="size-[18px] shrink-0" />
@@ -391,7 +381,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-canvas">
       <header className="sticky top-0 z-40 bg-canvas/88 backdrop-blur-md">
-        <div className="flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-4">
+        <div className="flex min-h-16 flex-wrap items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
           <button
             onClick={() => (window.innerWidth >= 1024 ? setCollapsed((v) => !v) : setDrawer(true))}
             aria-label="Toggle navigation"
@@ -432,7 +422,7 @@ export function FrontOfHouse({ children }: { children: React.ReactNode }) {
           {viewer && <NotificationBell />}
 
           <ThemeSelect />
-          <div className="hidden sm:block"><AccountMenu /></div>
+          <AccountMenu />
         </div>
         <MarqueeRule />
       </header>
@@ -605,8 +595,7 @@ export function BackOfHouse({
         <Wordmark to="/browse" compact />
       </div>
       <div className="px-4 pb-3">
-        <p className="letterboard text-ink-300">Console</p>
-        <p className="font-marquee text-[17px] font-bold text-fg">{console_.name}</p>
+                <p className="font-marquee text-[17px] font-bold text-fg">{console_.name}</p>
       </div>
       <div className="mx-4 mb-3 h-px bg-ink-800" />
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
@@ -631,7 +620,7 @@ export function BackOfHouse({
                 {({ isActive }) => (
                   <>
                     {isActive && (
-                      <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-cyan-400" />
+                      <span className="absolute inset-y-1.5 left-0 w-px rounded-full bg-cyan-400" />
                     )}
                     <i.icon className="size-4 shrink-0" />
                     {i.label}
@@ -684,7 +673,7 @@ export function BackOfHouse({
       </AnimatePresence>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-ink-800 bg-canvas/90 px-4 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center gap-3 py-3 border-b border-ink-800 bg-canvas/90 px-4 backdrop-blur-md sm:px-6">
           <button
             onClick={() => setOpen(true)}
             aria-label="Open console menu"
@@ -692,8 +681,8 @@ export function BackOfHouse({
           >
             <Menu className="size-5" />
           </button>
-          <h1 className="font-marquee truncate text-[17px] font-bold text-fg">{title}</h1>
-          <div className="ml-auto flex items-center gap-2">
+          <h1 className="font-marquee min-w-0 flex-1 truncate text-[17px] font-bold text-fg">{title}</h1>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <NotificationBell />
             {actions}<ThemeSelect />
           </div>
@@ -729,8 +718,7 @@ function Denied({
       </header>
       <MarqueeRule />
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-4 py-16">
-        <p className="letterboard text-ink-300">Access</p>
-        <h1 className="font-marquee mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-fg">
+                <h1 className="font-marquee mt-2 text-[clamp(1.7rem,4vw,2.3rem)] font-extrabold leading-[1.05] tracking-[-0.03em] text-fg">
           {heading}
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-ink-200">{explain}</p>
@@ -753,7 +741,7 @@ function Denied({
 }
 
 const primaryAction =
-  'inline-flex h-10 items-center rounded-sm bg-violet-500 px-4 text-[14px] font-medium text-fg transition-colors hover:bg-brand-hi'
+  'inline-flex h-10 items-center rounded-sm bg-violet-500 px-4 text-[14px] font-medium text-white transition-colors hover:bg-brand-hi'
 
 /** Anything tied to an account: watchlist, pass, reports, notifications. */
 export function RequireAuth({ what, children }: { what: string; children: React.ReactNode }) {

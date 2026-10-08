@@ -1,6 +1,6 @@
-import { AnimatePresence, motion } from 'motion/react'
+import { Popover } from './Popover'
 import { Bell, BellRing, CheckCircle2, Megaphone, PlayCircle, Receipt, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useSession } from '@/lib/session-context'
 import {
@@ -60,7 +60,7 @@ function notifBadgeMeta(item: NotificationFeedItem) {
   if (type.includes('REFUND') || title.includes('refund')) {
     return {
       icon: <Receipt size={17} />,
-      bg: type.includes('REJECTED') ? 'bg-rose-500/10 text-rose-400' : type.includes('APPROVED') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-tone-amber-400',
+      bg: type.includes('REJECTED') ? 'bg-rose-500/10 text-rose-400' : type.includes('APPROVED') ? 'bg-emerald-500/10 text-tone-success-400' : 'bg-amber-500/10 text-tone-amber-400',
       label: type.includes('ADMIN_NEW') ? 'Refund queue' : 'Refund update',
     }
   }
@@ -68,7 +68,7 @@ function notifBadgeMeta(item: NotificationFeedItem) {
   if (type.includes('RESOLVED') || title.includes('resolved')) {
     return {
       icon: <ShieldCheck size={17} />,
-      bg: 'bg-emerald-500/10 text-emerald-400',
+      bg: 'bg-emerald-500/10 text-tone-success-400',
       label: 'Report resolved',
     }
   }
@@ -89,7 +89,7 @@ function notifBadgeMeta(item: NotificationFeedItem) {
   if (type.includes('REPUBLISHED') || title.includes('republished')) {
     return {
       icon: <CheckCircle2 size={17} />,
-      bg: 'bg-emerald-500/10 text-emerald-400',
+      bg: 'bg-emerald-500/10 text-tone-success-400',
       label: 'Video republished',
     }
   }
@@ -105,7 +105,8 @@ export function NotificationBell() {
   const { viewer } = useSession()
   const userId = viewer?.userId ?? 0
   const location = useLocation()
-  const containerRef = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const popoverId = useId()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<DurableNotification[]>([])
   const [publishedAnnouncements, setPublishedAnnouncements] = useState<Announcement[]>([])
@@ -156,13 +157,6 @@ export function NotificationBell() {
     }
   }, [refresh])
 
-  useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', closeOnOutsideClick)
-    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
-  }, [])
 
   const feed = useMemo(() => buildNotificationFeed(items, publishedAnnouncements).slice(0, 8), [items, publishedAnnouncements])
   const unreadNotifications = items.filter((item) => item.readAt === null).length
@@ -199,22 +193,20 @@ export function NotificationBell() {
   if (!userId) return null
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative shrink-0">
       <button
         type="button"
+        ref={trigger}
+        aria-haspopup="dialog"
+        aria-controls={open ? popoverId : undefined}
         onClick={toggle}
         aria-label={hasAttention ? `Notifications, ${attentionCount} new` : 'Notifications'}
         aria-expanded={open}
-        className={`relative grid h-10 w-10 place-items-center rounded-full border transition-colors ${open || hasAttention ? 'border-red-500/40 bg-red-500/10 text-tone-danger-500' : 'border-ink-800 text-ink-400 hover:border-ink-700 hover:text-fg'}`}
+        className={`relative grid h-10 w-10 place-items-center rounded-full border transition-colors ${open || hasAttention ? 'border-red-500/40 bg-red-500/10 text-tone-danger-500' : 'border-ink-800 text-ink-300 hover:border-ink-700 hover:text-fg'}`}
       >
-        {hasAttention && <span className="absolute inset-0 animate-ping rounded-full border border-red-500/35" aria-hidden="true" />}
-        <motion.span
-          className="relative z-10"
-          animate={hasAttention ? { rotate: [0, -14, 14, -10, 10, 0] } : { rotate: 0 }}
-          transition={hasAttention ? { duration: 1.15, repeat: Infinity, repeatDelay: 1.35, ease: 'easeInOut' } : { duration: 0.2 }}
-        >
+        <span className="relative z-10">
           {hasAttention ? <BellRing size={19} /> : <Bell size={19} />}
-        </motion.span>
+        </span>
         {attentionCount > 0 && (
           <span className="absolute -right-1 -top-1 z-20 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-black leading-4 text-white shadow-lg shadow-red-950/50">
             {attentionCount > 99 ? '99+' : attentionCount}
@@ -222,28 +214,21 @@ export function NotificationBell() {
         )}
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            className="absolute right-0 top-12 z-[80] w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-ink-800 bg-ink-950 shadow-2xl shadow-black/70"
-          >
+      {open && <Popover anchor={trigger} onClose={() => setOpen(false)} width={400}
+        role="dialog" label="Notifications" id={popoverId}>
             <div className="flex items-center justify-between border-b border-ink-800 px-4 py-3">
               <div>
                 <p className="text-sm font-black text-fg">Notifications</p>
-                <p className="text-[11px] text-ink-500">Activity, refund and report updates, and announcements</p>
+                <p className="text-[11px] text-ink-300">Activity, refund and report updates, and announcements</p>
               </div>
-              {hasAttention && <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" aria-label="New activity" />}
+              {hasAttention && <span className="h-2.5 w-2.5 rounded-full bg-red-500" aria-label="New activity" />}
             </div>
 
             <div className="max-h-[26rem] overflow-y-auto">
               {feed.length === 0 ? (
                 <div className="px-5 py-10 text-center">
                   <Bell size={24} className="mx-auto mb-3 text-ink-700" />
-                  <p className="text-sm font-semibold text-ink-400">No notifications yet</p>
+                  <p className="text-sm font-semibold text-ink-300">No notifications yet</p>
                 </div>
               ) : feed.map((item) => {
                 const meta = notifBadgeMeta(item)
@@ -263,7 +248,7 @@ export function NotificationBell() {
                         {item.unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}
                       </span>
                       <span className="mt-1 block truncate text-xs text-ink-300">{item.body}</span>
-                      <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-ink-500">
+                      <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-ink-300">
                         {meta.label} · {relativeTime(item.occurredAt)}
                       </span>
                     </span>
@@ -279,9 +264,7 @@ export function NotificationBell() {
             >
               View all notifications
             </Link>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </Popover>}
     </div>
   )
 }

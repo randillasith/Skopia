@@ -54,7 +54,7 @@ export function Notifications() {
       <Button size="sm" loading={busy === 'all'} disabled={unread === 0 || busy != null} onClick={() => void markAll()}>Mark all read</Button>
     </div>
     {loading && <p className="mt-8" role="status">Loading notifications…</p>}
-    {error && <div className="mt-8 rounded border border-danger-500/40 p-4 text-danger-400" role="alert">{error} <Button size="sm" onClick={() => setRevision((n) => n + 1)}>Retry</Button></div>}
+    {error && <div className="mt-8 rounded border border-danger-500/40 p-4 text-tone-danger-400" role="alert">{error} <Button size="sm" onClick={() => setRevision((n) => n + 1)}>Retry</Button></div>}
     {!loading && !error && <>
       <section className="mt-8" aria-labelledby="account-notifications">
         <div className="mb-4 flex items-baseline justify-between"><h2 id="account-notifications" className="font-marquee text-xl font-bold text-fg">Account notifications</h2><span className="font-mono text-xs text-ink-300">{unread} unread</span></div>
@@ -64,7 +64,7 @@ export function Notifications() {
               <span className={`mt-2 size-2 shrink-0 rounded-full ${item.readAt == null ? 'bg-cyan-400' : 'bg-ink-600'}`} aria-hidden />
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-medium text-fg">{item.title}</h3><time className="font-mono text-[11px] text-ink-300">{date(item.createdAt)}</time></div>
                 <p className="mt-1 text-sm leading-relaxed text-ink-300">{item.body}</p>
-                <div className="mt-3 flex gap-3">{item.link && <Link className="text-sm text-cyan-300 hover:underline" to={item.link}>Open</Link>}{item.readAt == null && <Button size="sm" variant="quiet" loading={busy === item.id} disabled={busy != null} onClick={() => void markOne(item.id)}>Mark read</Button>}</div>
+                <div className="mt-3 flex gap-3">{item.link && <Link className="text-sm text-tone-cyan-300 hover:underline" to={item.link}>Open</Link>}{item.readAt == null && <Button size="sm" variant="quiet" loading={busy === item.id} disabled={busy != null} onClick={() => void markOne(item.id)}>Mark read</Button>}</div>
               </div>
             </div>
           </li>)}</ul>}
