@@ -20,12 +20,13 @@ public class BillingMailDispatcher {
     private final BillingMailClaims claims;
     private final JavaMailSender sender;
     private final String from;
+    private final SkopiaEmailTemplates templates;
     public BillingMailDispatcher(BillingMailOutboxRepository outbox, BillingMailClaims claims,
                                  @Qualifier("billingMailSender") JavaMailSender sender,
-                                 @Value("${skopia.mail.from:}") String from) {
+                                 @Value("${skopia.mail.from:}") String from, SkopiaEmailTemplates templates) {
         if(!BillingMailAddress.valid(from))
             throw new IllegalStateException("Enabled billing mail requires a valid from address");
-        this.outbox=outbox; this.claims=claims; this.sender=sender; this.from=from;
+        this.outbox=outbox; this.claims=claims; this.sender=sender; this.from=from; this.templates=templates;
     }
     @Scheduled(cron="${skopia.mail.cron:*/30 * * * * *}")
     public void dispatch() {
@@ -35,10 +36,13 @@ public class BillingMailDispatcher {
                 if(claim==null) continue;
                 boolean sent=false;
                 try {
-                    SimpleMailMessage message=new SimpleMailMessage();
-                    message.setFrom(from); message.setTo(claim.recipient()); message.setSubject(claim.subject());
-                    message.setText(claim.body());
-                    sender.send(message);
+                    var html=templates.billing(claim.eventKey(),claim.body());
+                    if (html.isPresent()) SkopiaMailMessage.send(sender,from,claim.recipient(),claim.subject(),claim.body(),html.get());
+                    else {
+                        SimpleMailMessage message=new SimpleMailMessage();
+                        message.setFrom(from); message.setTo(claim.recipient()); message.setSubject(claim.subject());
+                        message.setText(claim.body()); sender.send(message);
+                    }
                     sent=true;
                 } catch (Exception ignored) {
                     // Never log exception text: transport errors may contain credentials or addresses.

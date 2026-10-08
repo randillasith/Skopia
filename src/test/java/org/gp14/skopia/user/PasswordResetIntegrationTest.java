@@ -10,7 +10,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.mail.SimpleMailMessage;
+import jakarta.mail.internet.MimeMessage;
+import org.gp14.skopia.mail.MailParts;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -52,9 +53,9 @@ class PasswordResetIntegrationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
     }
     private String token() {
-        var capture = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
+        var capture = org.mockito.ArgumentCaptor.forClass(MimeMessage.class);
         verify(sender, timeout(5000).atLeastOnce()).send(capture.capture());
-        String text = capture.getAllValues().get(capture.getAllValues().size()-1).getText();
+        String text = MailParts.plain(capture.getAllValues().get(capture.getAllValues().size()-1));
         var matcher = Pattern.compile("https://app\\.example\\.test/reset/confirm#token=([A-Za-z0-9_-]+)").matcher(text);
         assertThat(matcher.find()).isTrue();
         return matcher.group(1);
@@ -64,21 +65,36 @@ class PasswordResetIntegrationTest {
                 .content(json.writeValueAsString(java.util.Map.of("token",token,"newPassword",password))))
                 .andExpect(status().is(status));
     }
+    @Test void brandedMultipartResetRetainsFragmentAndNeverPersistsLink() throws Exception {
+        clearInvocations(sender);
+        RegisteredViewer user=account("ACTIVE"); request(user.getEmail(),"192.0.2.81");
+        var capture=org.mockito.ArgumentCaptor.forClass(MimeMessage.class);
+        verify(sender,timeout(5000)).send(capture.capture());
+        var message=capture.getValue(); String html=MailParts.html(message), plain=MailParts.plain(message);
+        assertThat(message.getContentType()).startsWith("multipart/");
+        assertThat(html).contains("Reset your password", "Watch Beyond Limits", "1 hour", "https://app.example.test/skopia-logo.png");
+        assertThat(html).doesNotContain("{{", "?token=", "javascript:");
+        var matcher=Pattern.compile("https://app\\.example\\.test/reset/confirm#token=([A-Za-z0-9_-]{43})").matcher(plain);
+        assertThat(matcher.find()).isTrue(); String token=matcher.group(1);
+        assertThat(html).contains("href=\"https://app.example.test/reset/confirm#token="+token+"\"");
+        assertThat(jdbc.queryForObject("select count(*) from billing_mail_outbox where body like ?",Integer.class,"%"+token+"%")).isZero();
+        confirm(token,"template-new-password",200); confirm(token,"another-new-password",400);
+    }
     @Test void genericResponsesInactiveFloodAndMailFailure() throws Exception {
         clearInvocations(sender);
         RegisteredViewer active = account("ACTIVE"), inactive = account("SUSPENDED");
         String a = request(active.getEmail(), "192.0.2.21");
         assertThat(request("missing"+UUID.randomUUID()+"@example.test", "192.0.2.22")).isEqualTo(a);
         assertThat(request(inactive.getEmail(), "192.0.2.23")).isEqualTo(a);
-        verify(sender, timeout(5000).times(1)).send(any(SimpleMailMessage.class));
+        verify(sender, timeout(5000).times(1)).send(any(MimeMessage.class));
         for(int i=0;i<8;i++) assertThat(request(active.getEmail(), "192.0.2.21")).isEqualTo(a);
-        verify(sender, times(1)).send(any(SimpleMailMessage.class));
-        doThrow(new org.springframework.mail.MailSendException("SMTP failed")).when(sender).send(any(SimpleMailMessage.class));
+        verify(sender, times(1)).send(any(MimeMessage.class));
+        doThrow(new org.springframework.mail.MailSendException("SMTP failed")).when(sender).send(any(MimeMessage.class));
         RegisteredViewer failed=account("ACTIVE");
         assertThat(request(failed.getEmail(), "192.0.2.24")).isEqualTo(a);
-        var failedCapture=org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
+        var failedCapture=org.mockito.ArgumentCaptor.forClass(MimeMessage.class);
         verify(sender,timeout(5000).times(2)).send(failedCapture.capture());
-        String failedText=failedCapture.getAllValues().get(1).getText();
+        String failedText=MailParts.plain(failedCapture.getAllValues().get(1));
         var failedMatcher=Pattern.compile("#token=([A-Za-z0-9_-]+)").matcher(failedText);
         assertThat(failedMatcher.find()).isTrue();
         String failedToken=failedMatcher.group(1);
@@ -166,7 +182,7 @@ class PasswordResetIntegrationTest {
         String ip="192.0.2.61";
         for(int i=0;i<10;i++) request("notfound"+UUID.randomUUID()+"@example.test",ip);
         request(account("ACTIVE").getEmail(),ip);
-        verify(sender,never()).send(any(SimpleMailMessage.class));
+        verify(sender,never()).send(any(MimeMessage.class));
     }
     @Test void trustedProxyUsesRealIpAndIgnoresUntrustedHeaders() throws Exception {
         clearInvocations(sender);
@@ -177,23 +193,23 @@ class PasswordResetIntegrationTest {
         mvc.perform(post("/api/auth/password-reset/request").with(r -> { r.setRemoteAddr("127.0.0.1"); return r; })
                 .header("X-Real-IP","198.51.100.71").contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(java.util.Map.of("email",account("ACTIVE").getEmail())))).andExpect(status().isOk());
-        verify(sender,never()).send(any(SimpleMailMessage.class));
+        verify(sender,never()).send(any(MimeMessage.class));
         RegisteredViewer user=account("ACTIVE");
         mvc.perform(post("/api/auth/password-reset/request").with(r -> { r.setRemoteAddr("198.51.100.72"); return r; })
                 .header("X-Real-IP","198.51.100.71").contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(java.util.Map.of("email",user.getEmail())))).andExpect(status().isOk());
-        verify(sender,timeout(5000)).send(any(SimpleMailMessage.class));
+        verify(sender,timeout(5000)).send(any(MimeMessage.class));
     }
     @Test void accountCooldownSurvivesMemoryResetAndDistinctIpFlood() throws Exception {
         clearInvocations(sender);
         RegisteredViewer user=account("ACTIVE");
         request(user.getEmail(),"203.0.113.1");
-        verify(sender,timeout(5000)).send(any(SimpleMailMessage.class));
+        verify(sender,timeout(5000)).send(any(MimeMessage.class));
         var field=PasswordResetService.class.getDeclaredField("limits"); field.setAccessible(true);
         ((java.util.Map<?,?>)field.get(org.springframework.test.util.AopTestUtils.getTargetObject(resets))).clear();
         request(user.getEmail(),"203.0.113.2");
         Thread.sleep(200);
-        verify(sender,times(1)).send(any(SimpleMailMessage.class));
+        verify(sender,times(1)).send(any(MimeMessage.class));
         assertThat(jdbc.queryForObject("select reset_requested_at from users where user_id=?",java.sql.Timestamp.class,user.getId())).isNotNull();
     }
     @Test void limitEvictsOnlyOldestWhenOverCapacity() throws Exception {
