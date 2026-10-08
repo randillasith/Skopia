@@ -20,20 +20,16 @@ describe('safe subscription preview', () => {
     expect(monthlyPreviewPlan({ previewMode: true, demoEnabled: false, currency: 'LKR', plans: [yearly, monthly] })).toEqual(monthly)
     expect(reviewableOrders([{ id: 1, planName: 'MONTHLY', status: 'PENDING_REVIEW' }, { id: 2, planName: 'MONTHLY', status: 'APPROVED' }, { id: 3, planName: 'MONTHLY', status: 'SUBMITTED' }]).map((order) => order.id)).toEqual([1, 3])
   })
-  it('posts only brand and billing, never card credentials', async () => {
-    await billing.cardPreview('MASTERCARD', contact, 7)
+  it('posts only billing and plan for complimentary access', async () => {
+    await billing.complimentary(contact, 7)
     const [path, init] = vi.mocked(fetch).mock.calls[0]
-    expect(path).toBe('/api/billing/orders/card-preview')
-    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'MONTHLY', brand: 'MASTERCARD', billing: contact })
+    expect(path).toBe('/api/billing/orders/complimentary')
+    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'MONTHLY', billing: contact })
     expect(init?.headers).toMatchObject({ Authorization: 'Bearer signed' })
   })
-  it('rejects unsupported brands and never sends an invalid request', async () => {
-    expect(() => billing.cardPreview('OTHER' as 'VISA', contact, 7)).toThrow()
-    expect(fetch).not.toHaveBeenCalled()
-  })
-  it('does not turn a server refusal into a successful preview', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Preview unavailable' }), { status: 409 })))
-    await expect(billing.cardPreview('VISA', contact, 7)).rejects.toThrow('Preview unavailable')
+  it('does not turn a server refusal into successful activation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Activation unavailable' }), { status: 409 })))
+    await expect(billing.complimentary(contact, 7)).rejects.toThrow('Activation unavailable')
   })
   it('validates slip type and size, then uploads billing and reference without setting multipart Content-Type', async () => {
     const slip = new File(['preview'], 'sample.pdf', { type: 'application/pdf' })

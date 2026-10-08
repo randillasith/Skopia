@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = "skopia.billing.demo-enabled=true")
+@SpringBootTest(properties = {"skopia.billing.demo-enabled=true", "skopia.billing.legacy-orders-enabled=true"})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional

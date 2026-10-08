@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest @AutoConfigureMockMvc @ActiveProfiles("test")
-@TestPropertySource(properties="skopia.billing.demo-enabled=true") @Transactional
+@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.billing.legacy-orders-enabled=true"}) @Transactional
 class BillingApiTest {
     @Autowired MockMvc mvc;
     @Autowired RegisteredViewerRepository viewers;

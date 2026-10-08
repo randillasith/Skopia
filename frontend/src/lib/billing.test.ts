@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { billing, buildAdminRefundQuery, normalizePlans, validateBilling, validateRefundDecision, validateRefundReason, testCardNumber, validateTestCard } from './billing'
+import { billing, buildAdminRefundQuery, normalizePlans, validateBilling, validateRefundDecision, validateRefundReason } from './billing'
 import { catalogue } from './catalogue'
 import { writeSession } from './auth-storage'
 
@@ -18,47 +18,50 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
 })
 
-describe('no-charge test-card checkout', () => {
-  const now = new Date(2026, 9, 8)
-  it('accepts only the published Visa/Mastercard test numbers with valid future expiry', () => {
-    for (const brand of ['VISA', 'MASTERCARD'] as const) {
-      const number = testCardNumber(brand)
-      expect(number).toHaveLength(16)
-      expect(validateTestCard(number, '10/26', now)).toEqual({ brand })
-      expect(validateTestCard(number, '10/26', new Date(2026, 9, 31, 23, 59, 59, 999))).toEqual({ brand })
-      expect(validateTestCard(number, '11/26', new Date(2026, 9, 31, 23, 59, 59, 999))).toEqual({ brand })
-      expect(validateTestCard(number, '09/26', now)).toHaveProperty('error')
-      expect(validateTestCard(number, '13/27', now)).toHaveProperty('error')
-      expect(validateTestCard(number, '1/27', now)).toHaveProperty('error')
-      expect(validateTestCard(number.slice(0, -1) + (number.at(-1) === '0' ? '1' : '0'), '11/26', now)).toHaveProperty('error')
-      expect(validateTestCard(number.slice(0, -2) + '01', '11/26', now)).toHaveProperty('error')
-    }
-    expect(validateTestCard('4' + '2'.repeat(15), '12/27', now)).toHaveProperty('error')
-    expect(validateTestCard('3' + '4'.repeat(14), '12/27', now)).toHaveProperty('error')
-  })
+describe('complimentary activation client', () => {
+  const contact = { fullName: 'Test User', email: 'user@example.test', phone: '0771234567', addressLine1: 'Street', addressLine2: '', city: 'Colombo', postalCode: '00100', country: 'LK' as const }
   it('rejects card-like contact text locally without blocking an ordinary phone', () => {
-    const contact = { fullName: 'Test User', email: 'user@example.test', phone: '0771234567', addressLine1: 'Street', addressLine2: '', city: 'Colombo', postalCode: '00100', country: 'LK' as const }
-    const testNumber = '4' + '1'.repeat(15)
     const grouped = 'Sample ' + ['4111', '1111', '1111', '1111'].join('-') + ' detail'
     expect(validateBilling(contact)).toEqual({})
     for (const field of ['fullName', 'addressLine1', 'addressLine2', 'city', 'postalCode'] as const) {
       expect(validateBilling({ ...contact, [field]: grouped })[field]).toBeTruthy()
     }
-    expect(validateBilling({ ...contact, email: `user${testNumber}@example.test` }).email).toBeTruthy()
-    expect(validateBilling({ ...contact, phone: testNumber }).phone).toBeTruthy()
-    expect(validateBilling({ ...contact, addressLine1: 'Unit ' + '4' + '2'.repeat(12) }).addressLine1).toBeTruthy()
-    expect(validateBilling({ ...contact, addressLine1: 'Unit ' + '4' + '0'.repeat(17) + '6' }).addressLine1).toBeTruthy()
-    expect(validateBilling({ ...contact, addressLine1: 'Unit ' + '4' + '1'.repeat(14) + '2' })).toEqual({})
     expect(fetch).not.toHaveBeenCalled()
   })
-  it('sends only derived brand and contact, never card input or expiration', async () => {
-    const contact = { fullName: 'Test User', email: 'user@example.test', phone: '0771234567', addressLine1: 'Street', addressLine2: '', city: 'Colombo', postalCode: '00100', country: 'LK' as const }
-    await billing.noChargeCard(testCardNumber('VISA'), '11/27', contact, 7, now)
+  it('rejects Luhn-valid PAN-like contact sequences regardless of network prefix or separators', () => {
+    const makeNumber = (prefix: string, length: number) => {
+      const body = prefix + '0'.repeat(length - prefix.length - 1)
+      for (let check = 0; check < 10; check++) {
+        const digits = body + check
+        let sum = 0
+        for (let i = digits.length - 1, position = 0; i >= 0; i--, position++) {
+          let digit = Number(digits[i])
+          if (position % 2) { digit *= 2; if (digit > 9) digit -= 9 }
+          sum += digit
+        }
+        if (sum % 10 === 0) return digits
+      }
+      throw new Error('No checksum')
+    }
+    for (const digits of [makeNumber('6011', 16), makeNumber('34', 15), makeNumber('4', 16),
+      makeNumber('51', 16), makeNumber('9', 13), makeNumber('9', 19)]) {
+      for (const field of ['fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'city', 'postalCode'] as const) {
+        const leak = field === 'email' ? `user${digits}@example.test` : field === 'phone' ? digits : `Unit ${digits}`
+        expect(validateBilling({ ...contact, [field]: leak })[field]).toContain('Card numbers')
+      }
+      expect(() => billing.complimentary({ ...contact, addressLine1: `Unit ${digits}` }, 7)).toThrow('Card numbers')
+    }
+    const discover = makeNumber('6011', 16)
+    expect(validateBilling({ ...contact, addressLine1: discover.match(/.{4}/g)!.join('-') }).addressLine1).toContain('Card numbers')
+    expect(validateBilling({ ...contact, phone: '077' + '1234567890' }).phone).toBeUndefined()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+  it('posts only the plan and billing contact, without brand or card fields', async () => {
+    await billing.complimentary(contact, 7)
     const [path, init] = vi.mocked(fetch).mock.calls[0]
-    expect(path).toBe('/api/billing/orders/no-charge-card')
-    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'MONTHLY', brand: 'VISA', billing: contact })
-    expect(() => billing.noChargeCard('4' + '2'.repeat(15), '11/27', contact, 7, now)).toThrow()
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(path).toBe('/api/billing/orders/complimentary')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'MONTHLY', billing: contact })
   })
 })
 

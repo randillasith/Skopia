@@ -21,7 +21,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest @ActiveProfiles("test")
-@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.mail.enabled=true", "skopia.mail.cron=-", "skopia.mail.from=sender@example.test", "skopia.mail.host=mail.example.test", "skopia.mail.username=test-user", "skopia.mail.password=test-only"})
+@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.billing.legacy-orders-enabled=true", "skopia.mail.enabled=true", "skopia.mail.cron=-", "skopia.mail.from=sender@example.test", "skopia.mail.host=mail.example.test", "skopia.mail.username=test-user", "skopia.mail.password=test-only"})
 class BillingEmailTest {
     @Autowired SimulatedOrderService orders;
     @Autowired BillingService billing;
@@ -52,6 +52,25 @@ class BillingEmailTest {
     @AfterEach void deactivateMain() { users.findByUsername("main").ifPresent(u->{u.setAccountStatus("INACTIVE");users.saveAndFlush(u);}); }
     private BillingDtos.BillingContact contact(String email) {
         return new BillingDtos.BillingContact("Test Viewer", email, "0771234567", "Test Street", null, "Colombo", "00100", "LK");
+    }
+    @Test void complimentaryReceiptDispatchesToBillingContactAndCurrentMainWithoutPaidClaims() {
+        String key=UUID.randomUUID().toString().replace("-", "");
+        var admin=main();
+        var v=viewer(key);
+        String billingAddress="billing"+key+"@example.test";
+        var order=orders.complimentary(v.getId(),"MONTHLY",contact(billingAddress));
+        dispatcher.dispatch();
+        var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("COMPLIMENTARY_RECEIPT:"+order.id())).toList();
+        assertThat(rows).hasSize(2).allSatisfy(r->assertThat(r.getStatus()).isEqualTo("SENT"));
+        var captured=org.mockito.ArgumentCaptor.forClass(org.springframework.mail.SimpleMailMessage.class);
+        verify(sender,atLeast(2)).send(captured.capture());
+        assertThat(captured.getAllValues()).anySatisfy(m->assertThat(m.getTo()).containsExactly(billingAddress));
+        assertThat(captured.getAllValues()).anySatisfy(m->assertThat(m.getTo()).containsExactly(admin.getEmail()));
+        assertThat(captured.getAllValues()).allSatisfy(m->{
+            assertThat(m.getSubject()).contains("complimentary");
+            assertThat(m.getText()).contains("Listed monthly price: LKR 500", "Amount due: LKR 0");
+            assertThat(m.getText()).doesNotContain("test card", "charged LKR 500", "paid LKR 500");
+        });
     }
     @Test void corruptStoredRequesterEmailDoesNotRollBackRefund() {
         String key=UUID.randomUUID().toString().replace("-", "");

@@ -37,7 +37,7 @@ class BillingDisabledTest {
         mvc.perform(post("/api/billing/orders/card-preview")
                 .header("Authorization", "Bearer " + tokens.issue(v.getId()))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\",\"brand\":\"VISA\",\"billing\":{\"fullName\":\"Demo Viewer\",\"email\":\"demo@example.test\",\"phone\":\"0771234567\",\"addressLine1\":\"Sample Street\",\"city\":\"Colombo\",\"postalCode\":\"00100\",\"country\":\"LK\"}}"))
-                .andExpect(status().isServiceUnavailable());
+                .andExpect(status().isGone());
         assertThat(payments.count()).isZero();
     }
 }

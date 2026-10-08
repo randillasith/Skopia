@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest @AutoConfigureMockMvc @ActiveProfiles("test")
-@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.billing.private-storage-dir=${java.io.tmpdir}/skopia-order-test-${random.uuid}"})
+@TestPropertySource(properties={"skopia.billing.demo-enabled=true", "skopia.billing.legacy-orders-enabled=true", "skopia.billing.private-storage-dir=${java.io.tmpdir}/skopia-order-test-${random.uuid}"})
 @Transactional
 class SimulatedOrderApiTest {
     @Autowired MockMvc mvc;
