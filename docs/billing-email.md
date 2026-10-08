@@ -1,0 +1,22 @@
+# Billing transactional email (opt-in)
+
+Skopia records a persistent email outbox alongside successful zero-charge checkout and simulated refund transitions. Checkout receipts report **LKR 0 due**, 30-day nonrenewing access, and no actual payment; the LKR 500 catalog price is only a listed price. Refund notices apply only to historical simulated payment records, never the zero-charge order. No payment processor or money movement is involved.
+
+SMTP is **off by default**. Until enabled, committed messages remain `PENDING` in `billing_mail_outbox`; they are not sent. Provision a private environment file (never add credentials to Git) with:
+
+- `SKOPIA_MAIL_ENABLED=true`
+- `SKOPIA_MAIL_HOST` (authenticated SMTP host; not an unauthenticated localhost relay)
+- `SKOPIA_MAIL_PORT=587`
+- `SKOPIA_MAIL_USERNAME`, `SKOPIA_MAIL_PASSWORD`
+- `SKOPIA_MAIL_FROM` (authorized sender address)
+- Optional `SKOPIA_MAIL_MAIN_ADMIN_USERNAME=main` and `SKOPIA_MAIL_CRON=*/30 * * * * *`
+
+Enabled mail requires authenticated STARTTLS, requires the TLS upgrade, and validates server certificate/hostname. The host must present a trusted certificate. Do not set JavaMail trust-all overrides. Startup rejects missing host, credentials, or sender. Every event enqueues a durable symbolic `@MAIN_ADMIN` recipient alongside the subscriber/requester. At delivery claim time, only the current active administrator with the configured username is resolved to an email address. A missing/inactive administrator or invalid email leaves the admin row visibly `PENDING` with a sanitized reason, no SMTP attempt consumed, and a one-minute retry; the business transaction and subscriber delivery continue. If the administrator changes email before claim, the current address is used. A billing receipt goes to the order's billing email, refund updates to the owner's account email. Refund email contains only structured ID, status, category, amount and currency, plus a no-money disclosure and instruction to log in for details; free-text reason and decision note stay in the authenticated application, never in the outbox or SMTP. A database unique `(event_key, recipient)` key deduplicates committed events.
+
+**Skopia-host routing:** Public DNS for `mail.randillasith.me` points through Cloudflare, but SMTP must reach the mailserver directly at `168.138.183.189`. Arrange a *Skopia-host-only* answer for `mail.randillasith.me` → `168.138.183.189` (a backed-up `/etc/hosts` entry or trusted split-horizon DNS); never change public DNS or disable certificate checks to make SMTP work. Keep `SKOPIA_MAIL_HOST=mail.randillasith.me` (not the IP): the hostname must match the server's TLS certificate when JavaMail verifies identity after STARTTLS. Verify name resolution from the Skopia host and the certificate chain/hostname with a STARTTLS probe before enabling delivery; restart Skopia after resolver changes so Java DNS caching does not retain an old answer. Host routing is an operational prerequisite, not a change made by this feature branch.
+
+An invalid *stored* requester email must not roll back a refund: it creates a `FAILED` outbox row under symbolic `@INVALID_REQUESTER`, with only a sanitized error and no invalid address persisted in the outbox or sent. Checkout still rejects an invalid billing email at input validation. Due subscriber rows are selected ahead of unavailable administrator copies so an administrator backlog cannot starve receipts. The dispatcher uses a dedicated qualified billing mail sender with authenticated STARTTLS even if another application mail sender exists; `From` must be a single syntactically valid mailbox, not a display name or list.
+
+The dispatcher claims at most 25 due rows per run, leases each for five minutes, sends outside the claim transaction, and records completion in a separate transaction. SMTP failures are isolated and retried with backoff, at most four attempts; `FAILED` rows require manual review. Do not expose outbox body, recipient, or exception text in logs. Like any SMTP outbox, delivery is **at least once**, not exactly once: a crash after SMTP accepts a message but before `SENT` is committed can cause a duplicate after lease expiry. Monitor failed rows and the pending backlog before enabling after long downtime; do not purge or resend blindly.
+
+Tests mock `JavaMailSender` under the isolated H2 `test` profile; do not point them at a live server. No production config, mailserver, or data is changed by this feature branch.
