@@ -6,7 +6,7 @@ against the real local Spring Boot API. The original Word report was not edited.
 
 ## Environment and scope
 
-- Branch: `codex/fr5-ad-selection-strategy`, based on latest `origin/main` (`68dc594`).
+- Branch: `fr5-ad-selection-strategy`, based on latest `origin/main` (`68dc594`).
 - Backend: Java 17, Spring Boot, disposable H2 in MySQL compatibility mode.
 - Browser: installed Google Chrome, headed desktop at 1440 by 1000 and mobile
   viewport at 390 by 844, local port 8083.
