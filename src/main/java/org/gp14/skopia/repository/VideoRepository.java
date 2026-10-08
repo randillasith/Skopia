@@ -12,6 +12,11 @@ import java.util.List;
 public interface VideoRepository extends JpaRepository<Video, Long> {
     java.util.Optional<Video> findFirstByVideoUrl(String videoUrl);
     java.util.Optional<Video> findFirstByThumbnailUrl(String thumbnailUrl);
+    boolean existsByVideoUrlAndIdNot(String videoUrl, Long id);
+    boolean existsByThumbnailUrlAndIdNot(String thumbnailUrl, Long id);
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE Video v SET v.viewCount = COALESCE(v.viewCount, 0) + 1 WHERE v.id = :id")
+    int incrementViewCountAtomically(@Param("id") Long id);
     List<Video> findByCategoryId(Long categoryId);
 
     /**
@@ -54,8 +59,8 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     @Query("SELECT v FROM Video v " +
            "LEFT JOIN v.category c " +
            "LEFT JOIN v.accessTier t " +
-           "WHERE (:creatorId IS NOT NULL AND v.creator.id = :creatorId) " +
-           "   OR (:creatorId IS NULL AND (:status IS NULL OR v.videoStatus = :status)) " +
+           "WHERE ((:creatorId IS NOT NULL AND v.creator.id = :creatorId) " +
+           "   OR (:creatorId IS NULL AND (:status IS NULL OR v.videoStatus = :status))) " +
            "AND (:categoryId IS NULL OR v.category.id = :categoryId) " +
            "AND (:accessTier IS NULL OR UPPER(t.tierName) = UPPER(:accessTier)) " +
            "AND (:search IS NULL OR LOWER(v.title) LIKE LOWER(CONCAT('%', :search, '%')) " +

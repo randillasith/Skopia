@@ -198,7 +198,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
 }
 
 export function Playlists() {
-  const { playlists, watchLater, createPlaylist } = useLibrary()
+  const { playlists, watchLater, createPlaylist, hasLegacyLibrary, importLegacyLibrary } = useLibrary()
   const { byId } = useCatalogue()
   const toast = useToast()
   const [open, setOpen] = useState(false)
@@ -216,6 +216,12 @@ export function Playlists() {
             New playlist
           </Button>
         </div>
+        {hasLegacyLibrary && (
+          <div className="mt-5 rounded-sm border border-ink-700 p-4 text-sm text-ink-200">
+            <p>Older playlists and local library data were stored in this browser without an account. They may belong to another user. Import only if they are yours; the original stays available, and server watch history and Watch later are not imported.</p>
+            <Button className="mt-3" onClick={() => { importLegacyLibrary(); toast({ title: 'Legacy local library imported' }) }}>Import old local library into this account</Button>
+          </div>
+        )}
 
         <Section title="Saved" className="mt-8">
           <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

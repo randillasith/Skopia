@@ -34,7 +34,94 @@ class VideoSecurityIntegrationTest {
     @Autowired AccessTierRepository tiers;
     @Autowired TokenService tokens;
     @Autowired BillingService billing;
+    @Autowired CategoryRepository categories;
     ObjectMapper json = new ObjectMapper();
+
+    @Test void signedPrivateRangeRevokedWhenCreatorDeactivated() throws Exception {
+        ContentCreator owner = new ContentCreator();
+        owner.setUsername("owner_" + UUID.randomUUID()); owner.setEmail(UUID.randomUUID() + "@example.test");
+        owner.setPasswordHash("hash"); owner.setChannelName("Channel");
+        owner = creators.saveAndFlush(owner);
+        String filename = UUID.randomUUID() + ".mp4";
+        Path file = Path.of("uploads", filename);
+        Files.createDirectories(file.getParent()); Files.write(file, new byte[]{1,2,3,4});
+        try {
+            Video draft = video(owner, null, "DRAFT", "/uploads/" + filename);
+            String response = mvc.perform(get("/api/videos/" + draft.getId())
+                    .header("Authorization", "Bearer " + tokens.issue(owner.getId())))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            String signed = json.readTree(response).get("videoUrl").asText();
+            mvc.perform(get(signed).header("Range", "bytes=1-2"))
+                    .andExpect(status().isPartialContent()).andExpect(content().bytes(new byte[]{2,3}));
+            owner.setAccountStatus("SUSPENDED"); creators.saveAndFlush(owner);
+            mvc.perform(get(signed).header("Range", "bytes=1-2")).andExpect(status().isForbidden());
+            mvc.perform(get("/uploads/" + filename).header("Authorization", "Bearer " + tokens.issue(owner.getId())))
+                    .andExpect(status().isForbidden());
+        } finally { Files.deleteIfExists(file); }
+    }
+
+    @Test void mineSearchRespectsAllFiltersAndPublicSearchDoesNotLeakOtherStatuses() throws Exception {
+        ContentCreator owner = new ContentCreator(); owner.setUsername("owner_" + UUID.randomUUID());
+        owner.setEmail(UUID.randomUUID() + "@example.test"); owner.setPasswordHash("hash"); owner.setChannelName("Channel");
+        owner = creators.saveAndFlush(owner);
+        AccessTier free = new AccessTier(); free.setTierName("FREE"); free = tiers.saveAndFlush(free);
+        AccessTier premium = new AccessTier(); premium.setTierName("PREMIUM"); premium = tiers.saveAndFlush(premium);
+        org.gp14.skopia.model.video.Category category = new org.gp14.skopia.model.video.Category();
+        category.setCategoryName("Unique " + UUID.randomUUID());
+        category = categories.saveAndFlush(category);
+        Video match = video(owner, free, "DRAFT", "https://example.test/one.mp4");
+        match.setTitle("needle-specific"); match.setCategory(category); videos.saveAndFlush(match);
+        Video wrongTier = video(owner, premium, "DRAFT", "https://example.test/two.mp4");
+        wrongTier.setTitle("needle-specific"); wrongTier.setCategory(category); videos.saveAndFlush(wrongTier);
+        Video wrongCategory = video(owner, free, "DRAFT", "https://example.test/three.mp4");
+        wrongCategory.setTitle("needle-specific"); videos.saveAndFlush(wrongCategory);
+        String result = mvc.perform(get("/api/videos").header("Authorization", "Bearer " + tokens.issue(owner.getId()))
+                .param("scope", "mine").param("search", "needle-specific")
+                .param("category", category.getId().toString()).param("access", "FREE"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(result).size()).isEqualTo(1);
+        assertThat(json.readTree(result).get(0).get("id").asLong()).isEqualTo(match.getId());
+        String publicResult = mvc.perform(get("/api/videos").param("search", "needle-specific"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(publicResult).size()).isZero();
+    }
+
+    @Test void repeatedViewPostsBySameViewerAreDeduplicated() throws Exception {
+        ContentCreator owner = new ContentCreator(); owner.setUsername("owner_" + UUID.randomUUID());
+        owner.setEmail(UUID.randomUUID() + "@example.test"); owner.setPasswordHash("hash"); owner.setChannelName("Channel");
+        owner = creators.saveAndFlush(owner);
+        RegisteredViewer a = viewer("viewer", false), b = viewer("viewer", false);
+        Video v = video(owner, null, "PUBLISHED", "https://example.test/view.mp4");
+        for (int i = 0; i < 5; i++) mvc.perform(post("/api/videos/" + v.getId() + "/view")
+                .header("Authorization", "Bearer " + tokens.issue(a.getId()))).andExpect(status().isOk());
+        mvc.perform(post("/api/videos/" + v.getId() + "/view")
+                .header("Authorization", "Bearer " + tokens.issue(b.getId()))).andExpect(status().isOk());
+        assertThat(videos.findById(v.getId()).orElseThrow().getViewCount()).isEqualTo(2);
+    }
+
+    @Test void anonymousCookieLessViewPostsCannotInflateCounts() throws Exception {
+        ContentCreator owner = new ContentCreator(); owner.setUsername("owner_" + UUID.randomUUID());
+        owner.setEmail(UUID.randomUUID() + "@example.test"); owner.setPasswordHash("hash"); owner.setChannelName("Channel");
+        owner = creators.saveAndFlush(owner);
+        Video v = video(owner, null, "PUBLISHED", "https://example.test/free.mp4");
+        for (int i = 0; i < 3; i++) mvc.perform(post("/api/videos/" + v.getId() + "/view"))
+                .andExpect(status().isUnauthorized());
+        assertThat(videos.findById(v.getId()).orElseThrow().getViewCount()).isZero();
+    }
+
+    @Test void commentBadgeFollowsEntitlementNotLegacyFlag() throws Exception {
+        ContentCreator owner = new ContentCreator(); owner.setUsername("owner_" + UUID.randomUUID());
+        owner.setEmail(UUID.randomUUID() + "@example.test"); owner.setPasswordHash("hash"); owner.setChannelName("Channel");
+        owner = creators.saveAndFlush(owner);
+        RegisteredViewer stale = viewer("stale", true);
+        Video v = video(owner, null, "PUBLISHED", "https://example.test/movie.mp4");
+        mvc.perform(post("/api/videos/" + v.getId() + "/comments")
+                .header("Authorization", "Bearer " + tokens.issue(stale.getId()))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"first\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.badge").value(org.hamcrest.Matchers.nullValue()));
+        mvc.perform(get("/api/videos/" + v.getId() + "/comments"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].badge").value(org.hamcrest.Matchers.nullValue()));
+    }
 
     @Test void publicFreePlaybackPremiumAndDraftAreGuardedEvenForRangeRequests() throws Exception {
         ContentCreator creator = new ContentCreator();

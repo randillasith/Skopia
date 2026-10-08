@@ -23,7 +23,8 @@ public class VideoAccessService {
     }
 
     public boolean canSee(Video video, Long userId) {
-        return isPublished(video) || isOwner(video, userId);
+        return (video.getCreator() == null || "ACTIVE".equals(video.getCreator().getAccountStatus()))
+                && (isPublished(video) || isOwner(video, userId));
     }
 
     public boolean canPlay(Video video, Long userId) {

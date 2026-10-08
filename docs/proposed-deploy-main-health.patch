@@ -1,0 +1,17 @@
+# PROPOSED ONLY: review actual /opt/skopia/deploy-main.sh before applying.
+# The host script was not edited or used as patch context in this isolated worktree.
+# Substitute its configured local URL/port and preserve its existing retry/rollback flow.
+# Replace each curl-exit-only health probe with a JSON assertion, e.g.:
+#
+# - curl -fsS --connect-timeout 5 --max-time 10 "$local_health_url" >/dev/null
+# + curl -fsS --connect-timeout 5 --max-time 10 "$local_health_url" \
+# +   | jq -e '.status == "ok"' >/dev/null
+#
+# - curl -fsS --connect-timeout 5 --max-time 10 "$public_health_url" >/dev/null
+# + curl -fsS --connect-timeout 5 --max-time 10 "$public_health_url" \
+# +   | jq -e '.status == "ok"' >/dev/null
+#
+# Ensure `set -o pipefail`, jq installed, and the deployed-SHA marker is written
+# only after BOTH assertions and SPA/API checks succeed. A JSON status from the
+# current endpoint is not a DB readiness proof. See schema-and-release-safeguards.md
+# for DB-aware readiness, consistent backups and isolated rollback rehearsal.

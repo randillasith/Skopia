@@ -40,6 +40,8 @@ export type Playlist = {
 export type Vote = 'up' | 'down' | null
 
 type LibraryValue = {
+  hasLegacyLibrary: boolean
+  importLegacyLibrary: () => void
   /** Channel handles this account follows. */
   subscriptions: string[]
   isSubscribed: (handle: string) => boolean
@@ -138,9 +140,9 @@ const seed = (): Stored => ({
 export const setMembership = (ids: string[], id: string, active: boolean) =>
   active ? [...new Set([...ids, id])] : ids.filter((value) => value !== id)
 
-function read(): Stored {
+function read(key: string): Stored {
   try {
-    const raw = window.localStorage.getItem(KEY)
+    const raw = window.localStorage.getItem(key)
     if (!raw) return seed()
     return { ...seed(), ...(JSON.parse(raw) as Partial<Stored>) }
   } catch {
@@ -148,15 +150,38 @@ function read(): Stored {
   }
 }
 
-function write(s: Stored) {
+function write(key: string, s: Stored) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(s))
+    window.localStorage.setItem(key, JSON.stringify(s))
   } catch {
     // Storage is unavailable. The library simply will not outlive the tab.
   }
 }
 
 const LibraryCtx = createContext<LibraryValue | null>(null)
+
+// This key predates account scoping. The owner cannot be inferred, so import is opt-in.
+function legacyAvailable() {
+  try { return window.localStorage.getItem(KEY) !== null } catch { return false }
+}
+
+function legacyLocalFields(): Partial<Stored> | null {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(KEY) || 'null')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const old = value as Record<string, unknown>
+    const strings = (key: string) => Array.isArray(old[key]) ? (old[key] as unknown[]).filter((v): v is string => typeof v === 'string') : []
+    const playlists = Array.isArray(old.playlists) ? old.playlists.filter((p): p is Playlist =>
+      !!p && typeof p === 'object' && typeof p.id === 'string' && typeof p.name === 'string' &&
+      Array.isArray(p.videoIds) && p.videoIds.every((id: unknown) => typeof id === 'string') &&
+      ['Private', 'Public', 'Unlisted'].includes(p.visibility) && typeof p.created === 'string') : []
+    return { playlists, subscriptions: strings('subscriptions'), bells: strings('bells'),
+      queue: strings('queue'), downloads: strings('downloads'), recentSearches: strings('recentSearches'),
+      forgotten: strings('forgotten'), historyPaused: old.historyPaused === true,
+      votes: old.votes && typeof old.votes === 'object' && !Array.isArray(old.votes) ?
+        Object.fromEntries(Object.entries(old.votes).filter(([, v]) => v === 'up' || v === 'down' || v === null)) : {} }
+  } catch { return null }
+}
 
 export function useLibrary(): LibraryValue {
   const ctx = useContext(LibraryCtx)
@@ -165,19 +190,29 @@ export function useLibrary(): LibraryValue {
 }
 
 export function LibraryProvider({ children }: { children: React.ReactNode }) {
-  const [s, setS] = useState<Stored>(read)
   const { viewer, resolving } = useSession()
   const actor = actorIdOf(viewer)
+  // Remount synchronously on identity change: effects run after paint and cannot
+  // prevent a frame of the previous account's data from being rendered.
+  const key = resolving ? 'pending' : actor == null ? 'guest' : `user.${actor}`
+  return <AccountLibrary key={key} storageKey={`${KEY}.${key}`} actor={resolving ? null : actor} active={!resolving}>{children}</AccountLibrary>
+}
+
+function AccountLibrary({ children, storageKey, actor, active }: {
+  children: React.ReactNode; storageKey: string; actor: number | null; active: boolean
+}) {
+  const [s, setS] = useState<Stored>(() => active ? read(storageKey) : seed())
+  const [hasLegacyLibrary] = useState(() => legacyAvailable())
 
   useEffect(() => {
-    write(s)
-  }, [s])
+    if (active) write(storageKey, s)
+  }, [s, storageKey, active])
 
   // Watch later and history belong to the account, so they are replaced by the
   // server's answer whenever the acting account changes. Signing out empties
   // them here rather than leaving the last account's rows on screen.
   useEffect(() => {
-    if (resolving) return
+    if (!active) return
     if (actor == null) {
       setS((p) => ({ ...p, watchLater: [], history: [] }))
       return
@@ -187,20 +222,21 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       catalogue.watchlist(actor, abort.signal),
       catalogue.history(actor, abort.signal),
     ])
-      .then(([saved, watched]) =>
+      .then(([saved, watched]) => {
+        if (abort.signal.aborted) return
         setS((p) => ({
           ...p,
           watchLater: saved.map((row) => String(row.id)),
           history: watched.map((row) => String(row.id)),
-        })),
-      )
+        }))
+      })
       .catch(() => {
         // The API is down or the account is gone. An empty library reads better
         // than one that is silently a different account's.
         if (!abort.signal.aborted) setS((p) => ({ ...p, watchLater: [], history: [] }))
       })
     return () => abort.abort()
-  }, [actor, resolving])
+  }, [actor, active])
 
   const toggleIn = useCallback(
     (key: 'subscriptions' | 'bells' | 'watchLater' | 'queue' | 'downloads', id: string) => {
@@ -223,6 +259,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<LibraryValue>(
     () => ({
+      hasLegacyLibrary,
+      importLegacyLibrary: () => {
+        if (!active || actor == null) return
+        const old = legacyLocalFields()
+        if (old) setS((p) => ({
+          ...p,
+          playlists: [...p.playlists, ...(old.playlists || []).filter((item) => !p.playlists.some((existing) => existing.id === item.id))],
+          subscriptions: [...new Set([...p.subscriptions, ...(old.subscriptions || [])])],
+          bells: [...new Set([...p.bells, ...(old.bells || [])])],
+          queue: [...new Set([...p.queue, ...(old.queue || [])])],
+          downloads: [...new Set([...p.downloads, ...(old.downloads || [])])],
+          recentSearches: [...new Set([...p.recentSearches, ...(old.recentSearches || [])])].slice(0, 8),
+          forgotten: [...new Set([...p.forgotten, ...(old.forgotten || [])])],
+          votes: { ...old.votes, ...p.votes },
+          historyPaused: p.historyPaused || old.historyPaused === true,
+        }))
+      },
       subscriptions: s.subscriptions,
       isSubscribed: (h) => s.subscriptions.includes(h),
       toggleSubscribe: (h) => toggleIn('subscriptions', h),
@@ -341,7 +394,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       isDownloaded: (id) => s.downloads.includes(id),
       toggleDownload: (id) => toggleIn('downloads', id),
     }),
-    [s, toggleIn, actor],
+    [s, toggleIn, actor, active, hasLegacyLibrary],
   )
 
   return <LibraryCtx.Provider value={value}>{children}</LibraryCtx.Provider>

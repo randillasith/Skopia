@@ -79,6 +79,10 @@ public class UserResponse {
     }
 
     public static UserResponse fromEntity(User user) {
+        return fromEntity(user, false);
+    }
+
+    public static UserResponse fromEntity(User user, boolean activePremium) {
         if (user == null) return null;
 
         String defaultDisplayName = (user.getFirstName() != null ? user.getFirstName() : "") +
@@ -139,7 +143,7 @@ public class UserResponse {
                    .deviceType(regViewer.getDeviceType())
                    .displayName(regViewer.getDisplayName() != null && !regViewer.getDisplayName().isEmpty() ? regViewer.getDisplayName() : defaultDisplayName.trim())
                    .contactNo(user.getContactNo())
-                   .isPremium(regViewer.getIsPremium())
+                   .isPremium(activePremium)
                    .notifyChannel(regViewer.getNotifyChannel())
                    .street(regViewer.getStreet())
                    .city(regViewer.getCity())

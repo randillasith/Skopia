@@ -18,6 +18,8 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -34,6 +36,10 @@ import java.util.stream.Collectors;
 public class VideoService {
 
     private static final Path UPLOAD_DIR = Paths.get("uploads");
+    // A bounded, per-process window: no stable anonymous identity exists without a session cookie.
+    private final Map<String, Long> recentViews = new LinkedHashMap<>();
+    private static final long VIEW_WINDOW_MS = 30 * 60 * 1000L;
+    private static final int MAX_RECENT_VIEWS = 100_000;
 
     private final VideoAccessService access;
     private final TokenService tokens;
@@ -165,9 +171,12 @@ public class VideoService {
         requirePremiumPass(requestedTier, creatorId);
         AccessTier tier = resolveTier(requestedTier);
 
+        List<String> newFiles = new ArrayList<>();
+        try {
         String finalVideoUrl = checkedExternalUrl(request.getVideoUrl());
         if (videoFile != null && !videoFile.isEmpty()) {
             finalVideoUrl = saveUploadedFile(videoFile, true);
+            newFiles.add(finalVideoUrl);
         }
         if (finalVideoUrl == null || finalVideoUrl.isBlank()) {
             throw new IllegalArgumentException("Video file or URL is required");
@@ -176,6 +185,7 @@ public class VideoService {
         String finalThumbnailUrl = checkedExternalUrl(request.getThumbnailUrl());
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
             finalThumbnailUrl = saveUploadedFile(thumbnailFile, false);
+            newFiles.add(finalThumbnailUrl);
         }
         if (finalThumbnailUrl == null || finalThumbnailUrl.isBlank()) {
             finalThumbnailUrl = "/uploads/default-thumbnail.jpg";
@@ -203,7 +213,19 @@ public class VideoService {
             notifications.notifyVideoCreated(saved);
         }
 
-        return mapToVideoResponse(saved, creatorId);
+        VideoResponse response = mapToVideoResponse(saved, creatorId);
+        if (!newFiles.isEmpty() && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) newFiles.forEach(VideoService::deleteLocalUpload);
+                }
+            });
+        }
+        return response;
+        } catch (RuntimeException | Error failure) {
+            newFiles.forEach(VideoService::deleteLocalUpload);
+            throw failure;
+        }
     }
 
     public VideoResponse updateVideo(Long videoId, UpdateVideoRequest request, Long creatorId) {
@@ -241,6 +263,8 @@ public class VideoService {
             }
             video.setVideoStatus(next);
         }
+        String oldVideoUrl = video.getVideoUrl();
+        String oldThumbnailUrl = video.getThumbnailUrl();
         if (request.getVideoUrl() != null && !request.getVideoUrl().isBlank()) {
             video.setVideoUrl(checkedExternalUrl(request.getVideoUrl()));
         }
@@ -249,6 +273,21 @@ public class VideoService {
         }
 
         Video updated = videoRepository.save(video);
+        for (String oldUrl : new HashSet<>(List.of(oldVideoUrl == null ? "" : oldVideoUrl,
+                oldThumbnailUrl == null ? "" : oldThumbnailUrl))) {
+            if (localUploadPath(oldUrl) == null || oldUrl.equals(updated.getVideoUrl())
+                    || oldUrl.equals(updated.getThumbnailUrl())) continue;
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override public void afterCommit() {
+                        // Check after commit: another title may have acquired this URL meanwhile.
+                        if (!videoRepository.existsByVideoUrlAndIdNot(oldUrl, videoId)
+                                && !videoRepository.existsByThumbnailUrlAndIdNot(oldUrl, videoId))
+                            deleteLocalUpload(oldUrl);
+                    }
+                });
+            }
+        }
         return mapToVideoResponse(updated, creatorId);
     }
 
@@ -288,7 +327,20 @@ public class VideoService {
         Optional<Video> videoOpt = videoRepository.findById(videoId);
         if (videoOpt.isPresent()) {
             requireCreatorOwnership(videoOpt.get(), creatorId);
-            videoRepository.delete(videoOpt.get());
+            Video video = videoOpt.get();
+            List<String> removable = new ArrayList<>();
+            for (String url : List.of(video.getVideoUrl() == null ? "" : video.getVideoUrl(),
+                    video.getThumbnailUrl() == null ? "" : video.getThumbnailUrl())) {
+                if (localUploadPath(url) != null && !videoRepository.existsByVideoUrlAndIdNot(url, videoId)
+                        && !videoRepository.existsByThumbnailUrlAndIdNot(url, videoId)) removable.add(url);
+            }
+            videoRepository.delete(video);
+            // Never delete before the database commit; a failed delete must leave playable media intact.
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override public void afterCommit() { removable.forEach(VideoService::deleteLocalUpload); }
+                });
+            }
             return true;
         }
         return false;
@@ -356,11 +408,26 @@ public class VideoService {
         return response;
     }
 
-    public void incrementViewCount(Long videoId, Long viewerId) {
+    public synchronized void incrementViewCount(Long videoId, Long viewerId, String viewerKey) {
         videoRepository.findById(videoId).ifPresent(v -> {
             access.requirePlayback(v, viewerId);
-            v.setViewCount((v.getViewCount() != null ? v.getViewCount() : 0L) + 1);
-            videoRepository.save(v);
+            String key = videoId + ":" + viewerKey;
+            long now = System.currentTimeMillis();
+            Long previous = recentViews.get(key);
+            if (previous != null && now - previous < VIEW_WINDOW_MS) return;
+            recentViews.entrySet().removeIf(e -> now - e.getValue() >= VIEW_WINDOW_MS);
+            if (recentViews.size() >= MAX_RECENT_VIEWS) recentViews.remove(recentViews.keySet().iterator().next());
+            recentViews.put(key, now);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override public void afterCompletion(int status) {
+                        if (status != STATUS_COMMITTED) synchronized (VideoService.this) {
+                            recentViews.remove(key, now);
+                        }
+                    }
+                });
+            }
+            videoRepository.incrementViewCountAtomically(videoId);
         });
     }
 
@@ -410,12 +477,7 @@ public class VideoService {
                         }
                     } catch (Exception ignored) {}
 
-                    Boolean isPrem = false;
-                    try {
-                        if (c.getViewer() != null && c.getViewer().getIsPremium() != null) {
-                            isPrem = c.getViewer().getIsPremium();
-                        }
-                    } catch (Exception ignored) {}
+                    boolean isPrem = commentUserId != null && billing.hasActivePremium(commentUserId);
 
                     return CommentResponse.builder()
                             .id(c.getId())
@@ -476,7 +538,7 @@ public class VideoService {
                 .userId(viewer.getId())
                 .displayName(author)
                 .avatarUrl(avatar)
-                .badge(viewer.getIsPremium() ? "Music Pass" : null)
+                .badge(billing.hasActivePremium(viewerId) ? "Music Pass" : null)
                 .likeCount(0)
                 .isPinned(false)
                 .build();
@@ -499,7 +561,7 @@ public class VideoService {
                 .displayName(comment.getViewer().getDisplayName() != null ? comment.getViewer().getDisplayName() : comment.getViewer().getUsername())
                 .postedAt(comment.getPostedDatetime() == null ? "" : comment.getPostedDatetime().toInstant(ZoneOffset.UTC).toString())
                 .avatarUrl("https://i.pravatar.cc/160?img=" + (Math.abs(commentId.hashCode() % 50) + 1))
-                .badge(Boolean.TRUE.equals(comment.getViewer().getIsPremium()) ? "Music Pass" : null)
+                .badge(billing.hasActivePremium(viewerId) ? "Music Pass" : null)
                 .likeCount(0).isPinned(false).build();
     }
 
@@ -735,15 +797,30 @@ public class VideoService {
     }
 
     private String saveUploadedFile(MultipartFile file, boolean isVideo) {
+        Path targetPath = null;
         try {
             String extension = UploadValidator.validate(file, isVideo);
             Files.createDirectories(UPLOAD_DIR);
             String fileName = UUID.randomUUID().toString() + extension;
-            Path targetPath = UPLOAD_DIR.resolve(fileName);
+            targetPath = UPLOAD_DIR.resolve(fileName);
             Files.copy(file.getInputStream(), targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             return "/uploads/" + fileName;
         } catch (IOException e) {
+            if (targetPath != null) deleteLocalUpload("/uploads/" + targetPath.getFileName());
             throw new RuntimeException("Failed to save uploaded file", e);
+        }
+    }
+
+    private static Path localUploadPath(String url) {
+        if (url == null || !url.matches("/uploads/[a-f0-9-]{36}\\.(mp4|webm|ogg|mov|jpg|jpeg|png|webp)")) return null;
+        return UPLOAD_DIR.resolve(url.substring("/uploads/".length()));
+    }
+
+    private static void deleteLocalUpload(String url) {
+        Path path = localUploadPath(url);
+        if (path != null) {
+            try { Files.deleteIfExists(path); }
+            catch (IOException e) { org.slf4j.LoggerFactory.getLogger(VideoService.class).warn("Could not remove upload {}", path, e); }
         }
     }
 }

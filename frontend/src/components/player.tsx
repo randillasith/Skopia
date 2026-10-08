@@ -17,7 +17,8 @@ import { SPEEDS, chaptersFor, clock, seconds, type Video } from '@/lib/data'
  * Catalogue records without a file use a simulated clock so the controls can
  * still be previewed. Both paths update the same player state.
  *
- * Fullscreen and captions are real. Picture-in-picture is not offered, because
+ * Fullscreen is real. Caption language labels are metadata, not playable tracks;
+ * the caption control stays unavailable until a sourced track exists. Picture-in-picture is not offered, because
  * it needs an actual media element and a button that cannot do its job is worse
  * than no button.
  */
@@ -89,9 +90,7 @@ export function Player({
   const [volume, setVolume] = useState(0.8)
   const [muted, setMuted] = useState(false)
   const [speed, setSpeed] = useState(1)
-  const [captions, setCaptions] = useState(video.captions.length > 0)
-  const [track, setTrack] = useState(video.captions[0] ?? '')
-  const [menu, setMenu] = useState<null | 'settings' | 'speed' | 'quality' | 'captions' | 'keys'>(null)
+  const [menu, setMenu] = useState<null | 'settings' | 'speed' | 'quality' | 'keys'>(null)
   const [full, setFull] = useState(false)
   const [failed, setFailed] = useState(false)
   const [scrub, setScrub] = useState<number | null>(null)
@@ -205,7 +204,7 @@ export function Player({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return
+      if (el && (el.closest('[contenteditable], input, textarea, select, button, [role="slider"], [role="dialog"]') || el.isContentEditable)) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
 
       const k = e.key
@@ -219,7 +218,7 @@ export function Player({
       else if (k === 'f') { hit(); toggleFull() }
       else if (k === 't') { hit(); onTheater(!theater) }
       else if (k === 'm') { hit(); setMuted((m) => !m) }
-      else if (k === 'c') { hit(); setCaptions((c) => !c) }
+
       else if (k === 'ArrowUp') { hit(); setVolume((v) => Math.min(1, +(v + 0.1).toFixed(2))) }
       else if (k === 'ArrowDown') { hit(); setVolume((v) => Math.max(0, +(v - 0.1).toFixed(2))) }
       else if (k === '>' || (k === '.' && e.shiftKey)) {
@@ -324,11 +323,6 @@ export function Player({
         </button>
       )}
 
-      {captions && playing && !failed && (
-        <p className="pointer-events-none absolute inset-x-0 bottom-24 mx-auto max-w-lg rounded-xs bg-ink-950/85 px-3 py-1.5 text-center text-[14px] text-fg">
-          {current ? `${current.title} —` : ''} placeholder caption line, {track || 'English'} track.
-        </p>
-      )}
 
       {/* ---------------------------------------------------------- menus -- */}
       <AnimatePresence>
@@ -358,11 +352,10 @@ export function Player({
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => setMenu('captions')} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13px] text-ink-100 hover:bg-white/8">
+                  <button disabled className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13px] text-ink-300 opacity-60">
                     <Subtitles className="size-4 text-ink-300" />
                     <span className="flex-1">Captions</span>
-                    <span className="text-ink-300">{captions ? track || 'On' : 'Off'}</span>
-                    <ChevronRight className="size-3.5 text-ink-300" />
+                    <span>Unavailable</span>
                   </button>
                 </li>
                 <li className="border-t border-ink-700 px-3.5 py-2.5">
@@ -420,38 +413,6 @@ export function Player({
               </div>
             )}
 
-            {menu === 'captions' && (
-              <ul className="py-1">
-                <li>
-                  <button onClick={() => setMenu('settings')} className="flex w-full items-center gap-2 border-b border-ink-700 px-3 py-2 text-left text-[13px] text-ink-200 hover:bg-white/8">
-                    <ChevronLeft className="size-3.5" /> Captions
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => { setCaptions(false); setMenu('settings') }} className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8">
-                    <span className="w-4">{!captions && <Check className="size-3.5 text-tone-cyan-300" />}</span>
-                    Off
-                  </button>
-                </li>
-                {video.captions.length === 0 ? (
-                  <li className="px-3.5 py-2.5 text-[12px] text-ink-300">
-                    This title has no caption track.
-                  </li>
-                ) : (
-                  video.captions.map((c) => (
-                    <li key={c}>
-                      <button
-                        onClick={() => { setTrack(c); setCaptions(true); setMenu('settings') }}
-                        className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[13px] text-ink-100 hover:bg-white/8"
-                      >
-                        <span className="w-4">{captions && track === c && <Check className="size-3.5 text-tone-cyan-300" />}</span>
-                        {c}
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            )}
 
             {menu === 'keys' && (
               <div className="py-1">
@@ -466,7 +427,7 @@ export function Player({
                     ['0–9', 'Jump to 0–90%'],
                     ['↑ ↓', 'Volume'],
                     ['M', 'Mute'],
-                    ['C', 'Captions'],
+
                     ['F', 'Full screen'],
                     ['T', 'Theatre'],
                     ['< >', 'Slower / faster'],
@@ -497,6 +458,13 @@ export function Player({
             aria-valuenow={time}
             aria-valuetext={clock(time)}
             tabIndex={0}
+            onKeyDown={(e) => {
+              const step = e.shiftKey ? 10 : 5
+              const to = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? time + step
+                : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? time - step
+                : e.key === 'Home' ? 0 : e.key === 'End' ? total : null
+              if (to !== null) { e.preventDefault(); e.stopPropagation(); seek(to) }
+            }}
             onClick={(e) => seek(fromEvent(e))}
             onMouseMove={(e) => setScrub(fromEvent(e))}
             onMouseLeave={() => setScrub(null)}
@@ -566,10 +534,8 @@ export function Player({
                 <span className="mr-1 font-mono text-[11px] text-tone-cyan-300">{speed}×</span>
               )}
               <IconBtn
-                label={captions ? 'Turn captions off' : 'Turn captions on'}
-                onClick={() => setCaptions((c) => !c)}
-                active={captions}
-                disabled={video.captions.length === 0}
+                label="Captions unavailable"
+                disabled
               >
                 <Subtitles className="size-4" />
               </IconBtn>

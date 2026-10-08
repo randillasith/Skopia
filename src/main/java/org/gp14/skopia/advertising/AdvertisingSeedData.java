@@ -13,6 +13,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,16 +30,16 @@ import java.util.List;
  *
  * <p>Two rules keep this from becoming fake data nobody asked for. It writes
  * nothing that already exists — one officer with an existing handle, or a single
- * category, and the whole seeder stands down. And it is off outside development:
- * {@code @Profile("!prod")} plus the emptiness checks mean a real deployment with a
- * real catalogue never sees it.
+ * category, and the whole seeder stands down. The dev profile and an explicit
+ * opt-in are both required; prod and test remain excluded even when dev is active.
  *
  * <p>The marketing officer's handle matches the prototype's own advertising
  * identity, so signing in as that account in the UI resolves to this row through
  * {@link AdvertisingSessionController}.
  */
 @Configuration
-@Profile("!prod & !test")
+@Profile("dev & !prod & !test")
+@ConditionalOnProperty(name = "skopia.dev.seed-enabled", havingValue = "true")
 public class AdvertisingSeedData {
 
     private static final Logger log = LoggerFactory.getLogger(AdvertisingSeedData.class);
@@ -112,7 +113,7 @@ public class AdvertisingSeedData {
         MarketingOfficer officer = new MarketingOfficer();
         officer.setUsername(OFFICER_HANDLE);
         officer.setEmail(OFFICER_HANDLE + "@skopia.test");
-        // Development credentials only; AuthController accepts a plain-text match.
+        // Development-only fixture; authentication checks the encoded password.
         officer.setPasswordHash(passwords.encode(PASSWORD));
         officer.setFirstName("Madhusara");
         officer.setLastName("J. P. M.");

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { Search, Clock, X, CornerDownLeft, Tv } from 'lucide-react'
@@ -51,6 +51,7 @@ export function SearchBox({
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const box = useRef<HTMLDivElement>(null)
+  const listId = useId()
 
   useEffect(() => setQ(initial), [initial])
 
@@ -133,9 +134,9 @@ export function SearchBox({
           onKeyDown={onKey}
           role="combobox"
           aria-expanded={open && suggestions.length > 0}
-          aria-controls="search-suggestions"
+          aria-controls={listId}
           aria-autocomplete="list"
-          aria-activedescendant={active >= 0 ? `sugg-${active}` : undefined}
+          aria-activedescendant={open && active >= 0 && suggestions[active] ? `${listId}-sugg-${active}` : undefined}
           placeholder="Search the programme"
           aria-label="Search the programme"
           className="min-w-0 flex-1 bg-transparent text-[13px] text-ink-50 outline-none placeholder:text-ink-300"
@@ -154,7 +155,7 @@ export function SearchBox({
       <AnimatePresence>
         {open && suggestions.length > 0 && (
           <motion.ul
-            id="search-suggestions"
+            id={listId}
             role="listbox"
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -163,7 +164,7 @@ export function SearchBox({
             className="absolute inset-x-0 top-full z-50 mt-1.5 overflow-hidden rounded-sm border border-ink-600 bg-ink-850 py-1 shadow-e4"
           >
             {suggestions.map((s, i) => (
-              <li key={keyOf(s)} id={`sugg-${i}`} role="option" aria-selected={i === active}>
+              <li key={keyOf(s)} id={`${listId}-sugg-${i}`} role="option" aria-selected={i === active}>
                 <div
                   onMouseEnter={() => setActive(i)}
                   className={cn(

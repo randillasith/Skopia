@@ -19,7 +19,7 @@ import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import { Resolve } from '@/components/Loading'
 import { billing } from '@/lib/billing'
-import { ACCOUNTS, CHANNELS, accountById, ownedChannel } from '@/lib/session'
+import { ACCOUNTS, accountById, ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
 const isPublicVideo = (status?: string | null) => ['PUBLISHED', 'PUBLIC'].includes((status ?? '').toUpperCase())
@@ -858,36 +858,14 @@ export function StudioAnalytics() {
 /* ====================================================== create a channel */
 
 /**
- * Self-service. A registered account becomes a creator by naming a channel —
- * there is no approval step and no administrator in the path. That is the whole
- * point of the screen, so it says so rather than implying it by absence.
+ * RegisteredViewer and ContentCreator are sibling JOINED JPA subtypes. Inserting
+ * a content_creators row for an existing registered_viewers id does not convert
+ * its persisted Java type or its bearer-token role. Removing the registered row
+ * would cascade away viewer-owned data. Until an explicit migration preserves
+ * that data and re-hydrates identity safely, do not offer a success-only form.
  */
 export function CreateChannel() {
-  const nav = useNavigate()
-  const toast = useToast()
   const { viewer } = useSession()
-  const [name, setName] = useState('')
-  const [handle, setHandle] = useState('')
-  const [touched, setTouched] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const slug = handle || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-  const taken = CHANNELS.some((c) => c.handle === slug)
-  const tooShort = slug.length > 0 && slug.length < 3
-  const error = taken ? 'That handle is already in use.' : tooShort ? 'Handles are at least three characters.' : ''
-  const ready = name.trim().length > 1 && slug.length >= 3 && !taken
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setTouched(true)
-    if (!ready) return
-    setBusy(true)
-    window.setTimeout(() => {
-      toast({ title: `${name} is yours. You can publish straight away.`, tone: 'ok' })
-      nav('/studio')
-    }, 650)
-  }
-
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:py-16">
@@ -895,65 +873,16 @@ export function CreateChannel() {
         <h1 className="font-marquee mt-2 text-[clamp(1.9rem,5vw,2.8rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-fg">
           Open a channel
         </h1>
-        <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-ink-200">
-          Everything you publish belongs to a channel. Nobody approves this — the channel exists
-          the moment you name it, and you can upload immediately.
-        </p>
-
-        <form onSubmit={submit} className="mt-9 space-y-5">
-          <Field label="Channel name" hint="What viewers see under every video.">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Meridian Films"
-              autoFocus
-            />
-          </Field>
-
-          <Field
-            label="Handle"
-            hint="The channel's address. Letters, numbers and hyphens."
-            error={touched ? error : ''}
-          >
-            <div className="flex items-stretch">
-              <span className="flex items-center rounded-l-sm border border-r-0 border-ink-600 bg-ink-900 px-3 font-mono text-[13px] text-ink-300">
-                skopia.lk/@
-              </span>
-              <Input
-                className="rounded-l-none"
-                value={handle}
-                onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                onBlur={() => setTouched(true)}
-                placeholder={slug || 'meridian'}
-              />
-            </div>
-          </Field>
-
-          <div className="rounded-lg border border-ink-700 bg-ink-850 p-4">
-            <p className="letterboard text-ink-300">What opening a channel gives you</p>
-            <ul className="mt-2.5 space-y-1.5 text-[14px] text-ink-200">
-              <li>· Publish, edit and withdraw your own videos</li>
-              <li>· Appoint moderators for this channel, and remove them</li>
-              <li>· See how your own videos perform</li>
-            </ul>
-            <p className="mt-3 border-t border-ink-700 pt-3 text-[13px] leading-relaxed text-ink-300">
-              It gives you nothing beyond your own channel. Staff work — advertising, the complaint
-              queue, platform settings — stays with the roles an administrator grants.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!ready}>
-              Create {name.trim() ? name.trim() : 'channel'}
-            </Button>
-            <Button type="button" size="lg" onClick={() => nav('/browse')}>
-              Not now
-            </Button>
-          </div>
-          <p className="text-[13px] text-ink-300">
-            Opening as <span className="text-ink-150">{viewer?.name}</span> · @{viewer?.handle}
+        <div role="status" className="mt-8 rounded-lg border border-warning-500/35 bg-warning-500/8 p-5">
+          <p className="font-medium text-tone-warning-400">Channel creation is not available yet.</p>
+          <p className="mt-2 text-[14px] leading-relaxed text-ink-200">
+            Your account has not been changed and no channel has been created. We cannot safely
+            convert an existing viewer account into a creator account yet. Please check back later.
           </p>
-        </form>
+        </div>
+        <p className="mt-5 text-[13px] text-ink-300">
+          Signed in as {viewer?.name ?? 'a viewer'} · <Link to="/browse" className="underline">Back to browse</Link>
+        </p>
       </div>
     </FrontOfHouse>
   )
@@ -1095,28 +1024,19 @@ export function ChannelModerators() {
 
 export function ChannelSettings() {
   const { viewer } = useSession()
-  const channel = ownedChannel(viewer)!
-  const toast = useToast()
-  const [name, setName] = useState(channel.name)
-
+  // The prototype channel list is not an authoritative ownership record. Never
+  // allow its local-only settings editor to imply an authenticated server write.
+  const channel = ownedChannel(viewer)
   return (
     <BackOfHouse title="Channel settings">
       <div className="max-w-xl space-y-5">
-        <Field label="Channel name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Handle" hint="Changing this breaks existing links to your channel.">
-          <Input value={channel.handle} readOnly className="text-ink-300" />
-        </Field>
-        <div>
-          <p className="letterboard text-ink-300">Opened</p>
-          <p className="mt-1 font-mono text-[13px] text-ink-150">{channel.created}</p>
-        </div>
-        <div className="flex gap-3 pt-1">
-          <Button variant="primary" onClick={() => toast({ title: 'Channel updated.', tone: 'ok' })}>
-            Save changes
-          </Button>
-        </div>
+        <p role="status" className="rounded-lg border border-warning-500/35 bg-warning-500/8 p-4 text-ink-200">
+          Channel settings cannot be changed here yet. No changes will be saved.
+        </p>
+        {channel && <>
+          <Field label="Channel name"><Input value={channel.name} readOnly /></Field>
+          <Field label="Handle"><Input value={channel.handle} readOnly /></Field>
+        </>}
       </div>
     </BackOfHouse>
   )
