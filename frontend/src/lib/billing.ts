@@ -28,7 +28,7 @@ export type OrderView = {
   brand?: CardBrand | null; cardBrand?: CardBrand | null; status: string; reference?: string | null;
   createdAt?: string | null; submittedAt?: string | null; billing?: BillingContact | null;
   fullName?: string | null; email?: string | null; note?: string | null; decisionNote?: string | null;
-  hasSlip?: boolean; slipAvailable?: boolean
+  hasSlip?: boolean; slipAvailable?: boolean; paymentId?: number | null; simulation?: boolean
 }
 export const SAMPLE_BANK_INSTRUCTIONS = 'Sample only: use a fictional reference such as SAMPLE-001. Do not send money to any bank account or upload a real transfer receipt.'
 export function validateBilling(billing: BillingContact): Partial<Record<keyof BillingContact, string>> {

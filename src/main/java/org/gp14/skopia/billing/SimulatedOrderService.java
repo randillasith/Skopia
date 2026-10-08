@@ -70,14 +70,7 @@ public class SimulatedOrderService {
     /** No-charge test-card UX: only a derived network brand reaches the server. No payment is recorded. */
     @Transactional
     public BillingDtos.OrderView noChargeCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
-        checkLegacyOrdersEnabled();
-        return demoCard(id, plan, brand, contact);
-    }
-
-    /** Explicitly gated demo checkout: receives only the derived network, never card credentials. */
-    @Transactional
-    public BillingDtos.OrderView demoCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
-        checkEnabled(); checkPlan(plan);
+        checkLegacyOrdersEnabled(); checkEnabled(); checkPlan(plan);
         if (!List.of("VISA", "MASTERCARD").contains(brand)) bad("Unsupported test-card brand");
         Viewer owner=lockViewer(id);
         BillingOrder order=create(owner,plan,"NO_CHARGE_TEST_CARD",brand,contact);
@@ -86,6 +79,20 @@ public class SimulatedOrderService {
         order.setStatus("NO_CHARGE_ACTIVE");
         Subscription subscription=issueEntitlement(owner);
         order.setSubscription(subscription);
+        order=orders.saveAndFlush(order);
+        billingMail.receipt(order);
+        return view(order);
+    }
+
+    /** Refundable simulated LKR 500 checkout. The server owns the price; no real card data or processor. */
+    @Transactional
+    public BillingDtos.OrderView demoCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
+        checkEnabled(); checkPlan(plan);
+        if (!List.of("VISA", "MASTERCARD").contains(brand)) bad("Unsupported test-card brand");
+        Viewer owner=lockViewer(id);
+        BillingOrder order=create(owner,plan,"DEMO_CARD",brand,contact);
+        order.setStatus("SIMULATED_APPROVED");
+        activate(order,owner,"CARD_PREVIEW_"+brand);
         order=orders.saveAndFlush(order);
         billingMail.receipt(order);
         return view(order);
