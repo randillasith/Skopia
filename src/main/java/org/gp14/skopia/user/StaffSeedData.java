@@ -12,6 +12,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ import java.time.LocalDateTime;
  *
  * <p>This is the same device {@code AdvertisingSeedData} uses for the marketing
  * officer, under the same two rules: it writes nothing that already exists, and
- * it is off outside development. It is a way in for development and for a
+ * it requires the dev profile and explicit opt-in. It is a way in for development and for a
  * demonstration; it is not a substitute for the grant flow, which is still
  * missing and is noted in the wiring notes.
  *
@@ -36,7 +37,8 @@ import java.time.LocalDateTime;
  * one lands in the console that identity was written for.
  */
 @Configuration
-@Profile("!prod & !test")
+@Profile("dev & !prod & !test")
+@ConditionalOnProperty(name = "skopia.dev.seed-enabled", havingValue = "true")
 public class StaffSeedData {
 
     private static final Logger log = LoggerFactory.getLogger(StaffSeedData.class);

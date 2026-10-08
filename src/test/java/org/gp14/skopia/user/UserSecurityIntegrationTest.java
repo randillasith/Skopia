@@ -77,6 +77,66 @@ class UserSecurityIntegrationTest {
     }
 
     @Test
+    void registeredViewerNamedAdminCannotAcquireStaffPrivileges() throws Exception {
+        String body = json.writeValueAsString(java.util.Map.of("username", "admin", "email", "admin-viewer@example.test", "password", "viewer-password"));
+        String registration = mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String viewerToken = json.readTree(registration).get("token").asText();
+        for (String path : java.util.List.of("/api/admin/users", "/api/billing/admin/users")) {
+            mvc.perform(get(path).header("Authorization", "Bearer " + viewerToken)).andExpect(status().isForbidden());
+            mvc.perform(get(path).header("Authorization", "Bearer " + tokens.issue(admin.getId()))).andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void renamedViewerNamedAdminCannotAcquireStaffPrivileges() throws Exception {
+        viewer.setUsername("AdMiN");
+        viewers.saveAndFlush(viewer);
+        for (String path : java.util.List.of("/api/admin/users", "/api/billing/admin/users")) {
+            mvc.perform(get(path).header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void announcementAdminAliasRequiresAdministrator() throws Exception {
+        mvc.perform(get("/api/announcements/admin")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/announcements/admin").header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/announcements/admin").header("Authorization", "Bearer " + tokens.issue(admin.getId())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void unmatchedApiPathsDenyAnonymousAndAuthenticatedCallers() throws Exception {
+        mvc.perform(get("/api/not-yet-registered")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/not-yet-registered").header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void intendedPublicReadsRemainPublic() throws Exception {
+        mvc.perform(get("/api/health")).andExpect(status().isOk());
+        mvc.perform(get("/api/categories")).andExpect(status().isOk());
+        mvc.perform(get("/api/deployment")).andExpect(status().isOk());
+        // A nonexistent video is rejected by the endpoint, not by security.
+        mvc.perform(get("/api/ads/active").param("videoId", "999999")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void profileAndAdminBadgesIgnoreStaleLegacyPremiumFlag() throws Exception {
+        viewer.setIsPremium(true); viewers.saveAndFlush(viewer);
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokens.issue(viewer.getId())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.isPremium").value(false));
+        mvc.perform(get("/api/admin/users/" + viewer.getId())
+                .header("Authorization", "Bearer " + tokens.issue(admin.getId())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.isPremium").value(false));
+        mvc.perform(get("/api/admin/users/stats")
+                .header("Authorization", "Bearer " + tokens.issue(admin.getId())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.premiumViewers").value(0));
+    }
+
+    @Test
     void loginReturnsSignedTokenAndMeUsesOnlyPrincipal() throws Exception {
         String body = json.writeValueAsString(java.util.Map.of("identifier", viewer.getEmail(), "password", "correct-horse"));
         String token = json.readTree(mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))

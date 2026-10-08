@@ -15,6 +15,9 @@ spring:
       max-file-size: 250MB
       max-request-size: 260MB
 skopia:
+  # Fixtures activate only with the dev profile and this opt-in; prod/test profiles always disable them.
+  dev:
+    seed-enabled: ${SKOPIA_DEV_SEED_ENABLED:false}
   billing:
     demo-enabled: ${SKOPIA_BILLING_DEMO_ENABLED:false}
     # Private directory outside static assets and /uploads; never serve slips publicly.

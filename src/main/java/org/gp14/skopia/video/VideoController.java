@@ -160,7 +160,9 @@ public class VideoController {
     @PostMapping("/videos/{id}/view")
     public ResponseEntity<Map<String, String>> incrementView(@PathVariable Long id,
             @AuthenticationPrincipal User principal) {
-        videoService.incrementViewCount(id, actor(principal, null, null));
+        // A stateless public request has no durable identity to deduplicate against.
+        if (principal == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in to count views");
+        videoService.incrementViewCount(id, principal.getId(), "user:" + principal.getId());
         return ResponseEntity.ok(Map.of("message", "View counted"));
     }
 

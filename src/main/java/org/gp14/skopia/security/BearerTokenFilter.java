@@ -55,7 +55,7 @@ public class BearerTokenFilter extends OncePerRequestFilter {
                     List<GrantedAuthority> authorities = new ArrayList<>();
                     authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
 
-                    if (user instanceof Administrator || admins.existsById(user.getId()) || "admin".equalsIgnoreCase(user.getUsername())) {
+                    if (user instanceof Administrator || admins.existsById(user.getId())) {
                         authorities.add(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"));
                         authorities.add(new SimpleGrantedAuthority("ROLE_SUPPORT_OFFICER"));
                     } else if (user instanceof SupportOfficer || supportOfficers.existsById(user.getId())) {
