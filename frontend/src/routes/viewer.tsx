@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Play, Bookmark, Share2, Flag, ThumbsUp, ThumbsDown, Trash2, SearchX, Clock,
@@ -655,14 +655,15 @@ export function Watch() {
     return [...top.filter((c) => c.pinned), ...sorted]
   }, [thread, order])
 
-  // Watching is what puts something in history and what counts as a view, so
-  // both are recorded here rather than on any click that happened to lead here.
-  // The count is deliberately not awaited: a failed count must not stop playback.
-  useEffect(() => {
-    if (!v || (v.premium && !v.mediaUrl)) return
+  // Record a view only when playback actually starts, never merely on page load
+  // or while a pre-roll is running. Repeated pause/resume counts once per title.
+  const countedVideo = useRef<string | null>(null)
+  const onPlaybackStarted = useCallback(() => {
+    if (!v || numericId == null || countedVideo.current === v.id) return
+    countedVideo.current = v.id
     recordWatch(v.id)
-    if (numericId != null) catalogue.countView(numericId).catch(() => {})
-  }, [v?.id, v?.premium, v?.mediaUrl, numericId])
+    catalogue.countView(numericId).catch(() => {})
+  }, [v?.id, numericId, recordWatch])
 
   // Where you stopped is written back as you watch, so picking the title up on
   // another device lands in the right place — and because that write is what
@@ -775,6 +776,7 @@ export function Watch() {
                 autoplay={autoplay}
                 onAutoplay={setAutoplay}
                 onTimeChange={setAt}
+                onPlaybackStarted={onPlaybackStarted}
                 onReport={() => setReportOpen(true)}
                 onEnded={() => {
                   if (autoplay && related[0]) {

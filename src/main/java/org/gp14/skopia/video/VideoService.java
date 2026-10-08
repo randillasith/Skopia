@@ -149,6 +149,7 @@ public class VideoService {
         if (creatorId == null) throw new AccessDeniedException("Authentication required");
         ContentCreator creator = contentCreatorRepository.findById(creatorId)
                 .orElseThrow(() -> new AccessDeniedException("Creator account required"));
+        String initialStatus = creatorStatus(request.getStatus(), false);
 
         Long catId = request.getCategoryId() != null ? request.getCategoryId() : 1L;
         Category category = categoryRepository.findById(catId)
@@ -187,7 +188,7 @@ public class VideoService {
         video.setTitle(request.getTitle() != null ? request.getTitle().trim() : "Untitled Video");
         video.setDescription(request.getDescription() != null ? request.getDescription().trim() : "");
         video.setDuration(request.getDurationSeconds() != null ? request.getDurationSeconds() : 0);
-        video.setVideoStatus(request.getStatus() != null ? request.getStatus().toUpperCase() : "PUBLISHED");
+        video.setVideoStatus(initialStatus);
         video.setVideoUrl(finalVideoUrl);
         video.setThumbnailUrl(finalThumbnailUrl);
         video.setViewCount(0L);
@@ -224,8 +225,21 @@ public class VideoService {
             requirePremiumPass(requestedTier, creatorId);
             video.setAccessTier(resolveTier(requestedTier));
         }
-        if (request.getStatus() != null && !request.getStatus().isBlank()) {
-            video.setVideoStatus(request.getStatus().toUpperCase());
+        if (request.getStatus() != null) {
+            String current = video.getVideoStatus();
+            String next = creatorStatus(request.getStatus(), true);
+            if (current != null && !java.util.Set.of("PUBLISHED", "PUBLIC", "DRAFT", "PRIVATE", "ARCHIVED")
+                    .contains(current.toUpperCase(java.util.Locale.ROOT))) {
+                throw new AccessDeniedException("Video visibility cannot be changed during moderation");
+            }
+            if ("ARCHIVED".equalsIgnoreCase(current) && !"PUBLISHED".equals(next)) {
+                throw new AccessDeniedException("Archived videos can only be restored to public");
+            }
+            if ("PUBLISHED".equals(next) && video.getAccessTier() != null
+                    && "PREMIUM".equalsIgnoreCase(video.getAccessTier().getTierName())) {
+                requirePremiumPass("PREMIUM", creatorId);
+            }
+            video.setVideoStatus(next);
         }
         if (request.getVideoUrl() != null && !request.getVideoUrl().isBlank()) {
             video.setVideoUrl(checkedExternalUrl(request.getVideoUrl()));
@@ -676,6 +690,20 @@ public class VideoService {
             return url + "?access=" + tokens.issueMedia(video.getId(), filename, viewerId);
         }
         return url;
+    }
+
+    private String creatorStatus(String requested, boolean allowArchive) {
+        String status = requested == null ? "PUBLISHED" : requested.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (status) {
+            case "PUBLIC", "PUBLISHED" -> "PUBLISHED";
+            case "PRIVATE", "DRAFT" -> "DRAFT";
+            case "ARCHIVED" -> {
+                if (!allowArchive) throw new IllegalArgumentException("New videos must be public or private");
+                yield "ARCHIVED";
+            }
+            default -> throw new IllegalArgumentException("Status must be PUBLIC or PRIVATE"
+                    + (allowArchive ? ", or ARCHIVED" : ""));
+        };
     }
 
     private String normalizedTier(String requested) {

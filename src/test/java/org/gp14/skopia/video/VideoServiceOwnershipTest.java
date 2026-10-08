@@ -87,6 +87,44 @@ class VideoServiceOwnershipTest {
     }
 
     @Test
+    void creatorCanToggleVisibilityButCannotOverrideModeration() {
+        UpdateVideoRequest privateRequest = new UpdateVideoRequest();
+        privateRequest.setStatus("PRIVATE");
+        video.setVideoStatus("PUBLISHED");
+        when(videos.save(video)).thenReturn(video);
+        service.updateVideo(9L, privateRequest, 41L);
+        org.assertj.core.api.Assertions.assertThat(video.getVideoStatus()).isEqualTo("DRAFT");
+
+        UpdateVideoRequest publicRequest = new UpdateVideoRequest();
+        publicRequest.setStatus("PUBLIC");
+        service.updateVideo(9L, publicRequest, 41L);
+        org.assertj.core.api.Assertions.assertThat(video.getVideoStatus()).isEqualTo("PUBLISHED");
+
+        video.setVideoStatus("PULLED");
+        assertThatThrownBy(() -> service.updateVideo(9L, publicRequest, 41L))
+                .isInstanceOf(AccessDeniedException.class);
+        org.assertj.core.api.Assertions.assertThat(video.getVideoStatus()).isEqualTo("PULLED");
+    }
+
+    @Test
+    void invalidCreatorStatusIsRejected() {
+        UpdateVideoRequest request = new UpdateVideoRequest();
+        request.setStatus("PULLED");
+        video.setVideoStatus("DRAFT");
+        assertThatThrownBy(() -> service.updateVideo(9L, request, 41L))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(videos, never()).save(video);
+    }
+
+    @Test
+    void privateVideoCannotBeViewedBySomeoneElse() {
+        VideoAccessService actual = new VideoAccessService(billing);
+        video.setVideoStatus("DRAFT");
+        org.assertj.core.api.Assertions.assertThat(actual.canSee(video, 42L)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(actual.canSee(video, 41L)).isTrue();
+    }
+
+    @Test
     void onlyCommentOwnerCanEditOrDeleteAndDeletedCannotBeEdited() {
         org.gp14.skopia.model.user.RegisteredViewer author = new org.gp14.skopia.model.user.RegisteredViewer();
         author.setId(7L); author.setDisplayName("Author");

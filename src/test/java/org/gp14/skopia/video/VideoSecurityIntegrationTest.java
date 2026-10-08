@@ -91,6 +91,36 @@ class VideoSecurityIntegrationTest {
         } finally { Files.deleteIfExists(path); }
     }
 
+    @Test void creatorVisibilityChangesAreEnforcedByTheApiAndCatalogue() throws Exception {
+        ContentCreator owner = new ContentCreator();
+        owner.setUsername("owner_" + UUID.randomUUID()); owner.setEmail(UUID.randomUUID() + "@example.test");
+        owner.setPasswordHash("hash"); owner.setChannelName("Channel");
+        owner = creators.saveAndFlush(owner);
+        RegisteredViewer outsider = viewer("outsider", false);
+        Video v = video(owner, null, "PUBLISHED", "https://example.test/movie.mp4");
+        String ownerToken = "Bearer " + tokens.issue(owner.getId());
+        String viewerToken = "Bearer " + tokens.issue(outsider.getId());
+        mvc.perform(put("/api/videos/" + v.getId()).header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PRIVATE\"}"))
+                .andExpect(status().isOk());
+        assertThat(videos.findById(v.getId()).orElseThrow().getVideoStatus()).isEqualTo("DRAFT");
+        mvc.perform(get("/api/videos/" + v.getId()).header("Authorization", viewerToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/videos/" + v.getId()).header("Authorization", ownerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT"));
+        mvc.perform(put("/api/videos/" + v.getId()).header("Authorization", viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PUBLIC\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/videos/" + v.getId()).header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PUBLIC\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/videos/" + v.getId()).header("Authorization", viewerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PUBLISHED"));
+        mvc.perform(put("/api/videos/" + v.getId()).header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PULLED\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test void forgedIdsCannotCreateOrEditOthersComments() throws Exception {
         RegisteredViewer a = viewer("author", false);
         RegisteredViewer b = viewer("intruder", false);

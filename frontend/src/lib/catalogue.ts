@@ -141,6 +141,7 @@ export function toVideo(row: ServerVideo): Video {
     comments: 0,
     premium: (row.accessType ?? '').toUpperCase() === 'PREMIUM',
     billing: billingOf(row.status),
+    status: row.status,
     // No caption track is stored yet, so claiming one would be a lie on screen.
     captions: [],
     synopsis: row.description ?? '',
