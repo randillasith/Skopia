@@ -19,6 +19,7 @@ vi.mock('@/lib/billing', async (importOriginal) => {
 })
 import { Plans, Checkout, CheckoutResult, Subscription } from './billing'
 import { billing } from '@/lib/billing'
+import { ApiError } from '@/lib/api'
 
 let root: Root | undefined
 let host: HTMLDivElement
@@ -61,6 +62,16 @@ describe('subscription visual flow', () => {
     for (const [key, value] of Object.entries(values)) await type(input(key), value)
     await click(host.querySelector<HTMLButtonElement>('button[type="submit"]')!)
     expect(billing.complimentary).toHaveBeenCalledWith(expect.objectContaining(values), 42)
+  })
+  it('explains an existing-pass conflict and links to the active subscription', async () => {
+    vi.mocked(billing.complimentary).mockRejectedValueOnce(new ApiError(409, 'The request failed (409).'))
+    await mount(<Checkout />, '/checkout?plan=MONTHLY')
+    const values = { fullName: 'Test User', email: 'test@example.test', phone: '0771234567', addressLine1: 'Street', city: 'Colombo', postalCode: '00100' }
+    for (const [key, value] of Object.entries(values)) await type(input(key), value)
+    await click(host.querySelector<HTMLButtonElement>('button[type="submit"]')!)
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('You already have an active pass.')
+    expect(host.textContent).not.toContain('The request failed (409).')
+    expect(host.querySelector<HTMLAnchorElement>('a[href="/subscription"]')?.textContent).toContain('View your active subscription')
   })
   it('shows a styled activation result with an obvious subscription action', async () => {
     host = document.createElement('div'); document.body.append(host); root = createRoot(host)

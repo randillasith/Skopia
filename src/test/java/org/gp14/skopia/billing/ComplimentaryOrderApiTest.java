@@ -123,8 +123,8 @@ class ComplimentaryOrderApiTest {
                 .contentType(MediaType.APPLICATION_JSON).content(payload())).andExpect(status().isCreated());
         var order=orders.findByOwnerIdOrderBySubmittedAtDescIdDesc(v.getId()).get(0);
         var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("COMPLIMENTARY_RECEIPT:"+order.getId())).toList();
-        assertThat(rows).hasSize(2).extracting(r->r.getRecipient())
-                .containsExactlyInAnyOrder("ada@example.test",BillingMailService.MAIN_ADMIN_RECIPIENT);
+        assertThat(rows).hasSize(3).extracting(r->r.getRecipient())
+                .containsExactlyInAnyOrder(v.getEmail(),"ada@example.test",BillingMailService.MAIN_ADMIN_RECIPIENT);
         assertThat(rows).allSatisfy(r->{
             assertThat(r.getSubject()).contains("complimentary");
             assertThat(r.getBody()).contains("Listed monthly price: LKR 500", "Amount due: LKR 0", "no payment was made", "no automatic renewal");

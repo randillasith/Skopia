@@ -49,8 +49,9 @@ class BillingEmailMissingAdminTest {
         assertThat(row.getAttempts()).isZero();
         assertThat(row.getLastError()).isEqualTo("Main administrator unavailable");
         var subscriberMail=org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(sender,times(1)).send(subscriberMail.capture());
-        assertThat(subscriberMail.getValue().getTo()).containsExactly(contact.email());
+        verify(sender,times(2)).send(subscriberMail.capture());
+        assertThat(subscriberMail.getAllValues()).extracting(message->message.getTo()[0])
+                .containsExactlyInAnyOrder(viewer.getEmail(),contact.email());
         var admin=new Administrator(); admin.setUsername("billing-mail-test-admin");
         admin.setEmail("newadmin"+key+"@example.test"); admin.setPasswordHash("test-only-hash");
         admin.setDesignation("Administrator"); admin.setHireDate(LocalDate.now()); admin.setAdminLevel("MAIN");

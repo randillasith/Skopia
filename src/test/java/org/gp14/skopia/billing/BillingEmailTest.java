@@ -53,24 +53,36 @@ class BillingEmailTest {
     private BillingDtos.BillingContact contact(String email) {
         return new BillingDtos.BillingContact("Test Viewer", email, "0771234567", "Test Street", null, "Colombo", "00100", "LK");
     }
-    @Test void complimentaryReceiptDispatchesToBillingContactAndCurrentMainWithoutPaidClaims() {
+    @Test void complimentaryReceiptDispatchesToAccountBillingContactAndCurrentMainWithoutPaidClaims() {
         String key=UUID.randomUUID().toString().replace("-", "");
         var admin=main();
         var v=viewer(key);
         String billingAddress="billing"+key+"@example.test";
         var order=orders.complimentary(v.getId(),"MONTHLY",contact(billingAddress));
+        reset(sender);
         dispatcher.dispatch();
         var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("COMPLIMENTARY_RECEIPT:"+order.id())).toList();
-        assertThat(rows).hasSize(2).allSatisfy(r->assertThat(r.getStatus()).isEqualTo("SENT"));
+        assertThat(rows).hasSize(3).allSatisfy(r->assertThat(r.getStatus()).isEqualTo("SENT"));
         var captured=org.mockito.ArgumentCaptor.forClass(org.springframework.mail.SimpleMailMessage.class);
-        verify(sender,atLeast(2)).send(captured.capture());
-        assertThat(captured.getAllValues()).anySatisfy(m->assertThat(m.getTo()).containsExactly(billingAddress));
-        assertThat(captured.getAllValues()).anySatisfy(m->assertThat(m.getTo()).containsExactly(admin.getEmail()));
-        assertThat(captured.getAllValues()).allSatisfy(m->{
+        verify(sender,atLeast(3)).send(captured.capture());
+        var current=captured.getAllValues().stream().filter(m->m.getText().contains(order.reference())).toList();
+        assertThat(current).hasSize(3);
+        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(v.getEmail()));
+        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(billingAddress));
+        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(admin.getEmail()));
+        assertThat(current).allSatisfy(m->{
             assertThat(m.getSubject()).contains("complimentary");
             assertThat(m.getText()).contains("Listed monthly price: LKR 500", "Amount due: LKR 0");
             assertThat(m.getText()).doesNotContain("test card", "charged LKR 500", "paid LKR 500");
         });
+    }
+    @Test void matchingAccountAndBillingEmailsQueueOnlyOneSubscriberCopy() {
+        String key=UUID.randomUUID().toString().replace("-", "");
+        var v=viewer(key);
+        var order=orders.complimentary(v.getId(),"MONTHLY",contact(v.getEmail().toUpperCase(java.util.Locale.ROOT)));
+        var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("COMPLIMENTARY_RECEIPT:"+order.id())).toList();
+        assertThat(rows).hasSize(2).extracting(BillingMailOutbox::getRecipient)
+                .containsExactlyInAnyOrder(v.getEmail(),BillingMailService.MAIN_ADMIN_RECIPIENT);
     }
     @Test void corruptStoredRequesterEmailDoesNotRollBackRefund() {
         String key=UUID.randomUUID().toString().replace("-", "");
@@ -147,11 +159,11 @@ class BillingEmailTest {
         var v=viewer(key); var main=main(); admin("other"+key);
             var order=orders.noChargeCard(v.getId(),"MONTHLY","VISA",contact("billing"+key+"@example.test"));
             var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("NO_CHARGE_RECEIPT:"+order.id())).toList();
-            assertThat(rows).hasSize(2);
-            assertThat(rows).extracting(BillingMailOutbox::getRecipient).containsExactlyInAnyOrder("billing"+key+"@example.test",BillingMailService.MAIN_ADMIN_RECIPIENT);
+            assertThat(rows).hasSize(3);
+            assertThat(rows).extracting(BillingMailOutbox::getRecipient).containsExactlyInAnyOrder(v.getEmail(),"billing"+key+"@example.test",BillingMailService.MAIN_ADMIN_RECIPIENT);
             assertThat(rows).allSatisfy(r->{assertThat(r.getBody()).contains("LKR 0",order.reference(),"No payment", "30-day"); assertThat(r.getAttempts()).isZero();});
             transactions.executeWithoutResult(s->mail.receipt(orderRepository.findById(order.id()).orElseThrow()));
-            assertThat(outbox.findAll().stream().filter(r->r.getEventKey().equals("NO_CHARGE_RECEIPT:"+order.id()))).hasSize(2);
+            assertThat(outbox.findAll().stream().filter(r->r.getEventKey().equals("NO_CHARGE_RECEIPT:"+order.id()))).hasSize(3);
             assertThat(order.paymentId()).isNull();
             assertThat(billing.payments(v.getId())).isEmpty();
             verifyNoInteractions(sender);
