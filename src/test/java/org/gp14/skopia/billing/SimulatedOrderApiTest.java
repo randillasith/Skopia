@@ -27,6 +27,7 @@ class SimulatedOrderApiTest {
     @Autowired RegisteredViewerRepository viewers;
     @Autowired AdministratorRepository admins;
     @Autowired PaymentRepository payments;
+    @Autowired BillingOrderRepository orders;
     @Autowired SubscriptionRepository subscriptions;
     @Autowired TokenService tokens;
     @Autowired BillingService billing;
@@ -68,6 +69,71 @@ class SimulatedOrderApiTest {
         assertThat(payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId())).singleElement()
             .satisfies(p -> { assertThat(p.getAmount()).isEqualByComparingTo("500.00"); assertThat(p.getPayMethod()).isEqualTo("CARD_PREVIEW_VISA"); });
         mvc.perform(get("/api/billing/orders").header("Authorization",auth(other))).andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+    }
+    @Test void noChargeCardIssuesThirtyDayEntitlementWithoutPaymentAndRejectsCredentials() throws Exception {
+        var owner=viewer("noChargeOwner");
+        String endpoint="/api/billing/orders/no-charge-card";
+        for (String field : new String[]{"cardNumber", "pan", "cvv", "expiry", "expirationMonth", "expirationYear"}) {
+            mvc.perform(post(endpoint).header("Authorization",auth(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(card().replace("\"brand\"", "\""+field+"\":\"sensitive\",\"brand\"")))
+                .andExpect(status().isBadRequest());
+        }
+        mvc.perform(post(endpoint).header("Authorization",auth(owner)).contentType(MediaType.APPLICATION_JSON)
+            .content(card().replace("VISA","AMEX"))).andExpect(status().isBadRequest());
+        assertThat(payments.count()).isZero();
+        assertThat(subscriptions.count()).isZero();
+        var response=mvc.perform(post(endpoint).header("Authorization",auth(owner)).contentType(MediaType.APPLICATION_JSON).content(card()))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.amount").value(0))
+            .andExpect(jsonPath("$.status").value("NO_CHARGE_ACTIVE"))
+            .andExpect(jsonPath("$.paymentId").value(org.hamcrest.Matchers.nullValue()))
+            .andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(response).path("notice").asText()).contains("No charge");
+        assertThat(payments.count()).isZero();
+        assertThat(subscriptions.count()).isEqualTo(1);
+        var active=subscriptions.findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(owner.getId(),"ACTIVE",java.time.LocalDateTime.now());
+        assertThat(active).singleElement().satisfies(s -> assertThat(java.time.Duration.between(s.getStartDate(),s.getEndDate()).toDays()).isEqualTo(30));
+        assertThat(billing.hasActivePremium(owner.getId())).isTrue();
+        mvc.perform(post(endpoint).header("Authorization",auth(owner)).contentType(MediaType.APPLICATION_JSON).content(card()))
+            .andExpect(status().isConflict());
+        assertThat(subscriptions.count()).isEqualTo(1);
+        mvc.perform(post("/api/billing/cancel").header("Authorization",auth(owner))).andExpect(status().isOk());
+        assertThat(billing.hasActivePremium(owner.getId())).isFalse();
+    }
+    @Test void noChargeCardRejectsEmbeddedCardNumbersInEveryPersistedContactField() throws Exception {
+        var owner=viewer("noChargeContactGuard");
+        String testNumber = "4" + "1".repeat(15);
+        String grouped = "Sample " + String.join("-", "4111", "1111", "1111", "1111") + " detail";
+        for (String field : new String[]{"fullName", "email", "phone", "addressLine1", "addressLine2", "city", "postalCode"}) {
+            var payload=(com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(card());
+            var contact=(com.fasterxml.jackson.databind.node.ObjectNode) payload.get("billing");
+            String leaked=field.equals("email") ? "user" + testNumber + "@example.test"
+                    : field.equals("phone") ? testNumber
+                    : grouped;
+            contact.put(field,leaked);
+            mvc.perform(post("/api/billing/orders/no-charge-card").header("Authorization",auth(owner))
+                    .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest())
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString()).doesNotContain(leaked));
+            assertThat(orders.count()).isZero();
+            assertThat(subscriptions.count()).isZero();
+        }
+        var nested=(com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(card());
+        ((com.fasterxml.jackson.databind.node.ObjectNode) nested.get("billing")).put("cardNumber", testNumber);
+        mvc.perform(post("/api/billing/orders/no-charge-card").header("Authorization",auth(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(nested)))
+            .andExpect(status().isBadRequest());
+        for (String number : new String[]{"4" + "2".repeat(12), "4" + "0".repeat(17) + "6"}) {
+            var payload=(com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(card());
+            ((com.fasterxml.jackson.databind.node.ObjectNode) payload.get("billing")).put("addressLine1", "Unit " + number);
+            mvc.perform(post("/api/billing/orders/no-charge-card").header("Authorization",auth(owner))
+                    .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest());
+        }
+        assertThat(orders.count()).isZero();
+        mvc.perform(post("/api/billing/orders/no-charge-card").header("Authorization",auth(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(card()))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.billing.phone").value("0771234567"));
+        assertThat(orders.count()).isEqualTo(1);
     }
     @Test void mastercardIsBrandOnlyAndNeverProducesCardDigits() throws Exception {
         var owner=viewer("mastercardPreview");
