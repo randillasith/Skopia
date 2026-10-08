@@ -37,11 +37,12 @@ public class AuthController {
     private final TokenService tokens;
     private final BillingService billing;
     private final PasswordResetService passwordReset;
+    private final WelcomeMailService welcomeMail;
 
     public AuthController(UserRepository users, RegisteredViewerRepository viewers,
                           ContentCreatorRepository creators, UserManagementService userManagement,
                           PasswordService passwords, TokenService tokens, BillingService billing,
-                          PasswordResetService passwordReset) {
+                          PasswordResetService passwordReset, WelcomeMailService welcomeMail) {
         this.users = users;
         this.viewers = viewers;
         this.creators = creators;
@@ -50,6 +51,7 @@ public class AuthController {
         this.tokens = tokens;
         this.billing = billing;
         this.passwordReset = passwordReset;
+        this.welcomeMail = welcomeMail;
     }
 
     public record ResetRequest(String email) {}
@@ -104,6 +106,7 @@ public class AuthController {
             created = viewers.save(viewer);
         }
         userManagement.logActivity(created, creatorRole ? "CREATOR_REGISTERED" : "VIEWER_REGISTERED", clientIp(servletRequest));
+        welcomeMail.queue(created.getEmail());
         return ResponseEntity.status(HttpStatus.CREATED).body(response(created, "Account created"));
     }
 

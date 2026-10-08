@@ -13,7 +13,7 @@ import static org.mockito.Mockito.*;
 
 class BillingMailConfigurationTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(BillingMailConfig.class, BillingMailDispatcher.class, ExistingSender.class)
+            .withUserConfiguration(BillingMailConfig.class, BillingMailDispatcher.class, SkopiaEmailTemplates.class, ExistingSender.class)
             .withBean(BillingMailOutboxRepository.class, () -> mock(BillingMailOutboxRepository.class))
             .withBean(BillingMailClaims.class, () -> mock(BillingMailClaims.class))
             .withPropertyValues("skopia.mail.enabled=true", "skopia.mail.host=mail.example.test",

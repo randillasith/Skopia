@@ -7,7 +7,8 @@ import org.gp14.skopia.security.PasswordService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
+import org.gp14.skopia.mail.SkopiaEmailTemplates;
+import org.gp14.skopia.mail.SkopiaMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ public class PasswordResetService {
     private final JavaMailSender sender;
     private final boolean resetConfigured;
     private final String from, origin;
+    private final SkopiaEmailTemplates templates;
     private final TransactionTemplate transactions;
     private final SecureRandom random=new SecureRandom();
     // Account lookup, DB writes, and variable SMTP latency stay off the HTTP response path.
@@ -56,9 +58,9 @@ public class PasswordResetService {
             @Value("${skopia.mail.enabled:false}") boolean mailEnabled,
             @Value("${skopia.mail.from:}") String from,
             @Value("${skopia.password-reset.public-origin:}") String origin,
-            org.springframework.transaction.PlatformTransactionManager transactionManager) {
+            org.springframework.transaction.PlatformTransactionManager transactionManager, SkopiaEmailTemplates templates) {
         this.users=users; this.resets=resets; this.passwords=passwords; this.sender=sender.getIfAvailable();
-        this.from=from; this.origin=origin;
+        this.from=from; this.origin=origin; this.templates=templates;
         this.transactions=new TransactionTemplate(transactionManager);
         this.resetConfigured=mailEnabled && origin.matches("https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?")
                 && BillingMailAddress.valid(from) && this.sender!=null;
@@ -95,11 +97,10 @@ public class PasswordResetService {
         });
         if(user==null) return;
         try {
-            SimpleMailMessage message=new SimpleMailMessage();
-            message.setFrom(from); message.setTo(user.getEmail()); message.setSubject("Skopia password reset");
-            message.setText("Open this link to reset your Skopia password (expires in one hour):\n"
-                    +origin+"/reset/confirm#token="+token+"\nIf you did not request this, ignore this email.\n");
-            sender.send(message);
+            String resetUrl=origin+"/reset/confirm#token="+token;
+            String plain="Open this link to reset your Skopia password (expires in one hour):\n"
+                    +resetUrl+"\nIf you did not request this, ignore this email.\n";
+            SkopiaMailMessage.send(sender,from,user.getEmail(),"Skopia password reset",plain,templates.passwordReset(resetUrl));
         } catch(RuntimeException ex) {
             // Transport exception messages can contain credentials and the link. Never log them.
             transactions.executeWithoutResult(status -> resets.invalidate(hash));

@@ -6,7 +6,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.mail.SimpleMailMessage;
+import jakarta.mail.internet.MimeMessage;
+import org.gp14.skopia.mail.MailParts;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -36,6 +37,6 @@ class PasswordResetInvalidOriginTest {
         assertThat(first.getStatus()).isEqualTo(503);
         assertThat(second.getStatus()).isEqualTo(first.getStatus());
         assertThat(second.getContentAsString()).isEqualTo(first.getContentAsString());
-        verify(sender,never()).send(any(SimpleMailMessage.class));
+        verify(sender,never()).send(any(MimeMessage.class));
     }
 }

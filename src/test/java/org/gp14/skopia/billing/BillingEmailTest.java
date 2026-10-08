@@ -91,6 +91,14 @@ class BillingEmailTest {
             assertThat(r.getBody()).contains("Simulated payment: LKR 500.00", "No real money", "refund");
             assertThat(r.getBody()).doesNotContain("Amount due: LKR 0");
         });
+        var receiptCapture=org.mockito.ArgumentCaptor.forClass(jakarta.mail.internet.MimeMessage.class);
+        verify(sender,atLeast(3)).send(receiptCapture.capture());
+        assertThat(receiptCapture.getAllValues().stream().filter(m->MailParts.plain(m).contains(order.reference())))
+                .hasSize(3).allSatisfy(m->{
+                    assertThat(MailParts.html(m)).contains("Payment receipt", "LKR 500.00", "Open Skopia Billing", order.reference());
+                    assertThat(MailParts.html(m)).doesNotContain("{{", "LKR 0");
+                    assertThat(MailParts.plain(m)).contains("Simulated payment: LKR 500.00");
+                });
         var refund=refundFor(v,order.paymentId());
         assertThat(billing.hasActivePremium(v.getId())).isTrue();
         reset(sender); dispatcher.dispatch();
@@ -112,13 +120,16 @@ class BillingEmailTest {
     private void assertDeliveredRefund(Long id,String state,String account,String admin) {
         var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("REFUND_"+state+":"+id)).toList();
         assertThat(rows).hasSize(2).allSatisfy(r->assertThat(r.getStatus()).isEqualTo("SENT"));
-        var captured=org.mockito.ArgumentCaptor.forClass(org.springframework.mail.SimpleMailMessage.class);
+        var captured=org.mockito.ArgumentCaptor.forClass(jakarta.mail.internet.MimeMessage.class);
         verify(sender,atLeast(2)).send(captured.capture());
-        var current=captured.getAllValues().stream().filter(m->m.getText().contains("Refund ID: "+id+"\n") && m.getText().contains("Status: "+state)).toList();
+        var current=captured.getAllValues().stream().filter(m->MailParts.plain(m).contains("Refund ID: "+id+"\n") && MailParts.plain(m).contains("Status: "+state)).toList();
         assertThat(current).hasSize(2);
-        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(account));
-        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(admin));
-        assertThat(current).allSatisfy(m->assertThat(m.getText()).contains("Amount: LKR 500.00", "No real money"));
+        assertThat(current).anySatisfy(m->assertThat(MailParts.recipients(m)).containsExactly(account));
+        assertThat(current).anySatisfy(m->assertThat(MailParts.recipients(m)).containsExactly(admin));
+        assertThat(current).allSatisfy(m->{
+            assertThat(MailParts.plain(m)).contains("Amount: LKR 500.00", "No real money");
+            assertThat(MailParts.html(m)).contains("Refund status update", "LKR 500.00", state).doesNotContain("{{");
+        });
     }
     @Test void matchingAccountAndBillingEmailsQueueOnlyOneSubscriberCopy() {
         String key=UUID.randomUUID().toString().replace("-", "");
@@ -242,6 +253,27 @@ class BillingEmailTest {
             assertThat(outbox.findById(pending.getId()).orElseThrow().getStatus()).isEqualTo("SENT");
         }
     }
+    @Test void demoHtmlDeliveryFailureRetriesSameImmutableSnapshot() {
+        String key=UUID.randomUUID().toString().replace("-", "");
+        var v=viewer(key); var order=orders.demoCard(v.getId(),"MONTHLY","VISA",contact(v.getEmail()));
+        var snapshot=outbox.findAll().stream().filter(r->r.getEventKey().equals("DEMO_PAYMENT_RECEIPT:"+order.id()) && r.getRecipient().equals(v.getEmail())).findFirst().orElseThrow();
+        Long id=snapshot.getId(); String body=snapshot.getBody();
+        reset(sender); var first=new java.util.concurrent.atomic.AtomicBoolean(true);
+        doAnswer(invocation->{
+            jakarta.mail.internet.MimeMessage message=invocation.getArgument(0);
+            if(MailParts.plain(message).contains(order.reference()) && java.util.List.of(MailParts.recipients(message)).contains(v.getEmail()) && first.getAndSet(false))
+                throw new org.springframework.mail.MailSendException("mock SMTP failure");
+            return null;
+        }).when(sender).send(any(jakarta.mail.internet.MimeMessage.class));
+        dispatcher.dispatch(); var row=outbox.findById(id).orElseThrow();
+        assertThat(row.getStatus()).isEqualTo("PENDING"); assertThat(row.getAttempts()).isEqualTo(1);
+        assertThat(row.getBody()).isEqualTo(body); assertThat(row.getLastError()).isEqualTo("SMTP delivery failed").doesNotContain("mock SMTP failure");
+        row.setNextAttemptAt(java.time.LocalDateTime.now().minusSeconds(1)); outbox.saveAndFlush(row);
+        dispatcher.dispatch(); row=outbox.findById(id).orElseThrow();
+        assertThat(row.getStatus()).isEqualTo("SENT"); assertThat(row.getAttempts()).isEqualTo(2);
+        assertThat(row.getBody()).isEqualTo(body);
+        assertThat(billing.payments(v.getId())).singleElement().satisfies(p->assertThat(p.id()).isEqualTo(order.paymentId()));
+    }
     @Test void refundStagesProduceCandidMessagesToRequesterAndMain() {
         String key=UUID.randomUUID().toString().replace("-", "");
         var main=main(); var v=viewer(key);
@@ -286,9 +318,12 @@ class BillingEmailTest {
             assertThat(r.getBody()).doesNotContain(reason,note,"GB82WEST", "AB12CD34", "LK12BANK", "ABCDLKLX");
         });
         dispatcher.dispatch();
-        org.mockito.ArgumentCaptor<org.springframework.mail.SimpleMailMessage> captured=org.mockito.ArgumentCaptor.forClass(org.springframework.mail.SimpleMailMessage.class);
+        var captured=org.mockito.ArgumentCaptor.forClass(jakarta.mail.internet.MimeMessage.class);
         verify(sender,atLeastOnce()).send(captured.capture());
-        assertThat(captured.getAllValues()).allSatisfy(m->assertThat(m.getText()).doesNotContain(reason,note,"GB82WEST", "AB12CD34", "LK12BANK", "ABCDLKLX"));
+        assertThat(captured.getAllValues()).allSatisfy(m->{
+            assertThat(MailParts.plain(m)).doesNotContain(reason,note,"GB82WEST", "AB12CD34", "LK12BANK", "ABCDLKLX");
+            assertThat(MailParts.html(m)).doesNotContain(reason,note,"GB82WEST", "AB12CD34", "LK12BANK", "ABCDLKLX");
+        });
     }
     @Test void adminCopyRemainsPendingWithoutMainThenUsesCurrentActiveAddressExactlyOnce() {
         users.findByUsername("main").ifPresent(u->{u.setAccountStatus("INACTIVE");users.saveAndFlush(u);});

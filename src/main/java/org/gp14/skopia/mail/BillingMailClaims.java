@@ -18,7 +18,7 @@ public class BillingMailClaims {
                              @Value("${skopia.mail.main-admin-username:main}") String mainUsername) {
         this.outbox=outbox; this.users=users; this.mainUsername=mainUsername;
     }
-    public record Claimed(Long id, String token, String recipient, String subject, String body) {}
+    public record Claimed(Long id, String token, String recipient, String subject, String body, String eventKey) {}
     @Transactional(propagation=Propagation.REQUIRES_NEW)
     public Claimed claim(Long id) {
         var row=outbox.locked(id).orElse(null);
@@ -48,7 +48,7 @@ public class BillingMailClaims {
         row.setClaimToken(UUID.randomUUID().toString());
         outbox.saveAndFlush(row);
         row.setLastError(null);
-        return new Claimed(row.getId(),row.getClaimToken(),recipient,row.getSubject(),row.getBody());
+        return new Claimed(row.getId(),row.getClaimToken(),recipient,row.getSubject(),row.getBody(),row.getEventKey());
     }
     @Transactional(propagation=Propagation.REQUIRES_NEW)
     public void complete(Claimed claim, boolean sent) {
