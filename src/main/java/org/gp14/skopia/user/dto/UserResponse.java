@@ -24,6 +24,8 @@ public class UserResponse {
     private String accountStatus;
     private String roleType;
     private String userType;
+    private String accountType;
+    private String staffType;
     private String profilePicture;
     private String bio;
 
@@ -168,6 +170,11 @@ public class UserResponse {
                    .userType("USER");
         }
 
-        return builder.build();
+        UserResponse response = builder.build();
+        response.setAccountType(response.getRoleType());
+        if (user instanceof Administrator) response.setStaffType("ADMINISTRATOR");
+        else if (user instanceof SupportOfficer) response.setStaffType("SUPPORT_OFFICER");
+        else if (user instanceof MarketingOfficer) response.setStaffType("MARKETING_OFFICER");
+        return response;
     }
 }

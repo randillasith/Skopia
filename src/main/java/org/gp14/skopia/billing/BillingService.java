@@ -5,6 +5,7 @@ import org.gp14.skopia.model.subscription.*;
 import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.notification.NotificationService;
 import org.gp14.skopia.mail.BillingMailService;
+import org.gp14.skopia.user.StaffRoleService;
 import org.gp14.skopia.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,11 +38,13 @@ public class BillingService {
     private final EntityManager entityManager;
     private final boolean demoEnabled;
     private final int refundWindowDays;
+    private final StaffRoleService staffRoles;
 
     public BillingService(UserRepository users, SubscriptionRepository subscriptions, SubscriptionPlanRepository plans,
                           PaymentRepository payments, RefundRepository refunds,
                           RefundStatusHistoryRepository refundHistory, ActivityLogRepository logs,
                           NotificationService notificationService, BillingMailService billingMail, EntityManager entityManager,
+                          StaffRoleService staffRoles,
                           @Value("${skopia.billing.demo-enabled:false}") boolean demoEnabled,
                           @Value("${skopia.billing.refund-window-days:30}") int refundWindowDays) {
         this.users = users;
@@ -54,6 +57,7 @@ public class BillingService {
         this.notificationService = notificationService;
         this.billingMail = billingMail;
         this.entityManager = entityManager;
+        this.staffRoles = staffRoles;
         this.demoEnabled = demoEnabled;
         if (refundWindowDays < 1 || refundWindowDays > 365) {
             throw new IllegalArgumentException("skopia.billing.refund-window-days must be between 1 and 365");
@@ -209,7 +213,7 @@ public class BillingService {
                 "Your simulated refund request is pending review.", "REFUND_REQUESTED",
                 "/billing", "REFUND_REQUESTED:" + refund.getId());
         for (User user : users.findAll()) {
-            if (user instanceof Administrator && "ACTIVE".equals(user.getAccountStatus())) {
+            if (staffRoles.hasRole(user.getId(), StaffType.ADMINISTRATOR) && "ACTIVE".equals(user.getAccountStatus())) {
                 notificationService.create(user, "New refund request",
                         owner.getUsername() + " submitted a simulated refund request.", "REFUND_ADMIN_NEW",
                         "/admin/refunds", "REFUND_ADMIN_NEW:" + refund.getId());
@@ -235,7 +239,7 @@ public class BillingService {
                 "Your simulated refund request was cancelled.", "REFUND_CANCELLED",
                 "/billing", "REFUND_CANCELLED:" + refund.getId());
         for (User user : users.findAll()) {
-            if (user instanceof Administrator && "ACTIVE".equals(user.getAccountStatus())) {
+            if (staffRoles.hasRole(user.getId(), StaffType.ADMINISTRATOR) && "ACTIVE".equals(user.getAccountStatus())) {
                 notificationService.create(user, "Refund request withdrawn",
                         owner.getUsername() + " cancelled a pending simulated refund request.",
                         "REFUND_ADMIN_CANCELLED", "/admin/refunds",
@@ -250,7 +254,7 @@ public class BillingService {
     public List<BillingDtos.RefundHistoryView> refundHistory(User actor, Long refundId) {
         Refund refund = refunds.findById(refundId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         boolean owner = actor != null && refund.getPayment().getSubscription().getViewer().getId().equals(actor.getId());
-        if (!(actor instanceof Administrator) && !owner)
+        if ((actor == null || !staffRoles.hasRole(actor.getId(), StaffType.ADMINISTRATOR)) && !owner)
             throw new ResponseStatusException(actor == null ? HttpStatus.UNAUTHORIZED : HttpStatus.NOT_FOUND);
         return refundHistory.findByRefundIdOrderByChangedAtAscIdAsc(refundId).stream().map(this::historyView).toList();
     }
@@ -276,7 +280,7 @@ public class BillingService {
 
     @Transactional
     public BillingDtos.RefundView decideRefund(User actor, Long refundId, RefundStatus decision, String note) {
-        if (!(actor instanceof Administrator admin))
+        if (actor == null || !staffRoles.hasRole(actor.getId(), StaffType.ADMINISTRATOR))
             throw new ResponseStatusException(actor == null ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN);
         if (decision != RefundStatus.APPROVED && decision != RefundStatus.REJECTED)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decision must be APPROVED or REJECTED");
@@ -289,7 +293,7 @@ public class BillingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A rejection note is required");
 
         refund.setRefundStatus(decision);
-        refund.setProcessedBy(admin);
+        refund.setProcessedBy(actor);
         refund.setProcessedDate(LocalDateTime.now());
         refund.setDecisionNote(decisionNote);
         User target = refund.getPayment().getSubscription().getViewer();
@@ -300,7 +304,7 @@ public class BillingService {
             syncPremium((Viewer) target, active(target.getId()).stream()
                     .anyMatch(other -> !other.getId().equals(subscription.getId())));
         }
-        addHistory(refund, RefundStatus.PENDING, decision, admin, decisionNote);
+        addHistory(refund, RefundStatus.PENDING, decision, actor, decisionNote);
         billingMail.refund(refund);
         ActivityLog log = new ActivityLog();
         log.setUser(actor); log.setActor(actor); log.setTargetUser(target);

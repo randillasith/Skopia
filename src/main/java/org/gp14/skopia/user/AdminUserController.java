@@ -54,6 +54,28 @@ public class AdminUserController {
                 .body(userManagementService.createStaffMember(authenticatedActor(authentication), request, clientIp(httpRequest)));
     }
 
+    @GetMapping("/staff-catalog")
+    public StaffCatalogResponse staffCatalog() {
+        return StaffCatalogResponse.canonical();
+    }
+
+    @PostMapping("/{id}/staff-assignment")
+    public ResponseEntity<UserResponse> assignStaff(@PathVariable Long id,
+                                                     @Valid @RequestBody AssignStaffRequest request,
+                                                     Authentication authentication,
+                                                     HttpServletRequest httpRequest) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(userManagementService.assignStaff(authenticatedActor(authentication), id, request, clientIp(httpRequest)));
+    }
+
+    @PatchMapping("/{id}/staff-assignment")
+    public UserResponse updateStaffAssignment(@PathVariable Long id,
+                                              @Valid @RequestBody UpdateStaffProfileRequest request,
+                                              Authentication authentication,
+                                              HttpServletRequest httpRequest) {
+        return userManagementService.updateStaffProfile(authenticatedActor(authentication), id, request, clientIp(httpRequest));
+    }
+
     @RequestMapping(value = "/staff/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public UserResponse updateStaff(@PathVariable Long id,
                                     @Valid @RequestBody UpdateStaffProfileRequest request,

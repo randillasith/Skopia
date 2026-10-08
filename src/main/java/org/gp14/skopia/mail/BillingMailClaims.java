@@ -3,7 +3,8 @@ package org.gp14.skopia.mail;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.gp14.skopia.repository.UserRepository;
-import org.gp14.skopia.model.user.Administrator;
+import org.gp14.skopia.user.StaffRoleService;
+import org.gp14.skopia.model.user.StaffType;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -14,9 +15,10 @@ public class BillingMailClaims {
     private final BillingMailOutboxRepository outbox;
     private final UserRepository users;
     private final String mainUsername;
-    public BillingMailClaims(BillingMailOutboxRepository outbox, UserRepository users,
+    private final StaffRoleService staffRoles;
+    public BillingMailClaims(BillingMailOutboxRepository outbox, UserRepository users, StaffRoleService staffRoles,
                              @Value("${skopia.mail.main-admin-username:main}") String mainUsername) {
-        this.outbox=outbox; this.users=users; this.mainUsername=mainUsername;
+        this.outbox=outbox; this.users=users; this.staffRoles=staffRoles; this.mainUsername=mainUsername;
     }
     public record Claimed(Long id, String token, String recipient, String subject, String body, String eventKey) {}
     @Transactional(propagation=Propagation.REQUIRES_NEW)
@@ -27,7 +29,7 @@ public class BillingMailClaims {
         String recipient=row.getRecipient();
         if(BillingMailService.MAIN_ADMIN_RECIPIENT.equals(recipient)) {
             recipient=users.findByUsername(mainUsername)
-                    .filter(u->u instanceof Administrator && "ACTIVE".equals(u.getAccountStatus()))
+                    .filter(u->staffRoles.hasRole(u.getId(), StaffType.ADMINISTRATOR) && "ACTIVE".equals(u.getAccountStatus()))
                     .map(u->u.getEmail()).filter(BillingMailAddress::valid)
                     .orElse(null);
             if(recipient==null) {

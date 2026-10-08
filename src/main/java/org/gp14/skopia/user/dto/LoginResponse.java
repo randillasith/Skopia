@@ -19,6 +19,8 @@ public class LoginResponse {
     private String displayName;
     private String userType;
     private String roleType;
+    private String accountType;
+    private String staffType;
     private String accountStatus;
     private Boolean isPremium;
     private Boolean isVerified;

@@ -21,23 +21,14 @@ import java.util.List;
 public class BearerTokenFilter extends OncePerRequestFilter {
     private final TokenService tokens;
     private final UserRepository users;
-    private final AdministratorRepository admins;
-    private final SupportOfficerRepository supportOfficers;
-    private final MarketingOfficerRepository marketingOfficers;
-    private final ContentCreatorRepository creators;
+    private final org.gp14.skopia.user.StaffRoleService staffRoles;
 
     public BearerTokenFilter(TokenService tokens,
                              UserRepository users,
-                             AdministratorRepository admins,
-                             SupportOfficerRepository supportOfficers,
-                             MarketingOfficerRepository marketingOfficers,
-                             ContentCreatorRepository creators) {
+                             org.gp14.skopia.user.StaffRoleService staffRoles) {
         this.tokens = tokens;
         this.users = users;
-        this.admins = admins;
-        this.supportOfficers = supportOfficers;
-        this.marketingOfficers = marketingOfficers;
-        this.creators = creators;
+        this.staffRoles = staffRoles;
     }
 
     @Override
@@ -53,19 +44,7 @@ public class BearerTokenFilter extends OncePerRequestFilter {
                 User user = users.findById(id).orElse(null);
                 if (user != null && tokens.verifyForUser(header.substring(7), user)
                         && ("ACTIVE".equalsIgnoreCase(user.getAccountStatus()) || user.getAccountStatus() == null)) {
-                    List<GrantedAuthority> authorities = new ArrayList<>();
-                    authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
-
-                    if (user instanceof Administrator || admins.existsById(user.getId())) {
-                        authorities.add(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"));
-                        authorities.add(new SimpleGrantedAuthority("ROLE_SUPPORT_OFFICER"));
-                    } else if (user instanceof SupportOfficer || supportOfficers.existsById(user.getId())) {
-                        authorities.add(new SimpleGrantedAuthority("ROLE_SUPPORT_OFFICER"));
-                    } else if (user instanceof MarketingOfficer || marketingOfficers.existsById(user.getId())) {
-                        authorities.add(new SimpleGrantedAuthority("ROLE_MARKETING_OFFICER"));
-                    } else if (user instanceof ContentCreator || creators.existsById(user.getId())) {
-                        authorities.add(new SimpleGrantedAuthority("ROLE_CONTENT_CREATOR"));
-                    }
+                    List<GrantedAuthority> authorities = staffRoles.authoritiesFor(user);
                     var auth = new UsernamePasswordAuthenticationToken(user, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 }

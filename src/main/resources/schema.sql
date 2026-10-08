@@ -49,6 +49,23 @@ CREATE TABLE IF NOT EXISTS support_officers (
     FOREIGN KEY (employee_no) REFERENCES staff(employee_no) ON DELETE CASCADE
 );
 
+-- Canonical compositional staff grant. This permits a creator/viewer account to
+-- retain its inheritance rows while independently receiving one staff role.
+CREATE TABLE IF NOT EXISTS staff_assignments (
+    user_id BIGINT PRIMARY KEY,
+    staff_type VARCHAR(40) NOT NULL,
+    designation VARCHAR(100) NOT NULL,
+    hire_date DATE NOT NULL,
+    admin_level VARCHAR(30),
+    support_level VARCHAR(30),
+    shift VARCHAR(30),
+    officer_code VARCHAR(50) UNIQUE,
+    department VARCHAR(50),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
 -- Inheritance Table: VIEWER (Subclass of USER)
 CREATE TABLE IF NOT EXISTS viewers (
     viewer_id BIGINT PRIMARY KEY,
@@ -293,7 +310,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     INDEX idx_refunds_status_requested (refund_status, requested_date),
     INDEX idx_refunds_category (category),
     FOREIGN KEY (payment_id) REFERENCES payments(payment_id) ON DELETE CASCADE,
-    FOREIGN KEY (processed_by) REFERENCES administrators(employee_no) ON DELETE SET NULL
+    FOREIGN KEY (processed_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS refund_status_history (
@@ -381,7 +398,7 @@ CREATE TABLE IF NOT EXISTS announcements (
     status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (published_by) REFERENCES administrators(employee_no) ON DELETE CASCADE
+    FOREIGN KEY (published_by) REFERENCES users(user_id) ON DELETE RESTRICT
 );
 
 -- =============================================================================
