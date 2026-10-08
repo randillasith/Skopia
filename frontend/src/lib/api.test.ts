@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearSession, readSession, writeSession } from './auth-storage'
 import { request, submitForm, upload } from './api'
 import { ads } from './ads'
+import { accounts } from './accounts'
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
@@ -53,6 +54,21 @@ describe('authenticated API requests', () => {
       'Content-Type': 'application/json',
       'X-User-Id': '42',
     })
+  })
+
+  it('posts reset request and confirmation as JSON without putting the secret in the URL', async () => {
+    writeSession({ token: 'signed-token', userId: 42 })
+    await accounts.requestPasswordReset('viewer@example.com')
+    await accounts.confirmPasswordReset('private-token', 'new-password')
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe('/api/auth/password-reset/request')
+    expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ email: 'viewer@example.com' }) })
+    expect(vi.mocked(fetch).mock.calls[1][0]).toBe('/api/auth/password-reset/confirm')
+    expect(vi.mocked(fetch).mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ token: 'private-token', newPassword: 'new-password' }) })
+    for (const [, init] of vi.mocked(fetch).mock.calls) {
+      expect(init?.headers).not.toHaveProperty('Authorization')
+      expect(init?.referrerPolicy).toBe('no-referrer')
+    }
+    expect(readSession()).toEqual({ token: 'signed-token', userId: 42 })
   })
 
   it('downloads campaign CSV with authentication and the displayed inclusive date range', async () => {

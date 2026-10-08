@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "users")
@@ -28,6 +29,11 @@ public class User {
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @Column(name = "auth_version")
+    private Long authVersion = 0L;
+    @Column(name = "reset_requested_at")
+    private Instant resetRequestedAt;
 
     @Column(name = "first_name", length = 50)
     private String firstName;

@@ -135,6 +135,16 @@ export const accounts = {
   signUp: (input: SignUpInput) =>
     request<ServerAccount>('/api/auth/register', { method: 'POST', body: input }),
 
+  requestPasswordReset: (email: string) =>
+    request<void>('/api/auth/password-reset/request', {
+      method: 'POST', body: { email }, anonymous: true, referrerPolicy: 'no-referrer',
+    }),
+
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    request<void>('/api/auth/password-reset/confirm', {
+      method: 'POST', body: { token, newPassword }, anonymous: true, referrerPolicy: 'no-referrer',
+    }),
+
   /** Re-resolve the account represented by the stored signed bearer token. */
   me: () => request<ServerAccount>('/api/auth/me'),
 

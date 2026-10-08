@@ -1,0 +1,11 @@
+# Password reset email/link — implementation plan
+
+Scope: reset request and completion APIs; persistence of expiring single-use token digest; actual mail send via existing configured authenticated sender; responsive request/new-password screens; tests. Do not change billing display to claim a charge that never occurred.
+
+1. Inspect existing AuthController, PasswordService, TokenService, BearerTokenFilter, SecurityConfig, mail configuration and reset placeholder UI. Define secure endpoints and configured canonical HTTPS public URL; never use request Host or untrusted input to construct link.
+2. Backend: 32+ bytes cryptographic random link token; store only SHA-256 digest, user ID, expiry, consumed state and cooldown in DB; generic request response for present/missing/disabled addresses, bounded input, anti-flood per account and source IP. Send real link to registered email with existing SMTP only after token persistence; never return token to public caller or log it. Handle disabled SMTP and delivery failures without false 'sent' claims or secret logs. Validate expiry and single use atomically, hash new password using PasswordService; match register password policy; no automatic login. Ensure prior bearer sessions become unusable after reset; notify account owner without echoing password. Add explicit public route matchers, preserve deny-by-default.
+3. Frontend: wire existing /reset placeholder to POST request, show generic confirmation only on success, loading/errors, new /reset/confirm page reads token from URL then scrubs query/history, asks password twice and submits, expired/used token feedback and sign-in navigation. Avoid token in logs/referrer.
+4. Tests: unknown versus known generic response; no SMTP in tests, active address, inactive status, cooldown/rate limits, valid single-use/expired/invalid token, password policy, old session invalidation, new sign-in, frontend request/confirmation behavior; full Maven/frontend tests, lint/build/package and isolated MariaDB smoke; independent spec and quality/security review.
+5. Commit/push reviewed PR only after gates. No production secrets/data, no production deploy, no real reset email to someone else's account in validation.
+
+OWASP Forgot Password Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html
