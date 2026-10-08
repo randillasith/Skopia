@@ -1,10 +1,10 @@
 package org.gp14.skopia.billing;
 
 import jakarta.persistence.EntityManager;
+import org.gp14.skopia.billing.refund.RefundEventSubject;
+import org.gp14.skopia.billing.refund.RefundStatusChangedEvent;
 import org.gp14.skopia.model.subscription.*;
 import org.gp14.skopia.model.user.*;
-import org.gp14.skopia.notification.NotificationService;
-import org.gp14.skopia.mail.BillingMailService;
 import org.gp14.skopia.user.StaffRoleService;
 import org.gp14.skopia.repository.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,9 +32,7 @@ public class BillingService {
     private final PaymentRepository payments;
     private final RefundRepository refunds;
     private final RefundStatusHistoryRepository refundHistory;
-    private final ActivityLogRepository logs;
-    private final NotificationService notificationService;
-    private final BillingMailService billingMail;
+    private final RefundEventSubject refundEvents;
     private final EntityManager entityManager;
     private final boolean demoEnabled;
     private final int refundWindowDays;
@@ -42,8 +40,8 @@ public class BillingService {
 
     public BillingService(UserRepository users, SubscriptionRepository subscriptions, SubscriptionPlanRepository plans,
                           PaymentRepository payments, RefundRepository refunds,
-                          RefundStatusHistoryRepository refundHistory, ActivityLogRepository logs,
-                          NotificationService notificationService, BillingMailService billingMail, EntityManager entityManager,
+                          RefundStatusHistoryRepository refundHistory, RefundEventSubject refundEvents,
+                          EntityManager entityManager,
                           StaffRoleService staffRoles,
                           @Value("${skopia.billing.demo-enabled:false}") boolean demoEnabled,
                           @Value("${skopia.billing.refund-window-days:30}") int refundWindowDays) {
@@ -53,9 +51,7 @@ public class BillingService {
         this.payments = payments;
         this.refunds = refunds;
         this.refundHistory = refundHistory;
-        this.logs = logs;
-        this.notificationService = notificationService;
-        this.billingMail = billingMail;
+        this.refundEvents = refundEvents;
         this.entityManager = entityManager;
         this.staffRoles = staffRoles;
         this.demoEnabled = demoEnabled;
@@ -208,17 +204,7 @@ public class BillingService {
                     "A refund request has already been submitted for this payment", ex);
         }
         addHistory(refund, null, RefundStatus.PENDING, owner, "Refund requested");
-        billingMail.refund(refund);
-        notificationService.create(owner, "Refund request received",
-                "Your simulated refund request is pending review.", "REFUND_REQUESTED",
-                "/billing", "REFUND_REQUESTED:" + refund.getId());
-        for (User user : users.findAll()) {
-            if (staffRoles.hasRole(user.getId(), StaffType.ADMINISTRATOR) && "ACTIVE".equals(user.getAccountStatus())) {
-                notificationService.create(user, "New refund request",
-                        owner.getUsername() + " submitted a simulated refund request.", "REFUND_ADMIN_NEW",
-                        "/admin/refunds", "REFUND_ADMIN_NEW:" + refund.getId());
-            }
-        }
+        refundEvents.notifyObservers(new RefundStatusChangedEvent(refund, null, RefundStatus.PENDING, owner));
         return refundView(refund);
     }
 
@@ -234,19 +220,9 @@ public class BillingService {
         refund.setProcessedDate(LocalDateTime.now());
         refund.setDecisionNote("Cancelled by requester");
         addHistory(refund, RefundStatus.PENDING, RefundStatus.CANCELLED, owner, refund.getDecisionNote());
-        billingMail.refund(refund);
-        notificationService.create(owner, "Refund request cancelled",
-                "Your simulated refund request was cancelled.", "REFUND_CANCELLED",
-                "/billing", "REFUND_CANCELLED:" + refund.getId());
-        for (User user : users.findAll()) {
-            if (staffRoles.hasRole(user.getId(), StaffType.ADMINISTRATOR) && "ACTIVE".equals(user.getAccountStatus())) {
-                notificationService.create(user, "Refund request withdrawn",
-                        owner.getUsername() + " cancelled a pending simulated refund request.",
-                        "REFUND_ADMIN_CANCELLED", "/admin/refunds",
-                        "REFUND_ADMIN_CANCELLED:" + refund.getId());
-            }
-        }
         refunds.saveAndFlush(refund);
+        refundEvents.notifyObservers(new RefundStatusChangedEvent(
+                refund, RefundStatus.PENDING, RefundStatus.CANCELLED, owner));
         return refundView(refund);
     }
 
@@ -305,21 +281,9 @@ public class BillingService {
                     .anyMatch(other -> !other.getId().equals(subscription.getId())));
         }
         addHistory(refund, RefundStatus.PENDING, decision, actor, decisionNote);
-        billingMail.refund(refund);
-        ActivityLog log = new ActivityLog();
-        log.setUser(actor); log.setActor(actor); log.setTargetUser(target);
-        log.setActionType("SIMULATED_REFUND_" + decision.name());
-        log.setDetail("refund=" + refund.getId() + " " + decision.name() + ", payment=" + refund.getPayment().getId());
-        log.setIpAddress("127.0.0.1");
-        logs.save(log);
-        notificationService.create(target,
-                decision == RefundStatus.APPROVED ? "Refund request approved" : "Refund request rejected",
-                decision == RefundStatus.APPROVED
-                        ? "Your simulated refund request was approved and the related entitlement was revoked."
-                        : "Your simulated refund request was rejected. Note: " + decisionNote,
-                "REFUND_" + decision.name(), "/billing",
-                "REFUND_" + decision.name() + ":" + refund.getId());
         refunds.saveAndFlush(refund);
+        refundEvents.notifyObservers(new RefundStatusChangedEvent(
+                refund, RefundStatus.PENDING, decision, actor));
         return refundView(refund);
     }
 
