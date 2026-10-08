@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS staff_assignments (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+-- Durable allocator for automatic MKT-001, MKT-002, ... officer codes.
+CREATE TABLE IF NOT EXISTS staff_officer_code_sequence (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Inheritance Table: VIEWER (Subclass of USER)
 CREATE TABLE IF NOT EXISTS viewers (
     viewer_id BIGINT PRIMARY KEY,

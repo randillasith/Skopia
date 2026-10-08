@@ -28,6 +28,8 @@ class StaffAssignmentSchemaMigration implements ApplicationRunner {
                 "created_at datetime not null, updated_at datetime not null," +
                 "constraint uq_staff_assignment_officer_code unique (officer_code)," +
                 "constraint fk_staff_assignment_user foreign key (user_id) references users(user_id) on delete cascade)");
+        jdbc.execute("create table if not exists staff_officer_code_sequence (" +
+                "id bigint not null auto_increment primary key, created_at datetime not null)");
 
         Integer overlaps = jdbc.queryForObject("select count(*) from (select employee_no from (" +
                 "select employee_no from administrators union all select employee_no from support_officers " +
@@ -46,6 +48,11 @@ class StaffAssignmentSchemaMigration implements ApplicationRunner {
                 "select o.employee_no,'MARKETING_OFFICER',s.designation,s.hire_date,o.officer_code," +
                 "case when upper(o.department) in ('MARKETING','ADVERTISING','PARTNERSHIPS') then upper(o.department) else 'MARKETING' end," +
                 "current_timestamp,current_timestamp from marketing_officers o join staff s on s.employee_no=o.employee_no");
+        Long nextMarketingCode = jdbc.queryForObject("select coalesce(max(cast(substring(officer_code,5) as unsigned)),0)+1 " +
+                "from staff_assignments where officer_code regexp '^MKT-[0-9]+$'", Long.class);
+        if (nextMarketingCode != null && nextMarketingCode > 1) {
+            jdbc.execute("alter table staff_officer_code_sequence auto_increment = " + nextMarketingCode);
+        }
         rewireToUsers("refunds", "processed_by", "fk_refunds_processed_user", "set null");
         rewireToUsers("announcements", "published_by", "fk_announcements_publisher_user", "restrict");
     }

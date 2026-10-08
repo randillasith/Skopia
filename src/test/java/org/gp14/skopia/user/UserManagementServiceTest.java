@@ -33,6 +33,8 @@ class UserManagementServiceTest {
     @Mock
     private StaffRoleService staffRoles;
     @Mock
+    private StaffOfficerCodeService officerCodes;
+    @Mock
     private AdministratorRepository administratorRepository;
     @Mock
     private SupportOfficerRepository supportOfficerRepository;

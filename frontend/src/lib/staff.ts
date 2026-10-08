@@ -24,10 +24,16 @@ export type StaffFormValues = {
   department?: string
 }
 
+export function designationForStaffType(type: StaffType) {
+  if (type === 'ADMINISTRATOR') return 'Administrator'
+  if (type === 'MARKETING_OFFICER') return 'Marketing Officer'
+  return 'Support Officer'
+}
+
 export function buildStaffAssignmentPayload(values: StaffFormValues, mode: 'assign' | 'create' | 'edit') {
   const common: Record<string, string> = {
     staffType: values.staffType,
-    designation: values.designation.trim(),
+    designation: designationForStaffType(values.staffType),
     hireDate: values.hireDate,
   }
   if (mode !== 'assign') {
@@ -45,7 +51,6 @@ export function buildStaffAssignmentPayload(values: StaffFormValues, mode: 'assi
     common.shift = values.shift ?? ''
   }
   if (values.staffType === 'MARKETING_OFFICER') {
-    common.officerCode = values.officerCode?.trim() ?? ''
     common.department = values.department ?? ''
   }
   return common

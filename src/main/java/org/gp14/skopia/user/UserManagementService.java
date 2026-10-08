@@ -22,6 +22,7 @@ public class UserManagementService {
     private final StaffRepository staffRepository;
     private final StaffAssignmentRepository staffAssignmentRepository;
     private final StaffRoleService staffRoles;
+    private final StaffOfficerCodeService officerCodes;
     private final AdministratorRepository administratorRepository;
     private final SupportOfficerRepository supportOfficerRepository;
     private final MarketingOfficerRepository marketingOfficerRepository;
@@ -35,6 +36,7 @@ public class UserManagementService {
                                  StaffRepository staffRepository,
                                  StaffAssignmentRepository staffAssignmentRepository,
                                  StaffRoleService staffRoles,
+                                 StaffOfficerCodeService officerCodes,
                                  AdministratorRepository administratorRepository,
                                  SupportOfficerRepository supportOfficerRepository,
                                  MarketingOfficerRepository marketingOfficerRepository,
@@ -47,6 +49,7 @@ public class UserManagementService {
         this.staffRepository = staffRepository;
         this.staffAssignmentRepository = staffAssignmentRepository;
         this.staffRoles = staffRoles;
+        this.officerCodes = officerCodes;
         this.administratorRepository = administratorRepository;
         this.supportOfficerRepository = supportOfficerRepository;
         this.marketingOfficerRepository = marketingOfficerRepository;
@@ -117,11 +120,10 @@ public class UserManagementService {
         AssignStaffRequest assignment = new AssignStaffRequest();
         try { assignment.setStaffType(StaffType.valueOf(request.getStaffType().trim().toUpperCase())); }
         catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid staff type"); }
-        assignment.setDesignation(request.getDesignation()); assignment.setHireDate(request.getHireDate());
+        assignment.setHireDate(request.getHireDate());
         assignment.setAdminLevel(parse(AdminLevel.class, request.getAdminLevel(), "admin level"));
         assignment.setSupportLevel(parse(SupportLevel.class, request.getSupportLevel(), "support level"));
         assignment.setShift(parse(SupportShift.class, request.getShift(), "support shift"));
-        assignment.setOfficerCode(request.getOfficerCode());
         assignment.setDepartment(parse(MarketingDepartment.class, request.getDepartment(), "marketing department"));
         saveAssignment(user, assignment);
         logActivity(actor, user, "STAFF_CREATED", "staff type: " + assignment.getStaffType(), ipAddress);
@@ -147,12 +149,10 @@ public class UserManagementService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff assignment not found with ID: " + userId));
         AssignStaffRequest next = new AssignStaffRequest();
         next.setStaffType(request.getStaffType() == null ? current.getStaffType() : request.getStaffType());
-        next.setDesignation(request.getDesignation() == null ? current.getDesignation() : request.getDesignation());
         next.setHireDate(request.getHireDate() == null ? current.getHireDate() : request.getHireDate());
         next.setAdminLevel(parse(AdminLevel.class, request.getAdminLevel(), "admin level"));
         next.setSupportLevel(parse(SupportLevel.class, request.getSupportLevel(), "support level"));
         next.setShift(parse(SupportShift.class, request.getShift(), "support shift"));
-        next.setOfficerCode(request.getOfficerCode());
         next.setDepartment(parse(MarketingDepartment.class, request.getDepartment(), "marketing department"));
         if (request.getFirstName() != null) user.setFirstName(trim(request.getFirstName()));
         if (request.getLastName() != null) user.setLastName(trim(request.getLastName()));
@@ -173,9 +173,9 @@ public class UserManagementService {
 
     private void applyAssignment(StaffAssignment target, AssignStaffRequest request) {
         if (request.getStaffType() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Staff type is required");
-        if (request.getDesignation() == null || request.getDesignation().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Designation is required");
         if (request.getHireDate() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hire date is required");
-        target.setStaffType(request.getStaffType()); target.setDesignation(request.getDesignation().trim()); target.setHireDate(request.getHireDate());
+        String existingOfficerCode = target.getOfficerCode();
+        target.setStaffType(request.getStaffType()); target.setDesignation(defaultDesignation(request.getStaffType())); target.setHireDate(request.getHireDate());
         target.setAdminLevel(null); target.setSupportLevel(null); target.setShift(null); target.setOfficerCode(null); target.setDepartment(null);
         switch (request.getStaffType()) {
             case ADMINISTRATOR -> {
@@ -189,16 +189,21 @@ public class UserManagementService {
                 target.setSupportLevel(request.getSupportLevel()); target.setShift(request.getShift());
             }
             case MARKETING_OFFICER -> {
-                if (!notBlank(request.getOfficerCode()) || request.getDepartment() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Officer code and department are required");
+                if (request.getDepartment() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Marketing department is required");
                 reject(request.getAdminLevel()!=null || request.getSupportLevel()!=null || request.getShift()!=null);
-                String code=request.getOfficerCode().trim();
-                StaffAssignment existing=staffAssignmentRepository.findAll().stream().filter(a -> code.equalsIgnoreCase(a.getOfficerCode())).findFirst().orElse(null);
-                if (existing != null && !java.util.Objects.equals(existing.getUserId(), target.getUserId())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Officer code already exists");
+                String code=notBlank(existingOfficerCode) ? existingOfficerCode : officerCodes.nextMarketingCode();
                 target.setOfficerCode(code); target.setDepartment(request.getDepartment());
             }
         }
     }
     private void reject(boolean invalid) { if (invalid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fields do not match selected staff type"); }
+    private String defaultDesignation(StaffType type) {
+        return switch (type) {
+            case ADMINISTRATOR -> "Administrator";
+            case SUPPORT_OFFICER -> "Support Officer";
+            case MARKETING_OFFICER -> "Marketing Officer";
+        };
+    }
     private boolean notBlank(String value) { return value != null && !value.isBlank(); }
     private String trim(String value) { return value == null ? null : value.trim(); }
     private void validatePassword(String value) {
