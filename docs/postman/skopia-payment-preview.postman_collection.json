@@ -1,0 +1,76 @@
+{
+  "info": {
+    "name": "Skopia subscription preview (simulated only)",
+    "description": "TEST ONLY. No payment gateway, real transfer, card credentials, or real money movement. Use disposable accounts on an isolated instance. Bank slips are sample files and remain private; only an administrator can review them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:18092" },
+    { "key": "viewerToken", "value": "" },
+    { "key": "otherViewerToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "orderId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Public monthly catalog — expect 200; previewMode follows demo-enabled flag",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/billing/plans" }
+    },
+    {
+      "name": "Viewer: card-brand preview — expect 201; no card credentials",
+      "request": {
+        "method": "POST", "url": "{{baseUrl}}/api/billing/orders/card-preview",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{viewerToken}}", "type": "string" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"planName\":\"MONTHLY\",\"brand\":\"MASTERCARD\",\"billing\":{\"fullName\":\"Sample Viewer\",\"email\":\"sample@example.test\",\"phone\":\"0771234567\",\"addressLine1\":\"Example Road\",\"addressLine2\":\"\",\"city\":\"Colombo\",\"postalCode\":\"00100\",\"country\":\"LK\"}}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Viewer: submit sample bank slip — expect 201 PENDING_REVIEW, no entitlement",
+      "request": {
+        "method": "POST", "url": "{{baseUrl}}/api/billing/orders/bank-transfer",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{viewerToken}}", "type": "string" }] },
+        "body": { "mode": "formdata", "formdata": [
+          { "key": "planName", "value": "MONTHLY", "type": "text" },
+          { "key": "billing", "value": "{\"fullName\":\"Sample Viewer\",\"email\":\"sample@example.test\",\"phone\":\"0771234567\",\"addressLine1\":\"Example Road\",\"city\":\"Colombo\",\"postalCode\":\"00100\",\"country\":\"LK\"}", "type": "text" },
+          { "key": "reference", "value": "SAMPLE-001", "type": "text" },
+          { "key": "slip", "type": "file", "src": "" }
+        ] }
+      }
+    },
+    {
+      "name": "Viewer: own orders only — expect 200",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/billing/orders", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{viewerToken}}", "type": "string" }] } }
+    },
+    {
+      "name": "Other viewer: cannot view admin queue — expect 403",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/billing/admin/orders", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{otherViewerToken}}", "type": "string" }] } }
+    },
+    {
+      "name": "Admin: order queue — expect 200",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/billing/admin/orders", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] } }
+    },
+    {
+      "name": "Admin: download private sample slip — expect 200 or 404",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/billing/admin/orders/{{orderId}}/slip", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] } }
+    },
+    {
+      "name": "Admin: approve pending sample — expect 200, repeated decision 409",
+      "request": {
+        "method": "POST", "url": "{{baseUrl}}/api/billing/admin/orders/{{orderId}}/decision",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}", "type": "string" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"decision\":\"APPROVED\",\"note\":\"Sample reviewed only; no funds confirmed\"}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Legacy PAN checkout removed — expect 410",
+      "request": {
+        "method": "POST", "url": "{{baseUrl}}/api/billing/checkout",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{viewerToken}}", "type": "string" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"planName\":\"MONTHLY\"}", "options": { "raw": { "language": "json" } } }
+      }
+    }
+  ]
+}

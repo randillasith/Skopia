@@ -61,10 +61,12 @@ public class BillingService {
     @Transactional(readOnly = true)
     public BillingDtos.Catalog plans() {
         return new BillingDtos.Catalog(demoEnabled, plans.findAll().stream()
-                .filter(p -> List.of("MONTHLY", "YEARLY").contains(p.getPlanName()))
-                .map(p -> new BillingDtos.Plan(p.getId(), p.getPlanName(), p.getDurationDays(), p.getPrice(),
+                .filter(p -> "MONTHLY".equals(p.getPlanName()))
+                .map(p -> new BillingDtos.Plan(p.getId(), p.getPlanName(), 30, new BigDecimal("500.00"),
                         p.getBenefit(), SubscriptionBenefits.isAdFree(p.getPlanName())))
-                .sorted(Comparator.comparing(BillingDtos.Plan::durationDays)).toList());
+                .sorted(Comparator.comparing(BillingDtos.Plan::durationDays)).toList(), Currency.LKR,
+                demoEnabled, false, "TEST ONLY: no card details, actual payment, transfer verification, or money movement.",
+                "SAMPLE ONLY: no receiving bank account. Do not transfer money. Upload a sample slip for review simulation.");
     }
 
     @Transactional(readOnly = true)
@@ -126,57 +128,13 @@ public class BillingService {
     private BillingDtos.PaymentView paymentView(Payment p) {
         String method = p.getPayMethod();
         String brand = method != null && method.startsWith("DEMO_TEST_VISA_") ? "VISA"
+                : method != null && method.startsWith("CARD_PREVIEW_")
+                ? method.substring("CARD_PREVIEW_".length())
                 : method != null && method.startsWith("DEMO_") ? "DEMO" : null;
         String last4 = method != null && method.startsWith("DEMO_TEST_VISA_")
                 ? method.substring("DEMO_TEST_VISA_".length()) : null;
         return new BillingDtos.PaymentView(p.getId(), p.getAmount(), p.getCurrency(), p.getPaidDatetime(), method,
                 p.getPayStatus(), p.getSubscription().getPlan().getPlanName(), p.getGatewayRef(), brand, last4);
-    }
-
-    @Transactional
-    public BillingDtos.CheckoutResult checkout(Long id, String plan, String card, String expiry, String holder) {
-        enabled();
-        validatePlan(plan);
-        var v = lockedViewer(id);
-        var current = active(id);
-        if (current.stream().anyMatch(s -> plan.equals(s.getPlan().getPlanName())))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "That plan is already active");
-        var test = DemoPaymentValidator.validate(card, expiry, holder);
-        current.forEach(s -> { s.setSubStatus("CANCELLED"); s.setAutoRenew(false); });
-        return activate(v, plan, "DEMO_TEST_VISA_" + test.last4());
-    }
-
-    @Transactional
-    public BillingDtos.CheckoutResult changePlan(Long id, String plan) {
-        enabled();
-        validatePlan(plan);
-        Viewer v = lockedViewer(id);
-        List<Subscription> current = active(id);
-        if (current.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "No active subscription");
-        if (current.stream().anyMatch(s -> plan.equals(s.getPlan().getPlanName())))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "That plan is already active");
-        current.forEach(s -> { s.setSubStatus("CANCELLED"); s.setAutoRenew(false); });
-        return activate(v, plan, "DEMO_PLAN_CHANGE");
-    }
-
-    private BillingDtos.CheckoutResult activate(Viewer v, String planName, String method) {
-        SubscriptionPlan plan = plans.findByPlanName(planName)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Demo plan unavailable"));
-        if (plan.getPrice().compareTo(BigDecimal.ZERO) != 0 || plan.getDurationDays() <= 0)
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Not a demo plan");
-        LocalDateTime now = LocalDateTime.now();
-        Subscription s = new Subscription();
-        s.setViewer(v); s.setPlan(plan); s.setStartDate(now); s.setEndDate(now.plusDays(plan.getDurationDays()));
-        s.setSubStatus("ACTIVE"); s.setAutoRenew(false);
-        s = subscriptions.saveAndFlush(s);
-        Payment p = new Payment();
-        p.setSubscription(s); p.setAmount(BigDecimal.ZERO.setScale(2)); p.setCurrency(Currency.USD);
-        p.setPaidDatetime(now); p.setPayMethod(method); p.setPayStatus("SIMULATED");
-        p.setGatewayRef("TEST-" + java.util.UUID.randomUUID());
-        p = payments.saveAndFlush(p);
-        syncPremium(v, true);
-        return new BillingDtos.CheckoutResult(statusFor(v.getId()), paymentView(p),
-                new BillingDtos.SubscriptionView(s.getId(), planName, now, s.getEndDate(), s.getSubStatus()));
     }
 
     @Transactional
@@ -488,7 +446,8 @@ public class BillingService {
     private boolean isRefundableDemoPayment(Payment payment) {
         if (payment == null || !"SIMULATED".equals(payment.getPayStatus())) return false;
         String method = payment.getPayMethod();
-        return method != null && (method.startsWith("DEMO_TEST_VISA_") || "DEMO_PLAN_CHANGE".equals(method));
+        return method != null && (method.startsWith("DEMO_TEST_VISA_") || "DEMO_PLAN_CHANGE".equals(method)
+                || method.startsWith("CARD_PREVIEW_") || "BANK_TRANSFER_PREVIEW".equals(method));
     }
 
     private String clean(String value, int max, String field) {

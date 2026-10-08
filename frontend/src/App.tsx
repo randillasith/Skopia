@@ -29,7 +29,7 @@ import {
   AdminDashboard, AdminAccounts, AdminRoles, AdminModeration,
   AdminLogs, AdminSettings,
 } from '@/routes/admin'
-import { AdminPlans, AdminRefunds, AdminAnnouncements } from '@/routes/admin-billing'
+import { AdminPlans, AdminRefunds, AdminAnnouncements, AdminPaymentOrders } from '@/routes/admin-billing'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -129,6 +129,7 @@ export default function App() {
               <Route path="/admin/roles" element={<AdminRoles />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
               <Route path="/admin/plans" element={<AdminPlans />} />
+              <Route path="/admin/payment-orders" element={<AdminPaymentOrders />} />
               <Route path="/admin/refunds" element={<AdminRefunds />} />
               <Route path="/admin/announcements" element={<AdminAnnouncements />} />
               <Route path="/admin/logs" element={<AdminLogs />} />

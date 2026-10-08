@@ -564,6 +564,7 @@ const CONSOLES: Record<
         items: [
           { to: '/admin/moderation', label: 'Moderation', icon: MessageSquareWarning },
           { to: '/admin/plans', label: 'Plans', icon: CreditCard },
+          { to: '/admin/payment-orders', label: 'Payment review', icon: Receipt },
           { to: '/admin/refunds', label: 'Refunds', icon: Receipt },
           { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
           { to: '/admin/logs', label: 'Activity log', icon: ScrollText },
