@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager;
 import org.gp14.skopia.model.subscription.*;
 import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.notification.NotificationService;
+import org.gp14.skopia.mail.BillingMailService;
 import org.gp14.skopia.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,6 +33,7 @@ public class BillingService {
     private final RefundStatusHistoryRepository refundHistory;
     private final ActivityLogRepository logs;
     private final NotificationService notificationService;
+    private final BillingMailService billingMail;
     private final EntityManager entityManager;
     private final boolean demoEnabled;
     private final int refundWindowDays;
@@ -39,7 +41,7 @@ public class BillingService {
     public BillingService(UserRepository users, SubscriptionRepository subscriptions, SubscriptionPlanRepository plans,
                           PaymentRepository payments, RefundRepository refunds,
                           RefundStatusHistoryRepository refundHistory, ActivityLogRepository logs,
-                          NotificationService notificationService, EntityManager entityManager,
+                          NotificationService notificationService, BillingMailService billingMail, EntityManager entityManager,
                           @Value("${skopia.billing.demo-enabled:false}") boolean demoEnabled,
                           @Value("${skopia.billing.refund-window-days:30}") int refundWindowDays) {
         this.users = users;
@@ -50,6 +52,7 @@ public class BillingService {
         this.refundHistory = refundHistory;
         this.logs = logs;
         this.notificationService = notificationService;
+        this.billingMail = billingMail;
         this.entityManager = entityManager;
         this.demoEnabled = demoEnabled;
         if (refundWindowDays < 1 || refundWindowDays > 365) {
@@ -201,6 +204,7 @@ public class BillingService {
                     "A refund request has already been submitted for this payment", ex);
         }
         addHistory(refund, null, RefundStatus.PENDING, owner, "Refund requested");
+        billingMail.refund(refund);
         notificationService.create(owner, "Refund request received",
                 "Your simulated refund request is pending review.", "REFUND_REQUESTED",
                 "/billing", "REFUND_REQUESTED:" + refund.getId());
@@ -226,6 +230,7 @@ public class BillingService {
         refund.setProcessedDate(LocalDateTime.now());
         refund.setDecisionNote("Cancelled by requester");
         addHistory(refund, RefundStatus.PENDING, RefundStatus.CANCELLED, owner, refund.getDecisionNote());
+        billingMail.refund(refund);
         notificationService.create(owner, "Refund request cancelled",
                 "Your simulated refund request was cancelled.", "REFUND_CANCELLED",
                 "/billing", "REFUND_CANCELLED:" + refund.getId());
@@ -296,6 +301,7 @@ public class BillingService {
                     .anyMatch(other -> !other.getId().equals(subscription.getId())));
         }
         addHistory(refund, RefundStatus.PENDING, decision, admin, decisionNote);
+        billingMail.refund(refund);
         ActivityLog log = new ActivityLog();
         log.setUser(actor); log.setActor(actor); log.setTargetUser(target);
         log.setActionType("SIMULATED_REFUND_" + decision.name());

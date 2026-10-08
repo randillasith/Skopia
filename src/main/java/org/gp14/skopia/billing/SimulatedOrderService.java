@@ -3,6 +3,8 @@ package org.gp14.skopia.billing;
 import jakarta.persistence.EntityManager;
 import org.gp14.skopia.model.subscription.*;
 import org.gp14.skopia.model.user.*;
+import org.gp14.skopia.mail.BillingMailService;
+import org.gp14.skopia.mail.BillingMailAddress;
 import org.gp14.skopia.repository.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -33,15 +35,16 @@ public class SimulatedOrderService {
     private final SubscriptionRepository subscriptions;
     private final PaymentRepository payments;
     private final EntityManager em;
+    private final BillingMailService billingMail;
     private final boolean enabled;
     private final Path storage;
 
     public SimulatedOrderService(BillingOrderRepository orders, UserRepository users, SubscriptionPlanRepository plans,
-            SubscriptionRepository subscriptions, PaymentRepository payments, EntityManager em,
+            SubscriptionRepository subscriptions, PaymentRepository payments, EntityManager em, BillingMailService billingMail,
             @Value("${skopia.billing.demo-enabled:false}") boolean enabled,
             @Value("${skopia.billing.private-storage-dir:${user.home}/.skopia/private-billing-slips}") String storage) {
         this.orders=orders; this.users=users; this.plans=plans; this.subscriptions=subscriptions;
-        this.payments=payments; this.em=em; this.enabled=enabled;
+        this.payments=payments; this.em=em; this.billingMail=billingMail; this.enabled=enabled;
         this.storage=Path.of(storage).toAbsolutePath().normalize();
         if (this.storage.startsWith(Path.of("uploads").toAbsolutePath().normalize()) ||
                 this.storage.startsWith(Path.of("src/main/resources/static").toAbsolutePath().normalize()))
@@ -71,7 +74,9 @@ public class SimulatedOrderService {
         order.setStatus("NO_CHARGE_ACTIVE");
         Subscription subscription=issueEntitlement(owner);
         order.setSubscription(subscription);
-        return view(orders.saveAndFlush(order));
+        order=orders.saveAndFlush(order);
+        billingMail.receipt(order);
+        return view(order);
     }
 
     @Transactional
@@ -163,7 +168,7 @@ public class SimulatedOrderService {
         o.setMethod(method); o.setBrand(brand); o.setSubmittedAt(LocalDateTime.now());
         o.setFullName(text(c.fullName(),120,"Full name"));
         o.setEmail(text(c.email(),254,"Email"));
-        if(!o.getEmail().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) bad("Invalid billing email");
+        if(!BillingMailAddress.valid(o.getEmail())) bad("Invalid billing email");
         o.setPhone(text(c.phone(),30,"Phone"));
         if(!o.getPhone().matches("[+0-9() .-]{7,30}")) bad("Invalid phone");
         o.setAddressLine1(text(c.addressLine1(),200,"Address"));

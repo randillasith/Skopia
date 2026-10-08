@@ -99,6 +99,20 @@ class SimulatedOrderApiTest {
         mvc.perform(post("/api/billing/cancel").header("Authorization",auth(owner))).andExpect(status().isOk());
         assertThat(billing.hasActivePremium(owner.getId())).isFalse();
     }
+    @Test void noChargeCardRejectsUndeliverableBillingEmailWithoutEntitlement() throws Exception {
+        var owner=viewer("invalidReceiptEmail");
+        for (String invalid : new String[]{"viewer@example..com", ".viewer@example.test",
+                "viewer.@example.test", "viewer@example.test,other@example.test"}) {
+            var payload=(com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(card());
+            ((com.fasterxml.jackson.databind.node.ObjectNode) payload.get("billing")).put("email",invalid);
+            mvc.perform(post("/api/billing/orders/no-charge-card").header("Authorization",auth(owner))
+                    .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest());
+            assertThat(orders.count()).isZero();
+            assertThat(subscriptions.count()).isZero();
+            assertThat(payments.count()).isZero();
+        }
+    }
     @Test void noChargeCardRejectsEmbeddedCardNumbersInEveryPersistedContactField() throws Exception {
         var owner=viewer("noChargeContactGuard");
         String testNumber = "4" + "1".repeat(15);
