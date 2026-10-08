@@ -76,6 +76,50 @@ class BillingEmailTest {
             assertThat(m.getText()).doesNotContain("test card", "charged LKR 500", "paid LKR 500");
         });
     }
+    @Test void refundableDemoCardDispatchesReceiptRequestAndApprovalAndBlocksRepeat() {
+        String key=UUID.randomUUID().toString().replace("-", "");
+        var admin=main(); var v=viewer(key);
+        String billingAddress="demobilling"+key+"@example.test";
+        var order=orders.demoCard(v.getId(),"MONTHLY","MASTERCARD",contact(billingAddress));
+        assertThat(order.amount()).isEqualByComparingTo("500.00");
+        assertThat(order.paymentId()).isNotNull();
+        assertThat(billing.refundEligibility(v.getId(),order.paymentId()).eligible()).isTrue();
+        reset(sender); dispatcher.dispatch();
+        var receiptRows=outbox.findAll().stream().filter(r->r.getEventKey().equals("DEMO_PAYMENT_RECEIPT:"+order.id())).toList();
+        assertThat(receiptRows).hasSize(3).allSatisfy(r->{
+            assertThat(r.getStatus()).isEqualTo("SENT");
+            assertThat(r.getBody()).contains("Simulated payment: LKR 500.00", "No real money", "refund");
+            assertThat(r.getBody()).doesNotContain("Amount due: LKR 0");
+        });
+        var refund=refundFor(v,order.paymentId());
+        assertThat(billing.hasActivePremium(v.getId())).isTrue();
+        reset(sender); dispatcher.dispatch();
+        assertDeliveredRefund(refund.id(),"PENDING",v.getEmail(),admin.getEmail());
+        var approved=billing.decideRefund(admin,refund.id(),RefundStatus.APPROVED,null);
+        assertThat(approved.amount()).isEqualByComparingTo("500.00");
+        assertThat(billing.hasActivePremium(v.getId())).isFalse();
+        reset(sender); dispatcher.dispatch();
+        assertDeliveredRefund(refund.id(),"APPROVED",v.getEmail(),admin.getEmail());
+        assertThatThrownBy(()->refundFor(v,order.paymentId())).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThatThrownBy(()->billing.decideRefund(admin,refund.id(),RefundStatus.APPROVED,null))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(billing.refundEligibility(v.getId(),order.paymentId()).reason()).isEqualTo("ALREADY_REQUESTED");
+        assertThat(billing.payments(v.getId())).singleElement().satisfies(p->{
+            assertThat(p.amount()).isEqualByComparingTo("500.00"); assertThat(p.payStatus()).isEqualTo("SIMULATED");
+        });
+        assertThat(outbox.findAll().stream().filter(r->r.getEventKey().equals("REFUND_APPROVED:"+refund.id()))).hasSize(2);
+    }
+    private void assertDeliveredRefund(Long id,String state,String account,String admin) {
+        var rows=outbox.findAll().stream().filter(r->r.getEventKey().equals("REFUND_"+state+":"+id)).toList();
+        assertThat(rows).hasSize(2).allSatisfy(r->assertThat(r.getStatus()).isEqualTo("SENT"));
+        var captured=org.mockito.ArgumentCaptor.forClass(org.springframework.mail.SimpleMailMessage.class);
+        verify(sender,atLeast(2)).send(captured.capture());
+        var current=captured.getAllValues().stream().filter(m->m.getText().contains("Refund ID: "+id+"\n") && m.getText().contains("Status: "+state)).toList();
+        assertThat(current).hasSize(2);
+        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(account));
+        assertThat(current).anySatisfy(m->assertThat(m.getTo()).containsExactly(admin));
+        assertThat(current).allSatisfy(m->assertThat(m.getText()).contains("Amount: LKR 500.00", "No real money"));
+    }
     @Test void matchingAccountAndBillingEmailsQueueOnlyOneSubscriberCopy() {
         String key=UUID.randomUUID().toString().replace("-", "");
         var v=viewer(key);
