@@ -42,23 +42,10 @@ public class BillingController {
         return billing.payment(id(user), paymentId);
     }
 
-    @PostMapping("/checkout")
-    @ResponseStatus(HttpStatus.CREATED)
-    public BillingDtos.CheckoutResult checkout(@AuthenticationPrincipal User user, @RequestBody JsonNode request) {
-        var fields = java.util.Set.of("planName", "cardNumber", "expiry", "cardholderName");
-        if (!request.isObject() || request.size() != fields.size()
-                || !fields.stream().allMatch(name -> request.has(name) && request.get(name).isTextual()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid demo payment fields");
-        return billing.checkout(id(user), request.get("planName").asText(), request.get("cardNumber").asText(),
-                request.get("expiry").asText(), request.get("cardholderName").asText());
-    }
-
-    @PostMapping("/change-plan")
-    @ResponseStatus(HttpStatus.CREATED)
-    public BillingDtos.CheckoutResult change(@AuthenticationPrincipal User user, @RequestBody JsonNode request) {
-        if (!request.isObject() || request.size() != 1 || !request.has("planName") || !request.get("planName").isTextual())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "planName is required");
-        return billing.changePlan(id(user), request.get("planName").asText());
+    /** Explicitly reject legacy PAN-bearing routes; no card fields are parsed or stored. */
+    @PostMapping({"/checkout", "/change-plan"})
+    public void removedCheckout() {
+        throw new ResponseStatusException(HttpStatus.GONE, "Legacy checkout removed; use test-only card-brand preview");
     }
 
     @PostMapping("/cancel")

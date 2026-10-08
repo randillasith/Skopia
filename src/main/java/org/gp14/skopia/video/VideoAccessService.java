@@ -7,10 +7,11 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class VideoAccessService {
-    private final BillingService billing;
+    private final VideoPlaybackStrategy free = new FreeVideoPlaybackStrategy();
+    private final VideoPlaybackStrategy premium;
 
     public VideoAccessService(BillingService billing) {
-        this.billing = billing;
+        this.premium = new PremiumVideoPlaybackStrategy(billing);
     }
 
     public boolean isOwner(Video video, Long userId) {
@@ -22,16 +23,20 @@ public class VideoAccessService {
     }
 
     public boolean canSee(Video video, Long userId) {
-        return isPublished(video) || isOwner(video, userId);
+        return (video.getCreator() == null || "ACTIVE".equals(video.getCreator().getAccountStatus()))
+                && (isPublished(video) || isOwner(video, userId));
     }
 
     public boolean canPlay(Video video, Long userId) {
         if (!canSee(video, userId)) return false;
         if (isOwner(video, userId)) return true;
         if (!isPublished(video)) return false;
-        if (video.getAccessTier() == null || !"PREMIUM".equalsIgnoreCase(video.getAccessTier().getTierName())) return true;
-        // BillingService checks an active, unexpired subscription and account status.
-        return userId != null && billing.hasActivePremium(userId);
+        String tier = video.getAccessTier() == null ? null : video.getAccessTier().getTierName();
+        VideoPlaybackStrategy strategy;
+        if (tier == null || "FREE".equalsIgnoreCase(tier)) strategy = free;
+        else if ("PREMIUM".equalsIgnoreCase(tier)) strategy = premium;
+        else return false;
+        return strategy.canPlay(userId);
     }
 
     public void requireVisible(Video video, Long userId) {

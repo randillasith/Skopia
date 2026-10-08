@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   Play, Bookmark, Share2, Flag, ThumbsUp, ThumbsDown, Trash2, SearchX, Clock,
@@ -646,14 +646,15 @@ export function Watch() {
     return [...top.filter((c) => c.pinned), ...sorted]
   }, [thread, order])
 
-  // Watching is what puts something in history and what counts as a view, so
-  // both are recorded here rather than on any click that happened to lead here.
-  // The count is deliberately not awaited: a failed count must not stop playback.
-  useEffect(() => {
-    if (!v || (v.premium && !v.mediaUrl)) return
+  // Record a view only when playback actually starts, never merely on page load
+  // or while a pre-roll is running. Repeated pause/resume counts once per title.
+  const countedVideo = useRef<string | null>(null)
+  const onPlaybackStarted = useCallback(() => {
+    if (!v || numericId == null || countedVideo.current === v.id) return
+    countedVideo.current = v.id
     recordWatch(v.id)
-    if (numericId != null) catalogue.countView(numericId).catch(() => {})
-  }, [v?.id, v?.premium, v?.mediaUrl, numericId])
+    if (viewer) catalogue.countView(numericId).catch(() => {})
+  }, [v?.id, numericId, recordWatch, viewer])
 
   // Where you stopped is written back as you watch, so picking the title up on
   // another device lands in the right place — and because that write is what
@@ -760,6 +761,7 @@ export function Watch() {
                 autoplay={autoplay}
                 onAutoplay={setAutoplay}
                 onTimeChange={setAt}
+                onPlaybackStarted={onPlaybackStarted}
                 onReport={() => setReportOpen(true)}
                 onEnded={() => {
                   if (autoplay && related[0]) {
@@ -778,7 +780,7 @@ export function Watch() {
                   <BillingBoard billing={v.billing} />
                   <Letterboard>{v.category}</Letterboard>
                   {v.genre && <Letterboard>{v.genre}</Letterboard>}
-                  {v.captions.length > 0 && <Letterboard tone="ok">{`CC ${v.captions.join(' · ')}`}</Letterboard>}
+                  {/* Language labels are not caption files; do not advertise CC until a sourced track exists. */}
                 </div>
                 <h1 className="font-marquee mt-3 text-[clamp(1.6rem,3.4vw,2.2rem)] font-extrabold leading-tight tracking-[-0.03em] text-fg">
                   {v.title}
@@ -1775,7 +1777,7 @@ export function Help() {
   const faqs = [
     ['Why can I not play a premium title?', 'Premium titles need an active pass. Check your pass under Account → Pass, or claim one from the Passes page.'],
     ['A video keeps buffering.', 'Playback quality follows your connection speed. If it persists, report it as a playback problem so support can check the transcode.'],
-    ['How do I turn captions on?', 'Use the CC control in the player. Caption tracks are listed under the title when a video has them.'],
+    ['How do I turn captions on?', 'Captions are unavailable until a video has a playable caption file. The player disables the caption control when none is available.'],
     ['Where do I see a report I filed?', 'Under My reports. You will also be notified whenever its status changes.'],
     ['Can I watch offline?', 'Not in this version. Skopia needs a live connection to stream.'],
   ]

@@ -37,12 +37,14 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Frontend tests and lint
+      - name: Frontend dependency audit, tests, lint and build
         working-directory: frontend
         run: |
           npm ci
+          npm audit --omit=dev --audit-level=high
           npm test
           npm run lint
+          npm run build
       - name: Backend tests and production JAR
         run: ./mvnw -B clean package
       - name: Verify this main commit is live on the hosted site
@@ -53,7 +55,7 @@ jobs:
           for attempt in $(seq 1 90); do
             actual="$(curl -fsS --connect-timeout 5 --max-time 10 https://skopia.randillasith.me/api/deployment 2>/dev/null | jq -r '.deployedSha // empty' 2>/dev/null || true)"
             if [ "$actual" = "$EXPECTED_SHA" ]; then
-              curl -fsS --max-time 10 https://skopia.randillasith.me/api/health >/dev/null
+              curl -fsS --max-time 10 https://skopia.randillasith.me/api/health | jq -e '.status == "ok"' >/dev/null
               curl -fsS --max-time 10 https://skopia.randillasith.me/browse >/dev/null
               echo "Verified hosted Skopia deployment: $actual"
               exit 0

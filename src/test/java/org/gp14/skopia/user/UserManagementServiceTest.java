@@ -42,6 +42,8 @@ class UserManagementServiceTest {
     private ActivityLogRepository activityLogRepository;
     @Mock
     private org.gp14.skopia.security.PasswordService passwordService;
+    @Mock
+    private org.gp14.skopia.billing.BillingService billing;
 
     @InjectMocks
     private UserManagementService userManagementService;
@@ -179,7 +181,11 @@ class UserManagementServiceTest {
         when(contentCreatorRepository.count()).thenReturn(2L);
         when(contentCreatorRepository.findByIsVerified(true)).thenReturn(Collections.emptyList());
         when(registeredViewerRepository.count()).thenReturn(5L);
-        when(registeredViewerRepository.countByIsPremium(true)).thenReturn(2L);
+        RegisteredViewer premiumOne = new RegisteredViewer(); premiumOne.setId(7L);
+        RegisteredViewer premiumTwo = new RegisteredViewer(); premiumTwo.setId(8L);
+        when(registeredViewerRepository.findAll()).thenReturn(List.of(premiumOne, premiumTwo));
+        when(billing.hasActivePremium(7L)).thenReturn(true);
+        when(billing.hasActivePremium(8L)).thenReturn(true);
 
         PlatformUserStatsResponse stats = userManagementService.getPlatformUserStats();
 

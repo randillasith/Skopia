@@ -64,49 +64,27 @@ class BillingManagementApiTest {
     }
 
     private String checkoutBody(String plan) {
-        return "{\"planName\":\"" + plan + "\",\"cardNumber\":\"4216000000000002\","
-                + "\"expiry\":\"12/99\",\"cardholderName\":\"Demo Viewer\"}";
+        return "{\"planName\":\"" + plan + "\",\"brand\":\"VISA\",\"billing\":{\"fullName\":\"Demo Viewer\",\"email\":\"demo@example.test\",\"phone\":\"0771234567\",\"addressLine1\":\"Sample Street\",\"city\":\"Colombo\",\"postalCode\":\"00100\",\"country\":\"LK\"}}";
     }
 
     @Test
-    void replacesActivePlanAtomicallyAndKeepsImmutableZeroAmountLedger() throws Exception {
+    void aSecondPreviewDoesNotBypassAnActivePass() throws Exception {
         RegisteredViewer owner = viewer("switchOwner");
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
-                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isCreated());
-
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
-                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("YEARLY")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status.planName").value("YEARLY"))
-                .andExpect(jsonPath("$.payment.amount").value(0.0))
-                .andExpect(jsonPath("$.payment.payStatus").value("SIMULATED"));
-
-        var all = subscriptions.findByViewerId(owner.getId());
-        assertThat(all).hasSize(2);
-        assertThat(all).filteredOn(s -> "ACTIVE".equals(s.getSubStatus())).singleElement()
-                .extracting(s -> s.getPlan().getPlanName()).isEqualTo("YEARLY");
-        assertThat(all).filteredOn(s -> "CANCELLED".equals(s.getSubStatus())).hasSize(1);
-        assertThat(payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId())).hasSize(2)
-                .allSatisfy(payment -> {
-                    assertThat(payment.getAmount()).isZero();
-                    assertThat(payment.getPayStatus()).isEqualTo("SIMULATED");
-                    assertThat(payment.getPayMethod()).isEqualTo("DEMO_TEST_VISA_0002");
-                });
-        assertThat(billing.hasActivePremium(owner.getId())).isTrue();
-
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
-                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("YEARLY")))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isConflict());
-        assertThat(subscriptions.findByViewerId(owner.getId())).hasSize(2);
-        assertThat(payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId())).hasSize(2);
+        assertThat(subscriptions.findByViewerId(owner.getId())).hasSize(1);
+        assertThat(payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId())).hasSize(1);
     }
 
     @Test
     void viewerRefundsAreOwnedBoundedAndLimitedToOnePendingPerPayment() throws Exception {
         RegisteredViewer owner = viewer("refundOwner");
         RegisteredViewer other = viewer("refundOther");
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isCreated());
         Long paymentId = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0).getId();
@@ -140,7 +118,7 @@ class BillingManagementApiTest {
     void adminProcessesPendingRefundOnceAndApprovalRevokesEntitlementWithoutChangingPayment() throws Exception {
         RegisteredViewer owner = viewer("approvalOwner");
         Administrator admin = admin("refundAdmin");
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isCreated());
         var payment = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0);
@@ -164,7 +142,7 @@ class BillingManagementApiTest {
         assertThat(viewers.findById(owner.getId()).orElseThrow().getIsPremium()).isFalse();
         var unchanged = payments.findById(payment.getId()).orElseThrow();
         assertThat(unchanged.getPayStatus()).isEqualTo("SIMULATED");
-        assertThat(unchanged.getAmount()).isZero();
+        assertThat(unchanged.getAmount()).isEqualByComparingTo("500.00");
         assertThat(payments.count()).isEqualTo(1);
 
         mvc.perform(post("/api/billing/admin/refunds/" + refund.getId() + "/reject")
@@ -187,7 +165,7 @@ class BillingManagementApiTest {
         owner.setLastName("Viewer");
         viewers.saveAndFlush(owner);
         Administrator admin = admin("dtoAdmin");
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isCreated());
         Long paymentId = payments.findAll().get(0).getId();
@@ -202,14 +180,14 @@ class BillingManagementApiTest {
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].displayName").value("Ada Viewer"))
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].planName").value("MONTHLY"))
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].payment.id").value(paymentId.intValue()))
-                .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].payment.payMethod").value("DEMO_TEST_VISA_0002"))
+                .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].payment.payMethod").value("CARD_PREVIEW_VISA"))
                 .andExpect(jsonPath("$[?(@.username == 'adminDtoOwner')].refund.status").value("PENDING"));
     }
 
     @Test
     void refundEligibilityCategoryCancellationHistoryAndPermanentDuplicateRule() throws Exception {
         RegisteredViewer owner = viewer("refundLifecycle");
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isCreated());
         Long paymentId = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0).getId();
@@ -231,7 +209,7 @@ class BillingManagementApiTest {
                         .content("{\"category\":\"ACCIDENTAL_PURCHASE\",\"reason\":\"I selected the wrong demo subscription.\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.category").value("ACCIDENTAL_PURCHASE"))
-                .andExpect(jsonPath("$.currency").value("USD"))
+                .andExpect(jsonPath("$.currency").value("LKR"))
                 .andExpect(jsonPath("$.simulation").value(true))
                 .andReturn().getResponse().getContentAsString();
         long refundId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created).get("id").asLong();
@@ -260,8 +238,8 @@ class BillingManagementApiTest {
     void adminRefundQueueSupportsDecisionNotificationFilteringCountAndCsv() throws Exception {
         RegisteredViewer owner = viewer("refundQueueOwner");
         Administrator admin = admin("refundQueueAdmin");
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer(owner))
-                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("YEARLY")))
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("MONTHLY")))
                 .andExpect(status().isCreated());
         Long paymentId = payments.findBySubscriptionViewerIdOrderByPaidDatetimeDescIdDesc(owner.getId()).get(0).getId();
         String created = mvc.perform(post("/api/billing/payments/" + paymentId + "/refunds")

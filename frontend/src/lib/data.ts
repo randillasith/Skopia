@@ -36,6 +36,8 @@ export type Video = {
   comments: number
   premium: boolean
   billing: Billing
+  /** Backend publication/moderation status; unlike billing, preserves private and archived distinctions. */
+  status?: string | null
   captions: string[]
   synopsis: string
   /** 0–1, where the viewer left off. 0 means never started. */

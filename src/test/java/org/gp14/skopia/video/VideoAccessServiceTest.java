@@ -12,6 +12,13 @@ class VideoAccessServiceTest {
     private final BillingService billing = mock(BillingService.class);
     private final VideoAccessService access = new VideoAccessService(billing);
 
+    @Test void unknownTierIsNotTreatedAsFree() {
+        Video video = new Video();
+        video.setVideoStatus("PUBLISHED");
+        AccessTier tier = new AccessTier(); tier.setTierName("UNKNOWN"); video.setAccessTier(tier);
+        assertThat(access.canPlay(video, 7L)).isFalse();
+    }
+
     @Test void premiumRequiresEntitlementOrOwner() {
         Video video = new Video();
         video.setVideoStatus("PUBLISHED");

@@ -19,17 +19,24 @@ class DemoPlanCatalog {
             if (!enabled) return;
             transactions.executeWithoutResult(tx -> {
                 seed(plans, "MONTHLY", 30);
-                seed(plans, "YEARLY", 365);
             });
         };
     }
 
     private void seed(SubscriptionPlanRepository plans, String name, int days) {
-        if (plans.findByPlanName(name).isPresent()) return;
+        var existing = plans.findByPlanName(name);
+        if (existing.isPresent()) {
+            SubscriptionPlan plan = existing.get();
+            plan.setPrice(new BigDecimal("500.00"));
+            plan.setDurationDays(30);
+            plan.setBenefit("Test-only preview; one-time 30-day access, no charge and no automatic renewal");
+            plans.save(plan);
+            return;
+        }
         SubscriptionPlan plan = new SubscriptionPlan();
         plan.setPlanName(name); plan.setDurationDays(days);
-        plan.setPrice(BigDecimal.ZERO.setScale(2));
-        plan.setBenefit("Simulated premium access only; no charge or automatic renewal");
+        plan.setPrice(new BigDecimal("500.00"));
+        plan.setBenefit("Test-only preview; one-time 30-day access, no charge and no automatic renewal");
         plans.save(plan);
     }
 }

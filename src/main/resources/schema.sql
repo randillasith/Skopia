@@ -1,6 +1,9 @@
 -- =============================================================================
 -- Skopia - Web-Based Video Browsing System Database Schema DDL
--- Compatible with MySQL 8.0+
+-- Reference schema for fresh MySQL 8.0+ / MariaDB 10.11 installations.
+-- Existing databases must be upgraded by the application compatibility runners:
+-- FeatureSchemaMigration, BillingSchemaMigration, RefundSchemaMigration.
+-- CREATE TABLE IF NOT EXISTS does not upgrade existing table definitions.
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -256,6 +259,7 @@ CREATE TABLE IF NOT EXISTS payments (
     payment_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     subscription_id BIGINT NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
     paid_datetime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     pay_method VARCHAR(50) NOT NULL,
     pay_status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
@@ -275,16 +279,34 @@ CREATE TABLE IF NOT EXISTS receipts (
 -- Refunds
 CREATE TABLE IF NOT EXISTS refunds (
     refund_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    payment_id BIGINT NOT NULL,
+    payment_id BIGINT NOT NULL UNIQUE,
     processed_by BIGINT,
     refund_amount DECIMAL(10, 2) NOT NULL,
     reason VARCHAR(500) NOT NULL,
+    category VARCHAR(40) NOT NULL DEFAULT 'OTHER',
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
     refund_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     requested_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     processed_date DATETIME,
     decision_note VARCHAR(500),
+    version BIGINT NOT NULL DEFAULT 0,
+    INDEX idx_refunds_status_requested (refund_status, requested_date),
+    INDEX idx_refunds_category (category),
     FOREIGN KEY (payment_id) REFERENCES payments(payment_id) ON DELETE CASCADE,
     FOREIGN KEY (processed_by) REFERENCES administrators(employee_no) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS refund_status_history (
+    history_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    refund_id BIGINT NOT NULL,
+    from_status VARCHAR(20),
+    to_status VARCHAR(20) NOT NULL,
+    changed_by BIGINT,
+    change_note VARCHAR(500),
+    changed_at DATETIME(6) NOT NULL,
+    INDEX idx_refund_history_refund_changed (refund_id, changed_at),
+    FOREIGN KEY (refund_id) REFERENCES refunds(refund_id),
+    FOREIGN KEY (changed_by) REFERENCES users(user_id)
 );
 
 -- Reports & Complaints

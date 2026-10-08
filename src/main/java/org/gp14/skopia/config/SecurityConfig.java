@@ -31,6 +31,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/billing/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers(HttpMethod.GET, "/api/billing/plans").permitAll()
                         .requestMatchers("/api/billing/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/health", "/api/categories", "/api/deployment").permitAll()
+                        .requestMatchers("/api/announcements/admin", "/api/announcements/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/notifications/**", "/api/announcements").authenticated()
                         .requestMatchers("/api/auth/me", "/api/users/me", "/api/users/me/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/complaints").authenticated()
@@ -56,7 +58,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/videos", "/api/videos/**", "/api/placements", "/api/placements/**", "/uploads/**").permitAll()
                         .requestMatchers("/api/videos", "/api/videos/**").authenticated()
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/error").permitAll()
-                        .requestMatchers("/api/**").permitAll()
+                        .requestMatchers("/api/**").denyAll()
                         .anyRequest().permitAll())
                 .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

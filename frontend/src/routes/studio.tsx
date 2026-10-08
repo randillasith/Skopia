@@ -14,13 +14,16 @@ import { BackOfHouse, FrontOfHouse, useSession } from '@/components/Shell'
 import { GENRES, fmt, UNDECIDED } from '@/lib/data'
 import { useCatalogue, useMyVideos, useVideo } from '@/lib/useCatalogue'
 import { studio, videoIdOf } from '@/lib/catalogue'
+import { visibilityAction, visibilityLabel } from '@/lib/video-visibility'
 import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import { Resolve } from '@/components/Loading'
 import { billing } from '@/lib/billing'
-import { ACCOUNTS, CHANNELS, accountById, ownedChannel } from '@/lib/session'
+import { ACCOUNTS, accountById, ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
+const isPublicVideo = (status?: string | null) => ['PUBLISHED', 'PUBLIC'].includes((status ?? '').toUpperCase())
+const isPrivateVideo = (status?: string | null) => ['DRAFT', 'PRIVATE'].includes((status ?? '').toUpperCase())
 
 /**
  * The studio only ever shows the signed-in account's own channel. Scoping it to
@@ -39,6 +42,7 @@ export function StudioLibrary() {
   const { videos: MINE, loading, error, refresh } = useMyVideos()
   const [confirm, setConfirm] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [visibilityBusy, setVisibilityBusy] = useState<string | null>(null)
   const toast = useToast()
   const target = confirm ? MINE.find((v) => v.id === confirm) : undefined
 
@@ -68,6 +72,21 @@ export function StudioLibrary() {
     }
   }
 
+  const changeVisibility = async (videoId: string, title: string, next: 'PUBLISHED' | 'DRAFT') => {
+    const numeric = videoIdOf(videoId)
+    if (numeric == null) return
+    setVisibilityBusy(videoId)
+    try {
+      await studio.update(numeric, { status: next }, actor)
+      refresh()
+      toast({ title: `"${title}" is now ${next === 'PUBLISHED' ? 'public' : 'private'}`, tone: 'ok' })
+    } catch (cause) {
+      toast({ title: cause instanceof ApiError ? cause.message : 'Could not change visibility.', tone: 'bad' })
+    } finally {
+      setVisibilityBusy(null)
+    }
+  }
+
   return (
     <BackOfHouse
       title="Video library"
@@ -80,8 +99,8 @@ export function StudioLibrary() {
     >
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          ['Published', MINE.filter((v) => v.billing === 'NOW SHOWING' || v.billing === 'HELD OVER').length],
-          ['In review', MINE.filter((v) => v.billing === 'IN REVIEW').length],
+          ['Public', MINE.filter((v) => isPublicVideo(v.status)).length],
+          ['Private', MINE.filter((v) => isPrivateVideo(v.status)).length],
           ['Total views', fmt(MINE.reduce((s, v) => s + v.views, 0))],
           ['Comments', fmt(MINE.reduce((s, v) => s + v.comments, 0))],
         ].map(([label, value]) => (
@@ -101,17 +120,17 @@ export function StudioLibrary() {
       ) : MINE.length === 0 ? (
         <div className="mt-8">
           <EmptyState
-            title="Nothing published yet"
+            title="No videos yet"
             body="Upload a video and it appears here with its billing, its views and its comments."
             action={<Button variant="primary" onClick={() => nav('/studio/upload')}>Upload a video</Button>}
           />
         </div>
       ) : (
       <div className="mt-8 rounded-lg border border-ink-700 bg-ink-850">
-        <Table labels={["Title", "Billing", "Category", "Published", "Views", "Likes", "Captions", ""]}>
+        <Table labels={["Title", "Visibility", "Billing", "Category", "Uploaded", "Views", "Likes", "Captions", "Actions"]}>
           <thead>
             <tr>
-              <Th>Title</Th><Th>Billing</Th><Th>Category</Th><Th>Published</Th>
+              <Th>Title</Th><Th>Visibility</Th><Th>Billing</Th><Th>Category</Th><Th>Uploaded</Th>
               <Th numeric>Views</Th><Th numeric>Likes</Th><Th>Captions</Th><Th />
             </tr>
           </thead>
@@ -130,6 +149,9 @@ export function StudioLibrary() {
                     </span>
                   </Link>
                 </Td>
+                <Td><Letterboard tone={isPublicVideo(v.status) ? 'ok' : 'review'}>
+                  {visibilityLabel(v.status)}
+                </Letterboard></Td>
                 <Td><BillingBoard billing={v.billing} /></Td>
                 <Td className="text-ink-300">{v.category}</Td>
                 <Td><span className="font-mono tabular-nums text-ink-300">{v.published}</span></Td>
@@ -144,7 +166,13 @@ export function StudioLibrary() {
                 </Td>
                 <Td>
                   <div className="flex justify-end items-center gap-1.5">
-                    {(v.billing === 'HELD OVER' || v.billing === 'PULLED') && (
+                    {visibilityAction(v.status) && (
+                      <Button size="sm" variant="quiet" loading={visibilityBusy === v.id}
+                        onClick={() => changeVisibility(v.id, v.title, visibilityAction(v.status)!)}>
+                        {isPublicVideo(v.status) ? 'Make private' : 'Make public'}
+                      </Button>
+                    )}
+                    {v.status === 'ARCHIVED' && (
                       <Button
                         size="sm"
                         variant="primary"
@@ -285,7 +313,7 @@ export function StudioUpload() {
         setStep(4)
         toast({ title: 'Published — now showing', tone: 'ok' })
       } else {
-        toast({ title: 'Saved as a draft' })
+        toast({ title: 'Saved as private. You can make it public from your library.' })
         nav('/studio')
       }
     } catch (cause) {
@@ -515,8 +543,8 @@ export function StudioUpload() {
               <div className="mt-5 flex items-start gap-2.5 rounded-sm border border-danger-500/35 bg-danger-500/8 px-4 py-3">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-tone-danger-400" />
                 <p className="text-[13.5px] leading-relaxed text-ink-200">
-                  Publishing makes this visible to viewers and starts collecting views and comments.
-                  You can archive it afterwards, but the earlier stations close.
+                  Publish now to make this visible to viewers and start collecting views and comments,
+                  or save it privately and make it public later from your library.
                 </p>
               </div>
 
@@ -524,7 +552,7 @@ export function StudioUpload() {
                 <Button variant="quiet" icon={<ArrowLeft className="size-4" />} onClick={() => setStep(2)}>Back</Button>
                 <div className="flex gap-2">
                   <Button loading={publishing} onClick={() => publish('DRAFT')}>
-                    Save as draft
+                    Save as private
                   </Button>
                   <Button variant="primary" loading={publishing} onClick={() => publish('PUBLISHED')}>
                     Publish now
@@ -569,13 +597,17 @@ export function StudioEdit() {
 
   // The form is held here rather than read off the DOM on submit, so what is
   // sent is what is on screen and an unchanged field is not sent as a change.
-  const [form, setForm] = useState({ title: '', category: '', synopsis: '', premium: false })
+  const [form, setForm] = useState<{
+    title: string; category: string; synopsis: string; premium: boolean; visibility: 'PUBLISHED' | 'DRAFT'
+  }>({ title: '', category: '', synopsis: '', premium: false, visibility: 'PUBLISHED' })
   const [busy, setBusy] = useState(false)
   useEffect(() => {
-    if (v) setForm({ title: v.title, category: v.category, synopsis: v.synopsis, premium: v.premium })
-  }, [v?.id])
+    if (v) setForm({ title: v.title, category: v.category, synopsis: v.synopsis, premium: v.premium,
+      visibility: isPrivateVideo(v.status) ? 'DRAFT' : 'PUBLISHED' })
+  }, [v?.id, v?.status])
 
   const numeric = v ? videoIdOf(v.id) : null
+  const editableVisibility = !!v && (isPublicVideo(v.status) || isPrivateVideo(v.status))
 
   const save = async () => {
     if (numeric == null) return
@@ -587,7 +619,11 @@ export function StudioEdit() {
           title: form.title.trim(),
           description: form.synopsis.trim(),
           categoryId: categories.find((c) => c.name === form.category)?.id ?? null,
-          accessType: form.premium ? 'PREMIUM' : 'FREE',
+          accessType: form.premium === v?.premium ? undefined : form.premium ? 'PREMIUM' : 'FREE',
+          status: editableVisibility && (
+            (form.visibility === 'PUBLISHED' && isPrivateVideo(v?.status)) ||
+            (form.visibility === 'DRAFT' && isPublicVideo(v?.status))
+          ) ? form.visibility : undefined,
         },
         actor,
       )
@@ -670,6 +706,17 @@ export function StudioEdit() {
           <Field label="Synopsis" required>
             <Textarea value={form.synopsis} onChange={(e) => setForm((f) => ({ ...f, synopsis: e.target.value }))} />
           </Field>
+
+          {editableVisibility ? (
+            <Field label="Visibility" hint="Public appears in the catalogue. Private is available only to you. You can change this at any time.">
+              <Select value={form.visibility} onChange={(e) => setForm((f) => ({ ...f, visibility: e.target.value as 'PUBLISHED' | 'DRAFT' }))}>
+                <option value="PUBLISHED">Public</option>
+                <option value="DRAFT">Private</option>
+              </Select>
+            </Field>
+          ) : (
+            <p className="text-sm text-ink-300">This video is {v.status?.toLowerCase() ?? 'unavailable'}; its visibility cannot be changed here.</p>
+          )}
 
           <div className="rounded-lg border border-ink-700 bg-ink-850 p-5">
             <p className="text-[15px] font-medium text-fg">Playback settings</p>
@@ -811,36 +858,14 @@ export function StudioAnalytics() {
 /* ====================================================== create a channel */
 
 /**
- * Self-service. A registered account becomes a creator by naming a channel —
- * there is no approval step and no administrator in the path. That is the whole
- * point of the screen, so it says so rather than implying it by absence.
+ * RegisteredViewer and ContentCreator are sibling JOINED JPA subtypes. Inserting
+ * a content_creators row for an existing registered_viewers id does not convert
+ * its persisted Java type or its bearer-token role. Removing the registered row
+ * would cascade away viewer-owned data. Until an explicit migration preserves
+ * that data and re-hydrates identity safely, do not offer a success-only form.
  */
 export function CreateChannel() {
-  const nav = useNavigate()
-  const toast = useToast()
   const { viewer } = useSession()
-  const [name, setName] = useState('')
-  const [handle, setHandle] = useState('')
-  const [touched, setTouched] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const slug = handle || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-  const taken = CHANNELS.some((c) => c.handle === slug)
-  const tooShort = slug.length > 0 && slug.length < 3
-  const error = taken ? 'That handle is already in use.' : tooShort ? 'Handles are at least three characters.' : ''
-  const ready = name.trim().length > 1 && slug.length >= 3 && !taken
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setTouched(true)
-    if (!ready) return
-    setBusy(true)
-    window.setTimeout(() => {
-      toast({ title: `${name} is yours. You can publish straight away.`, tone: 'ok' })
-      nav('/studio')
-    }, 650)
-  }
-
   return (
     <FrontOfHouse>
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:py-16">
@@ -848,65 +873,16 @@ export function CreateChannel() {
         <h1 className="font-marquee mt-2 text-[clamp(1.9rem,5vw,2.8rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-fg">
           Open a channel
         </h1>
-        <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-ink-200">
-          Everything you publish belongs to a channel. Nobody approves this — the channel exists
-          the moment you name it, and you can upload immediately.
-        </p>
-
-        <form onSubmit={submit} className="mt-9 space-y-5">
-          <Field label="Channel name" hint="What viewers see under every video.">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Meridian Films"
-              autoFocus
-            />
-          </Field>
-
-          <Field
-            label="Handle"
-            hint="The channel's address. Letters, numbers and hyphens."
-            error={touched ? error : ''}
-          >
-            <div className="flex items-stretch">
-              <span className="flex items-center rounded-l-sm border border-r-0 border-ink-600 bg-ink-900 px-3 font-mono text-[13px] text-ink-300">
-                skopia.lk/@
-              </span>
-              <Input
-                className="rounded-l-none"
-                value={handle}
-                onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                onBlur={() => setTouched(true)}
-                placeholder={slug || 'meridian'}
-              />
-            </div>
-          </Field>
-
-          <div className="rounded-lg border border-ink-700 bg-ink-850 p-4">
-            <p className="letterboard text-ink-300">What opening a channel gives you</p>
-            <ul className="mt-2.5 space-y-1.5 text-[14px] text-ink-200">
-              <li>· Publish, edit and withdraw your own videos</li>
-              <li>· Appoint moderators for this channel, and remove them</li>
-              <li>· See how your own videos perform</li>
-            </ul>
-            <p className="mt-3 border-t border-ink-700 pt-3 text-[13px] leading-relaxed text-ink-300">
-              It gives you nothing beyond your own channel. Staff work — advertising, the complaint
-              queue, platform settings — stays with the roles an administrator grants.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!ready}>
-              Create {name.trim() ? name.trim() : 'channel'}
-            </Button>
-            <Button type="button" size="lg" onClick={() => nav('/browse')}>
-              Not now
-            </Button>
-          </div>
-          <p className="text-[13px] text-ink-300">
-            Opening as <span className="text-ink-150">{viewer?.name}</span> · @{viewer?.handle}
+        <div role="status" className="mt-8 rounded-lg border border-warning-500/35 bg-warning-500/8 p-5">
+          <p className="font-medium text-tone-warning-400">Channel creation is not available yet.</p>
+          <p className="mt-2 text-[14px] leading-relaxed text-ink-200">
+            Your account has not been changed and no channel has been created. We cannot safely
+            convert an existing viewer account into a creator account yet. Please check back later.
           </p>
-        </form>
+        </div>
+        <p className="mt-5 text-[13px] text-ink-300">
+          Signed in as {viewer?.name ?? 'a viewer'} · <Link to="/browse" className="underline">Back to browse</Link>
+        </p>
       </div>
     </FrontOfHouse>
   )
@@ -1048,28 +1024,19 @@ export function ChannelModerators() {
 
 export function ChannelSettings() {
   const { viewer } = useSession()
-  const channel = ownedChannel(viewer)!
-  const toast = useToast()
-  const [name, setName] = useState(channel.name)
-
+  // The prototype channel list is not an authoritative ownership record. Never
+  // allow its local-only settings editor to imply an authenticated server write.
+  const channel = ownedChannel(viewer)
   return (
     <BackOfHouse title="Channel settings">
       <div className="max-w-xl space-y-5">
-        <Field label="Channel name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Handle" hint="Changing this breaks existing links to your channel.">
-          <Input value={channel.handle} readOnly className="text-ink-300" />
-        </Field>
-        <div>
-          <p className="letterboard text-ink-300">Opened</p>
-          <p className="mt-1 font-mono text-[13px] text-ink-150">{channel.created}</p>
-        </div>
-        <div className="flex gap-3 pt-1">
-          <Button variant="primary" onClick={() => toast({ title: 'Channel updated.', tone: 'ok' })}>
-            Save changes
-          </Button>
-        </div>
+        <p role="status" className="rounded-lg border border-warning-500/35 bg-warning-500/8 p-4 text-ink-200">
+          Channel settings cannot be changed here yet. No changes will be saved.
+        </p>
+        {channel && <>
+          <Field label="Channel name"><Input value={channel.name} readOnly /></Field>
+          <Field label="Handle"><Input value={channel.handle} readOnly /></Field>
+        </>}
       </div>
     </BackOfHouse>
   )

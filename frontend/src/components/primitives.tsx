@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useState } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { X, ChevronDown, Check, Search, Inbox, Construction } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -328,8 +328,20 @@ export function Tabs({
   value: string
   onChange: (id: string) => void
 }) {
+  const list = useRef<HTMLDivElement>(null)
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return
+    const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])]
+    if (!buttons.length) return
+    e.preventDefault()
+    const current = buttons.indexOf(e.target as HTMLButtonElement)
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1
+      : (current + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+    buttons[next].focus()
+    onChange(tabs[next].id)
+  }
   return (
-    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-ink-700">
+    <div ref={list} role="tablist" onKeyDown={onKeyDown} className="flex gap-1 overflow-x-auto border-b border-ink-700">
       {tabs.map((t) => {
         const on = t.id === value
         return (
@@ -337,6 +349,7 @@ export function Tabs({
             key={t.id}
             role="tab"
             aria-selected={on}
+            tabIndex={on ? 0 : -1}
             onClick={() => onChange(t.id)}
             className={cn(
               'relative shrink-0 whitespace-nowrap px-3.5 py-2.5 text-[13px] font-medium transition-colors',
@@ -382,16 +395,37 @@ export function Modal({
   footer?: React.ReactNode
   width?: 'sm' | 'md' | 'lg'
 }) {
+  const dialog = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusable = () => [...(dialog.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? [])].filter(el => el.getClientRects().length > 0 || el.offsetParent !== null || el instanceof HTMLButtonElement)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current() }
+      if (e.key !== 'Tab') return
+      const items = focusable()
+      if (!items.length) { e.preventDefault(); dialog.current?.focus(); return }
+      const first = items[0], last = items[items.length - 1]
+      if (e.shiftKey && (document.activeElement === first || !dialog.current?.contains(document.activeElement))) {
+        e.preventDefault(); last.focus()
+      } else if (!e.shiftKey && (document.activeElement === last || !dialog.current?.contains(document.activeElement))) {
+        e.preventDefault(); first.focus()
+      }
+    }
     document.addEventListener('keydown', onKey)
+    const oldOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    ;(focusable()[0] ?? dialog.current)?.focus()
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
+      document.body.style.overflow = oldOverflow
+      if (previous?.isConnected) previous.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   return (
     <AnimatePresence>
@@ -406,7 +440,9 @@ export function Modal({
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           />
           <motion.div
+            ref={dialog}
             role="dialog"
+            tabIndex={-1}
             aria-modal="true"
             aria-label={title}
             initial={{ opacity: 0, y: 24, scale: 0.98 }}

@@ -53,13 +53,13 @@ class AdSubscriptionApiTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.destination").value("https://example.invalid/demo"));
         mvc.perform(post("/api/ads/click/" + impressionId))
                 .andExpect(status().isForbidden());
-        mvc.perform(post("/api/billing/checkout").header("Authorization", bearer)
+        mvc.perform(post("/api/billing/orders/card-preview").header("Authorization", bearer)
                 .contentType(MediaType.APPLICATION_JSON).content("""
-                {"planName":"MONTHLY","cardNumber":"4216000000000002","expiry":"12/99","cardholderName":"Demo Viewer"}
+                {"planName":"MONTHLY","brand":"VISA","billing":{"fullName":"Demo Viewer","email":"demo@example.test","phone":"0771234567","addressLine1":"Sample Street","city":"Colombo","postalCode":"00100","country":"LK"}}
                 """))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.status.adFree").value(true));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("SIMULATED_APPROVED"));
         mvc.perform(get("/api/billing/plans")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.plans[0].adFree").value(true)).andExpect(jsonPath("$.plans[1].adFree").value(true));
+                .andExpect(jsonPath("$.plans[0].adFree").value(true)).andExpect(jsonPath("$.plans.length()").value(1));
         // A caller-supplied id cannot change the subscriber identified by the token.
         mvc.perform(get("/api/ads/active").param("videoId", video.getId().toString())
                 .param("viewerId", "999").header("X-User-Id", "999").header("Authorization", bearer))
@@ -70,7 +70,7 @@ class AdSubscriptionApiTest {
         assertThat(impressions.count()).isEqualTo(before);
         mvc.perform(post("/api/billing/change-plan").header("Authorization", bearer)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"YEARLY\"}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.status.adFree").value(true));
+                .andExpect(status().isGone());
         mvc.perform(get("/api/ads/active").param("videoId", video.getId().toString()).header("Authorization", bearer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         mvc.perform(post("/api/billing/cancel").header("Authorization", bearer))

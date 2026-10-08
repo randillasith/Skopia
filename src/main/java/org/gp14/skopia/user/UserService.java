@@ -17,6 +17,14 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private org.gp14.skopia.billing.BillingService billing;
+
+    private UserResponse response(User user) {
+        return UserResponse.fromEntity(user, user instanceof org.gp14.skopia.model.user.RegisteredViewer
+                && billing.hasActivePremium(user.getId()));
+    }
+
     public LoginResponse register(RegisterUserRequest request) {
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             return LoginResponse.builder()
@@ -98,7 +106,7 @@ public class UserService {
             return null;
         }
 
-        return UserResponse.fromEntity(user.get());
+        return response(user.get());
     }
 
     public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
@@ -164,7 +172,7 @@ public class UserService {
         }
 
         User updated = userRepository.save(user);
-        return UserResponse.fromEntity(updated);
+        return response(updated);
     }
 
     public boolean changePassword(Long userId, ChangePasswordRequest request) {

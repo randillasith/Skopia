@@ -27,6 +27,7 @@ public class UserManagementService {
     private final RegisteredViewerRepository registeredViewerRepository;
     private final ActivityLogRepository activityLogRepository;
     private final PasswordService passwordService;
+    private final org.gp14.skopia.billing.BillingService billing;
 
     public UserManagementService(UserRepository userRepository,
                                  StaffRepository staffRepository,
@@ -36,7 +37,8 @@ public class UserManagementService {
                                  ContentCreatorRepository contentCreatorRepository,
                                  RegisteredViewerRepository registeredViewerRepository,
                                  ActivityLogRepository activityLogRepository,
-                                 PasswordService passwordService) {
+                                 PasswordService passwordService,
+                                 org.gp14.skopia.billing.BillingService billing) {
         this.userRepository = userRepository;
         this.staffRepository = staffRepository;
         this.administratorRepository = administratorRepository;
@@ -46,6 +48,11 @@ public class UserManagementService {
         this.registeredViewerRepository = registeredViewerRepository;
         this.activityLogRepository = activityLogRepository;
         this.passwordService = passwordService;
+        this.billing = billing;
+    }
+
+    private UserResponse response(User user) {
+        return UserResponse.fromEntity(user, user instanceof RegisteredViewer && billing.hasActivePremium(user.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -56,7 +63,7 @@ public class UserManagementService {
         );
 
         return users.stream()
-                .map(UserResponse::fromEntity)
+                .map(this::response)
                 .filter(u -> role == null || role.trim().isEmpty() || u.getRoleType().equalsIgnoreCase(role.trim()))
                 .collect(Collectors.toList());
     }
@@ -65,7 +72,7 @@ public class UserManagementService {
     public UserResponse getUserById(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with ID: " + userId));
-        return UserResponse.fromEntity(user);
+        return response(user);
     }
 
     public UserResponse updateAccountStatus(User actor, Long targetUserId, UpdateAccountStatusRequest request, String ipAddress) {
@@ -82,7 +89,7 @@ public class UserManagementService {
         }
         logActivity(actor, savedUser, "ACCOUNT_STATUS_CHANGED", detail, ipAddress);
 
-        return UserResponse.fromEntity(savedUser);
+        return response(savedUser);
     }
 
     public UserResponse createStaffMember(User actor, CreateStaffRequest request, String ipAddress) {
@@ -128,7 +135,7 @@ public class UserManagementService {
         }
 
         logActivity(actor, createdStaff, "STAFF_CREATED", "staff type: " + staffType, ipAddress);
-        return UserResponse.fromEntity(createdStaff);
+        return response(createdStaff);
     }
 
     public UserResponse updateStaffProfile(User actor, Long staffId, UpdateStaffProfileRequest request, String ipAddress) {
@@ -151,7 +158,7 @@ public class UserManagementService {
 
         Staff updatedStaff = staffRepository.save(staff);
         logActivity(actor, updatedStaff, "STAFF_PROFILE_UPDATED", null, ipAddress);
-        return UserResponse.fromEntity(updatedStaff);
+        return response(updatedStaff);
     }
 
     public UserResponse updateCreatorVerification(User actor, Long creatorId, UpdateCreatorStatusRequest request, String ipAddress) {
@@ -161,7 +168,7 @@ public class UserManagementService {
         creator.setIsVerified(request.getIsVerified());
         ContentCreator saved = contentCreatorRepository.save(creator);
         logActivity(actor, saved, "CREATOR_VERIFICATION_CHANGED", "verified: " + request.getIsVerified(), ipAddress);
-        return UserResponse.fromEntity(saved);
+        return response(saved);
     }
 
     public UserResponse updateViewerPremiumStatus(User actor, Long viewerId, UpdatePremiumStatusRequest request, String ipAddress) {
@@ -171,7 +178,7 @@ public class UserManagementService {
         viewer.setIsPremium(request.getIsPremium());
         RegisteredViewer saved = registeredViewerRepository.save(viewer);
         logActivity(actor, saved, "VIEWER_PREMIUM_STATUS_CHANGED", "premium: " + request.getIsPremium(), ipAddress);
-        return UserResponse.fromEntity(saved);
+        return response(saved);
     }
 
     @Transactional(readOnly = true)
@@ -204,7 +211,8 @@ public class UserManagementService {
         long verifiedCreators = contentCreatorRepository.findByIsVerified(true).size();
 
         long registeredViewersCount = registeredViewerRepository.count();
-        long premiumViewers = registeredViewerRepository.countByIsPremium(true);
+        long premiumViewers = registeredViewerRepository.findAll().stream()
+                .filter(v -> billing.hasActivePremium(v.getId())).count();
 
         return PlatformUserStatsResponse.builder()
                 .totalUsers(totalUsers)

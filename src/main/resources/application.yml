@@ -15,8 +15,13 @@ spring:
       max-file-size: 250MB
       max-request-size: 260MB
 skopia:
+  # Fixtures activate only with the dev profile and this opt-in; prod/test profiles always disable them.
+  dev:
+    seed-enabled: ${SKOPIA_DEV_SEED_ENABLED:false}
   billing:
     demo-enabled: ${SKOPIA_BILLING_DEMO_ENABLED:false}
+    # Private directory outside static assets and /uploads; never serve slips publicly.
+    private-storage-dir: ${SKOPIA_BILLING_PRIVATE_STORAGE_DIR:${user.home}/.skopia/private-billing-slips}
     # Refunds are simulated only; no payment gateway or money movement occurs.
     refund-window-days: ${SKOPIA_BILLING_REFUND_WINDOW_DAYS:30}
   auth:
