@@ -16,6 +16,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class UserSecurityIntegrationTest {
+    // CI has no deployment receipt; public access must not depend on the VPS marker.
+    private static final String MISSING_DEPLOYMENT_MARKER =
+            System.getProperty("java.io.tmpdir") + "/skopia-security-unwritten-" + java.util.UUID.randomUUID();
+
+    @DynamicPropertySource
+    static void deploymentReceipt(DynamicPropertyRegistry registry) {
+        registry.add("skopia.deployment.sha-file", () -> MISSING_DEPLOYMENT_MARKER);
+    }
+
     @Autowired MockMvc mvc;
     ObjectMapper json = new ObjectMapper();
     @Autowired AdministratorRepository administrators;
@@ -118,7 +129,9 @@ class UserSecurityIntegrationTest {
     void intendedPublicReadsRemainPublic() throws Exception {
         mvc.perform(get("/api/health")).andExpect(status().isOk());
         mvc.perform(get("/api/categories")).andExpect(status().isOk());
-        mvc.perform(get("/api/deployment")).andExpect(status().isOk());
+        // The route is public, but without a deployed-main receipt it correctly reports unknown.
+        mvc.perform(get("/api/deployment")).andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value("deployment unknown"));
         // A nonexistent video is rejected by the endpoint, not by security.
         mvc.perform(get("/api/ads/active").param("videoId", "999999")).andExpect(status().isNotFound());
     }
