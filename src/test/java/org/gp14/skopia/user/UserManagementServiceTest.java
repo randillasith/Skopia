@@ -146,7 +146,7 @@ class UserManagementServiceTest {
         UserResponse response = userManagementService.createStaffMember(actor, request, "127.0.0.1");
 
         assertNotNull(response);
-        assertEquals("USER", response.getRoleType());
+        assertEquals("ADMINISTRATOR", response.getRoleType());
         assertEquals("ADMINISTRATOR", response.getStaffType());
         assertEquals("admin1", response.getUsername());
         assertEquals("SUPER", response.getAdminLevel());

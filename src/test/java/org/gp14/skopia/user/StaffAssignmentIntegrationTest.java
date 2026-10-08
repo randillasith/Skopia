@@ -4,18 +4,26 @@ import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.repository.*;
 import org.gp14.skopia.user.dto.AssignStaffRequest;
 import org.gp14.skopia.user.dto.CreateStaffRequest;
+import org.gp14.skopia.user.dto.UpdateStaffProfileRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
 class StaffAssignmentIntegrationTest {
@@ -25,6 +33,8 @@ class StaffAssignmentIntegrationTest {
     @Autowired StaffAssignmentRepository assignments;
     @Autowired StaffRepository legacyStaff;
     @Autowired StaffRoleService roles;
+    @Autowired MarketingOfficerRepository marketingOfficers;
+    @Autowired MockMvc mvc;
 
     @Test
     void assigningCreatorAsAdministratorPreservesCreatorAndAddsBothAuthorities() {
@@ -54,7 +64,7 @@ class StaffAssignmentIntegrationTest {
     }
 
     @Test
-    void createsPlainUserWithValidatedSupportAssignment() {
+    void createsDedicatedSupportEntityWithCanonicalAssignment() {
         User actor = user("creation_actor", "creation-actor@example.test");
         CreateStaffRequest request = new CreateStaffRequest();
         request.setUsername("new_support_account"); request.setEmail("new-support@example.test");
@@ -64,11 +74,46 @@ class StaffAssignmentIntegrationTest {
 
         var response = management.createStaffMember(actor, request, "127.0.0.1");
         User created = users.findById(response.getId()).orElseThrow();
-        assertEquals(User.class, created.getClass());
-        assertFalse(legacyStaff.existsById(created.getId()));
+        assertInstanceOf(SupportOfficer.class, created);
+        assertTrue(legacyStaff.existsById(created.getId()));
         assertEquals(StaffType.SUPPORT_OFFICER, assignments.findById(created.getId()).orElseThrow().getStaffType());
         assertEquals("Support Officer", assignments.findById(created.getId()).orElseThrow().getDesignation());
         assertEquals("SUPPORT_OFFICER", response.getStaffType());
+    }
+
+    @Test
+    void createsMarketingOfficerRowsAndAllowsMarketingPanelLogin() throws Exception {
+        User actor = user("marketing_creation_actor", "marketing-creation-actor@example.test");
+        CreateStaffRequest request = new CreateStaffRequest();
+        request.setUsername("new_marketing_account"); request.setEmail("new-marketing@example.test");
+        request.setPassword("temporary password"); request.setFirstName("New"); request.setLastName("Marketing");
+        request.setDesignation("Ignored title"); request.setOfficerCode("IGNORED-001");
+        request.setHireDate(LocalDate.of(2026, 10, 8)); request.setStaffType("MARKETING_OFFICER");
+        request.setDepartment("PARTNERSHIPS");
+
+        var response = management.createStaffMember(actor, request, "127.0.0.1");
+        MarketingOfficer marketing = marketingOfficers.findById(response.getId()).orElseThrow();
+        StaffAssignment assignment = assignments.findById(response.getId()).orElseThrow();
+        assertEquals("Marketing Officer", marketing.getDesignation());
+        assertEquals(assignment.getOfficerCode(), marketing.getOfficerCode());
+        assertEquals("PARTNERSHIPS", marketing.getDepartment());
+
+        UpdateStaffProfileRequest update = new UpdateStaffProfileRequest();
+        update.setStaffType(StaffType.MARKETING_OFFICER);
+        update.setHireDate(LocalDate.of(2026, 10, 9));
+        update.setDepartment("ADVERTISING");
+        management.updateStaffProfile(actor, response.getId(), update, "127.0.0.1");
+        MarketingOfficer updated = marketingOfficers.findById(response.getId()).orElseThrow();
+        assertEquals("ADVERTISING", updated.getDepartment());
+        assertEquals(LocalDate.of(2026, 10, 9), updated.getHireDate());
+        assertEquals(marketing.getOfficerCode(), updated.getOfficerCode());
+
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"new_marketing_account\",\"password\":\"temporary password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roleType").value("MARKETING_OFFICER"))
+                .andExpect(jsonPath("$.staffType").value("MARKETING_OFFICER"))
+                .andExpect(jsonPath("$.token").isNotEmpty());
     }
 
     @Test
