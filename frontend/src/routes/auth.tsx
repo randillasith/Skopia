@@ -517,41 +517,145 @@ export function Signup() {
 
 /* =========================================================== reset password */
 
+const signInLink = (
+  <Link to="/login" className="text-tone-violet-300 underline hover:text-tone-violet-200">
+    Back to sign in
+  </Link>
+)
+
 export function ResetPassword() {
+  const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (busy) return
+    const address = email.trim()
+    if (!address || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      setErr('Enter a valid email address.')
+      return
+    }
+    setErr('')
+    setBusy(true)
+    try {
+      await accounts.requestPasswordReset(address)
+      setSent(true)
+    } catch (cause) {
+      // Do not repeat server text: even an error must not identify an account.
+      setErr(cause instanceof ApiError && cause.status === 429
+        ? 'Too many requests. Please wait before trying again.'
+        : 'Could not request a reset link. Please try again later.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <AuthFrame
       title={sent ? 'Check your inbox' : 'Reset your password'}
-      lede={
-        sent
-          ? 'If that address has an account, a reset link is on its way. The link expires in one hour.'
-          : 'Enter your email address and we will send you a link to set a new password.'
-      }
-      foot={
-        <Link to="/login" className="text-tone-violet-300 underline hover:text-tone-violet-200">
-          Back to sign in
-        </Link>
-      }
+      lede={sent
+        ? 'If the address is registered and delivery succeeds, a link will arrive. Check your email for its expiry time.'
+        : 'Enter your email address to request a link to set a new password.'}
+      foot={signInLink}
     >
       {sent ? (
-        <div className="flex items-center gap-3 rounded-sm border border-success-500/35 bg-success-500/8 px-4 py-3.5 text-[14px] text-tone-success-400">
-          <Check className="size-4 shrink-0" />
-          Reset link sent.
+        <div role="status" className="flex items-center gap-3 rounded-sm border border-success-500/35 bg-success-500/8 px-4 py-3.5 text-[14px] text-tone-success-400">
+          <Check className="size-4 shrink-0" aria-hidden="true" />
+          If the address is registered and delivery succeeds, a link will arrive.
         </div>
       ) : (
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault()
-            setSent(true)
-          }}
-        >
+        <form className="space-y-4" onSubmit={submit} noValidate>
           <Field label="Email" required>
-            <Input type="email" placeholder="you@example.com" autoComplete="email" />
+            <Input type="email" placeholder="you@example.com" autoComplete="email" value={email}
+              aria-invalid={!!err} aria-describedby={err ? 'reset-request-error' : undefined}
+              onChange={(e) => setEmail(e.target.value)} invalid={!!err} />
           </Field>
-          <Button type="submit" variant="primary" size="lg" className="w-full">
+          {err && <p id="reset-request-error" role="alert" className="text-[13px] text-tone-danger-400">{err}</p>}
+          <Button type="submit" variant="primary" size="lg" loading={busy} className="w-full">
             Send reset link
           </Button>
+        </form>
+      )}
+    </AuthFrame>
+  )
+}
+
+// The first inline head script removes the token from the URL before asset loading.
+// Consume its in-memory slot once, retaining it across StrictMode's second initializer.
+let capturedResetToken: string | null = null
+type ResetTokenWindow = Window & { __skopiaResetToken?: string | null }
+function takeResetToken(): string | null {
+  const slot = window as ResetTokenWindow
+  if (slot.__skopiaResetToken) capturedResetToken = slot.__skopiaResetToken
+  delete slot.__skopiaResetToken
+  return capturedResetToken
+}
+
+export function ConfirmPasswordReset() {
+  const [token] = useState(takeResetToken)
+  useEffect(() => () => {
+    capturedResetToken = null
+    delete (window as ResetTokenWindow).__skopiaResetToken
+  }, [])
+  const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (busy || !token) return
+    if (password.length < 8) return setErr('Use a password of at least eight characters.')
+    if (new TextEncoder().encode(password).length > 72) return setErr('Password must not exceed 72 UTF-8 bytes.')
+    if (password !== confirmation) return setErr('Passwords must match.')
+    setErr('')
+    setBusy(true)
+    try {
+      await accounts.confirmPasswordReset(token, password)
+      capturedResetToken = null
+      setPassword('')
+      setConfirmation('')
+      setDone(true)
+    } catch (cause) {
+      // Do not echo a backend message: it may include the single-use token.
+      setErr(cause instanceof ApiError && cause.status === 0
+        ? 'Could not reach Skopia. Please try again.'
+        : 'This reset link is invalid, expired or already used. Request a new one.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <AuthFrame title={done ? 'Password updated' : 'Set a new password'}
+      lede={done
+        ? 'Your password has been changed. Sign in with your new password.'
+        : 'Choose a new password for your account.'}
+      foot={done ? signInLink : <Link to="/reset" className="text-tone-violet-300 underline hover:text-tone-violet-200">Request a new link</Link>}
+    >
+      {done ? (
+        <div role="status" className="flex items-center gap-3 rounded-sm border border-success-500/35 bg-success-500/8 px-4 py-3.5 text-[14px] text-tone-success-400">
+          <Check className="size-4 shrink-0" aria-hidden="true" /> Password updated.
+        </div>
+      ) : !token ? (
+        <p role="alert" className="text-[14px] text-tone-danger-400">This reset link is invalid or expired. Request a new one.</p>
+      ) : (
+        <form className="space-y-4" onSubmit={submit} noValidate>
+          <Field label="New password" required hint="8+ characters, at most 72 UTF-8 bytes">
+            <Input type="password" autoComplete="new-password" value={password} invalid={!!err}
+              aria-invalid={!!err} aria-describedby={err ? 'reset-confirm-error' : undefined}
+              onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          <Field label="Confirm password" required>
+            <Input type="password" autoComplete="new-password" value={confirmation} invalid={!!err}
+              aria-invalid={!!err} aria-describedby={err ? 'reset-confirm-error' : undefined}
+              onChange={(e) => setConfirmation(e.target.value)} />
+          </Field>
+          {err && <p id="reset-confirm-error" role="alert" className="text-[13px] text-tone-danger-400">{err}</p>}
+          <Button type="submit" variant="primary" size="lg" loading={busy} className="w-full">Set new password</Button>
         </form>
       )}
     </AuthFrame>

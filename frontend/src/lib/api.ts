@@ -41,6 +41,9 @@ type Options = {
   /** The signed-in account's numeric id. Omitted for the viewer-facing calls. */
   actorId?: number | null
   signal?: AbortSignal
+  /** Public flows must not attach a stored session or invalidate it on refusal. */
+  anonymous?: boolean
+  referrerPolicy?: ReferrerPolicy
 }
 
 /**
@@ -55,7 +58,7 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   const headers: Record<string, string> = {}
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   if (options.actorId != null) headers[ACTOR_HEADER] = String(options.actorId)
-  const token = bearerToken()
+  const token = options.anonymous ? null : bearerToken()
   if (token) headers.Authorization = `Bearer ${token}`
 
   let response: Response
@@ -65,6 +68,7 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: options.signal,
+      referrerPolicy: options.referrerPolicy,
     })
   } catch (cause) {
     // An aborted request is the caller changing its mind, not a failure, and

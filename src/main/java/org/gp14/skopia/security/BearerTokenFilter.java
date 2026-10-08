@@ -51,7 +51,8 @@ public class BearerTokenFilter extends OncePerRequestFilter {
             }
             if (id != null) {
                 User user = users.findById(id).orElse(null);
-                if (user != null && ("ACTIVE".equalsIgnoreCase(user.getAccountStatus()) || user.getAccountStatus() == null)) {
+                if (user != null && tokens.verifyForUser(header.substring(7), user)
+                        && ("ACTIVE".equalsIgnoreCase(user.getAccountStatus()) || user.getAccountStatus() == null)) {
                     List<GrantedAuthority> authorities = new ArrayList<>();
                     authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
 

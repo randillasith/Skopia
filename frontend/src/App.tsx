@@ -7,7 +7,7 @@ import {
   SessionProvider, RequireAuth, RequireChannel, RequireModerator, RequireStaff,
 } from '@/components/Shell'
 
-import { Lobby, Login, Signup, ResetPassword, Onboarding } from '@/routes/auth'
+import { Lobby, Login, Signup, ResetPassword, ConfirmPasswordReset, Onboarding } from '@/routes/auth'
 import {
   Browse, SearchPage, Category, Watch, Watchlist, History, ForYou,
   NotificationPrefs, Profile, Help,
@@ -53,6 +53,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/reset" element={<ResetPassword />} />
+            <Route path="/reset/confirm" element={<ConfirmPasswordReset />} />
             <Route path="/onboarding" element={<Onboarding />} />
 
             <Route path="/browse" element={<Browse />} />

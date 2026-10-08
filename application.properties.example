@@ -1,0 +1,8 @@
+# Password reset backend configuration
+# Set a canonical HTTPS origin for links (no path, query, fragment or trailing slash).
+skopia.password-reset.public-origin=${SKOPIA_PASSWORD_RESET_PUBLIC_ORIGIN:https://skopia.randillasith.me}
+# Reset mail reuses skopia.mail.enabled, skopia.mail.from and the existing
+# authenticated STARTTLS skopia.mail.host/port/username/password sender.
+# If mail or the origin is misconfigured, every address receives the same 503; no token is issued.
+# Accepted requests remain generic because async SMTP failure cannot be reported to the requester.
+# Watch for PASSWORD_RESET_DELIVERY_FAILED and password-reset delivery queue warnings.
