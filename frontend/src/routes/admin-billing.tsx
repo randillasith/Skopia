@@ -3,12 +3,77 @@ import { FileDown, Megaphone, Receipt } from 'lucide-react'
 import { BackOfHouse } from '@/components/Shell'
 import { Button, EmptyState, Field, Input, Modal, SearchInput, Select, Table, Td, Textarea, Th, Tr, useToast } from '@/components/primitives'
 import { Letterboard } from '@/components/world'
-import { billing, REFUND_CATEGORIES, validateRefundDecision, type AdminRefundFilters, type AdminSubscription, type RefundPage, type RefundRequest } from '@/lib/billing'
+import { billing, REFUND_CATEGORIES, reviewableOrders, validateRefundDecision, type AdminRefundFilters, type AdminSubscription, type OrderView, type RefundPage, type RefundRequest } from '@/lib/billing'
 import { announcements, validateAnnouncement, type Announcement, type AnnouncementInput } from '@/lib/notifications'
 
 const date = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : '—'
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Please try again.'
 const tone = (status: string): 'ok' | 'review' | 'bad' | 'soon' => status === 'ACTIVE' || status === 'PUBLISHED' || status === 'APPROVED' ? 'ok' : status === 'FREE' || status === 'DRAFT' ? 'soon' : status === 'CANCELLED' || status === 'ARCHIVED' || status === 'REJECTED' ? 'bad' : 'review'
+
+export function AdminPaymentOrders() {
+  const [orders, setOrders] = useState<OrderView[]>([])
+  const [revision, setRevision] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState<OrderView | null>(null)
+  const [decision, setDecision] = useState<'APPROVED' | 'REJECTED'>('APPROVED')
+  const [note, setNote] = useState('')
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const toast = useToast()
+  useEffect(() => {
+    const abort = new AbortController(); setLoading(true); setError(null)
+    billing.adminOrders(abort.signal).then((rows) => { if (!abort.signal.aborted) setOrders(rows) })
+      .catch((cause) => { if (!abort.signal.aborted) setError(errorText(cause)) })
+      .finally(() => { if (!abort.signal.aborted) setLoading(false) })
+    return () => abort.abort()
+  }, [revision])
+  const openSlip = async (id: number) => {
+    setBusy(true)
+    try {
+      const blob = await billing.adminSlip(id)
+      const url = URL.createObjectURL(blob)
+      // Only an authenticated fetch can retrieve this private file. Never put its API path in an href.
+      const anchor = document.createElement('a'); anchor.href = url
+      anchor.download = `skopia-sample-slip-${id}.${blob.type === 'application/pdf' ? 'pdf' : blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'}`
+      anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (cause) { toast({ title: errorText(cause), tone: 'bad' }) }
+    finally { setBusy(false) }
+  }
+  const submit = async () => {
+    if (!selected || busy) return
+    if (decision === 'REJECTED' && !note.trim()) { setNoteError('A rejection note is required.'); return }
+    setBusy(true); setNoteError(null)
+    try {
+      await billing.decideOrder(selected.id, decision, note)
+      toast({ title: `Sample order ${decision.toLowerCase()}`, tone: 'ok' })
+      setSelected(null); setRevision((n) => n + 1)
+      window.dispatchEvent(new Event('skopia:notifications-changed'))
+    } catch (cause) { setNoteError(errorText(cause)) }
+    finally { setBusy(false) }
+  }
+  const reviewable = reviewableOrders(orders)
+  return <BackOfHouse title="Sample payment review" actions={<Button size="sm" onClick={() => setRevision((n) => n + 1)}>Refresh orders</Button>}>
+    <p className="mb-5 text-sm text-ink-300">Simulation—no real money or bank transfer. Review sample bank-transfer submissions only. Approval updates simulated entitlement; it does not confirm receipt of funds.</p>
+    {loading ? <p role="status">Loading orders…</p> : error ? <p role="alert">{error} <Button size="sm" onClick={() => setRevision((n) => n + 1)}>Retry</Button></p>
+      : reviewable.length === 0 ? <EmptyState title="No orders awaiting review" body="Refresh to check for new sample submissions." />
+      : <div className="rounded-lg border border-ink-700 bg-ink-850"><Table labels={['Order', 'Contact', 'Method', 'Submitted', 'Status', 'Review']}><thead><Tr><Th>Order</Th><Th>Contact</Th><Th>Method</Th><Th>Submitted</Th><Th>Status</Th><Th>Review</Th></Tr></thead><tbody>
+        {reviewable.map((order) => <Tr key={order.id}>
+          <Td>#{order.id} · {order.planName}<span className="block text-xs text-ink-300">LKR {order.amount ?? 500} · simulated</span></Td>
+          <Td>{order.billing?.fullName ?? order.fullName ?? '—'}<span className="block text-xs text-ink-300">{order.billing?.email ?? order.email ?? '—'}</span></Td>
+          <Td>{order.paymentMethod ?? order.method ?? 'Bank transfer sample'}{order.reference && <span className="block text-xs">Reference: {order.reference}</span>}</Td>
+          <Td>{date(order.submittedAt ?? order.createdAt)}</Td><Td><Letterboard tone={tone(order.status)}>{order.status}</Letterboard></Td>
+          <Td><div className="flex gap-2"><Button size="sm" variant="quiet" disabled={busy} onClick={() => void openSlip(order.id)}>View private slip</Button>
+            <Button size="sm" disabled={busy} onClick={() => { setSelected(order); setDecision('APPROVED'); setNote(''); setNoteError(null) }}>Decide</Button></div></Td>
+        </Tr>)}</tbody></Table></div>}
+    <Modal open={selected != null} onClose={() => !busy && setSelected(null)} title="Review sample order" description={selected ? `Order #${selected.id} · no real funds received` : undefined}
+      footer={<><Button variant="quiet" disabled={busy} onClick={() => setSelected(null)}>Cancel</Button><Button loading={busy} onClick={() => void submit()}>{decision === 'APPROVED' ? 'Approve simulation' : 'Reject sample'}</Button></>}>
+      <p className="mb-4 text-sm">Simulation—no real money or bank transfer.</p>
+      <Field label="Decision"><Select value={decision} onChange={(event) => { setDecision(event.target.value as 'APPROVED' | 'REJECTED'); setNoteError(null) }}><option value="APPROVED">Approve</option><option value="REJECTED">Reject</option></Select></Field>
+      <Field label="Review note" required={decision === 'REJECTED'} error={noteError ?? undefined}><Textarea maxLength={500} value={note} onChange={(event) => { setNote(event.target.value); setNoteError(null) }} /></Field>
+    </Modal>
+  </BackOfHouse>
+}
 
 export function AdminPlans() {
   const [rows, setRows] = useState<AdminSubscription[]>([])
@@ -20,7 +85,7 @@ export function AdminPlans() {
     return () => abort.abort()
   }, [])
   return <BackOfHouse title="Subscription access">
-    <p className="mb-5 max-w-3xl text-sm leading-relaxed text-ink-300">Server-derived access and safe synthetic payment metadata. Full card numbers, expiry values and cardholder names are never available here.</p>
+    <p className="mb-5 max-w-3xl text-sm leading-relaxed text-ink-300">Server-derived access and historical synthetic payment metadata. No card credentials are collected by the preview flow.</p>
     {loading ? <p role="status">Loading subscriptions…</p> : error ? <p role="alert" className="text-danger-400">{error}</p> : rows.length === 0 ? <EmptyState title="No subscription records" body="Accounts will appear here when the billing service returns access state." /> :
       <div className="rounded-lg border border-ink-700 bg-ink-850"><Table labels={['Account', 'Plan', 'State', 'Term', 'Last simulated payment']}><thead><Tr><Th>Account</Th><Th>Plan</Th><Th>State</Th><Th>Term</Th><Th>Last simulated payment</Th></Tr></thead><tbody>{rows.map((row) => <Tr key={row.userId}>
         <Td><span className="font-medium text-fg">{row.displayName}</span><span className="block text-xs text-ink-300">@{row.username}{row.email ? ` · ${row.email}` : ''}</span><span className="block font-mono text-[11px] text-ink-400">User #{row.userId}</span></Td>

@@ -67,9 +67,9 @@ class VideoSecurityIntegrationTest {
                 mvc.perform(get("/api/videos/" + protectedVideo.getId())
                         .header("Authorization", "Bearer " + tokens.issue(unpaid.getId())))
                         .andExpect(jsonPath("$.videoUrl").value(org.hamcrest.Matchers.nullValue()));
-                mvc.perform(post("/api/billing/checkout")
+                mvc.perform(post("/api/billing/orders/card-preview")
                         .header("Authorization", "Bearer " + tokens.issue(paid.getId()))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\",\"cardNumber\":\"4216000000000002\",\"expiry\":\"12/99\",\"cardholderName\":\"Demo Viewer\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\",\"brand\":\"VISA\",\"billing\":{\"fullName\":\"Demo Viewer\",\"email\":\"demo@example.test\",\"phone\":\"0771234567\",\"addressLine1\":\"Sample Street\",\"city\":\"Colombo\",\"postalCode\":\"00100\",\"country\":\"LK\"}}"))
                         .andExpect(status().isCreated());
                 String response = mvc.perform(get("/api/videos/" + protectedVideo.getId())
                         .header("Authorization", "Bearer " + tokens.issue(paid.getId())))

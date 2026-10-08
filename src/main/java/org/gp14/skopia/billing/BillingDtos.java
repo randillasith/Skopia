@@ -16,7 +16,16 @@ public final class BillingDtos {
     private BillingDtos() {}
 
     public record Plan(Long id, String planName, int durationDays, BigDecimal price, String benefit, boolean adFree) {}
-    public record Catalog(boolean demoEnabled, List<Plan> plans) {}
+    public record Catalog(boolean demoEnabled, List<Plan> plans, Currency currency, boolean previewMode,
+                          boolean autoRenew, String paymentNotice, String bankInstructions) {}
+    /** Test-only billing snapshot. Never enter payment credentials or actual transfer details. */
+    public record BillingContact(String fullName, String email, String phone, String addressLine1,
+                                 String addressLine2, String city, String postalCode, String country) {}
+    public record OrderView(Long id, Long ownerId, String ownerUsername, String reference, String planName, BigDecimal amount, Currency currency,
+                            String method, String brand, String status, boolean simulation, LocalDateTime submittedAt,
+                            BillingContact billing, String transferReference, Long decidedById,
+                            LocalDateTime decidedAt, String decisionNote, Long subscriptionId, Long paymentId,
+                            String notice) {}
     public record Status(boolean premium, Long subscriptionId, String planName, LocalDateTime startDate,
                          LocalDateTime endDate, String status, boolean adFree) {}
     public record PaymentView(Long id, BigDecimal amount, Currency currency, LocalDateTime paidDatetime,

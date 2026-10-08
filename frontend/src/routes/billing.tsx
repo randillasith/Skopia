@@ -2,27 +2,26 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/primitives'
-import { billing, DEMO_TEST_CARD, REFUND_CATEGORIES, validateDemoPayment, validateRefundReason, type DemoPayment, type RefundCategory, type RefundEligibility, type RefundHistoryEntry, type RefundRequest, type PlansResponse, type SubscriptionStatus, type PlanChoice, type DemoPaymentInput } from '@/lib/billing'
+import { billing, monthlyPreviewPlan, REFUND_CATEGORIES, SAMPLE_BANK_INSTRUCTIONS, validateBilling, validateSlip, validateRefundReason, type BillingContact, type CardBrand, type OrderView, type DemoPayment, type RefundCategory, type RefundEligibility, type RefundHistoryEntry, type RefundRequest, type PlansResponse, type SubscriptionStatus } from '@/lib/billing'
 import { actorId as actorIdOf } from '@/lib/session'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
 const link = 'text-tone-cyan-300 underline hover:text-tone-cyan-200'
 const message = (error: unknown) => error instanceof Error ? error.message : 'Please try again.'
 const date = (value: string | null) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : 'Not provided'
+const disclaimer = 'Simulation—no real money or bank transfer. Do not enter card details or submit a real payment.'
 
 function Page({ title, children }: { title: string; children: React.ReactNode }) {
   return <FrontOfHouse><main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-    <p className="letterboard text-tone-gold-400">Demo only · No real payments</p>
+    <p className="letterboard text-tone-gold-400">Subscription simulation · LKR</p>
     <h1 className="font-marquee mt-2 text-3xl font-extrabold text-fg">{title}</h1>
-    <p className="mt-2 text-sm text-ink-300">TEST MODE only. No money is charged, no processor is called, and test card data is validated in memory but never stored.</p>
+    <p className="mt-2 text-sm text-ink-300">{disclaimer} No payment processor is connected.</p>
     <div className="mt-7">{children}</div>
   </main></FrontOfHouse>
 }
-
 function Feedback({ error, retry }: { error: string | null; retry?: () => void }) {
   return error ? <div role="alert" className="mt-4 rounded border border-danger-500/40 p-4 text-tone-danger-400">{error} {retry && <Button size="sm" onClick={retry}>Retry</Button>}</div> : null
 }
-
 function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
   const [value, setValue] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,122 +34,122 @@ function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
       .catch((cause) => { if (!controller.signal.aborted) setError(message(cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  // key identifies the account and revision triggers a retry; load is a stable callback.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, revision])
   return { value, loading, error, retry: () => setRevision((n) => n + 1) }
 }
-
 export function Plans() {
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'plans')
-  return <Page title="Demo passes">
-    <p className="mb-5 text-ink-200">Free viewing includes advertisements. Monthly and yearly passes remove advertisements while the subscription is active.</p>
+  const monthly = value && monthlyPreviewPlan(value)
+  return <Page title="Monthly subscription preview">
+    <p className="mb-5 text-ink-200">One-time preview of a monthly pass. No recurring charge or automatic renewal.</p>
     {loading && <p role="status">Loading plans…</p>}
     <Feedback error={error} retry={retry} />
-    {value && <>
-      {!value.demoEnabled && <p role="status" className="mb-5 text-tone-gold-400">Demo checkout is not enabled. No pass can be activated here.</p>}
-      {value.plans.length ? <div className="grid gap-4 sm:grid-cols-2">{value.plans.map((plan) => <article key={plan.id} className={box}>
-        <h2 className="font-marquee text-xl font-bold text-fg">{plan.planName}</h2>
-        <p className="mt-2 text-ink-200">{plan.durationDays} days · Demo price: {plan.price} (currency not specified)</p>
-        <p className="mt-3 font-semibold">{plan.adFree ? "Ad-free viewing" : "Includes advertisements"}</p>
-        {plan.benefit && <p className="mt-3 text-sm text-ink-300">{plan.benefit}</p>}
-        {value.demoEnabled && (plan.planName === 'MONTHLY' || plan.planName === 'YEARLY') && <Link to={`/checkout?plan=${encodeURIComponent(plan.planName)}`} className={`${link} mt-5 inline-block`}>Choose demo pass</Link>}
-      </article>)}</div> : <p>No plans are available.</p>}
-    </>}
+    {value && (!monthly ? <p>No monthly plan is available.</p> : <article className={box}>
+      <h2 className="font-marquee text-xl font-bold text-fg">Monthly · LKR 500</h2>
+      <p className="mt-2 text-ink-200">{monthly.durationDays} days · one-time simulated order</p>
+      <p className="mt-3">{monthly.adFree ? 'Ad-free viewing when an approved subscription is active.' : 'Includes advertisements.'}</p>
+      {monthly.benefit && <p className="mt-3 text-sm text-ink-300">{monthly.benefit}</p>}
+      {value.previewMode ? <Link to="/checkout?plan=MONTHLY" className={`${link} mt-5 inline-block`}>Continue to preview</Link> : <p role="status" className="mt-4 text-tone-gold-400">Preview orders are unavailable.</p>}
+    </article>)}
   </Page>
 }
-
+const emptyContact: BillingContact = { fullName: '', email: '', phone: '', addressLine1: '', addressLine2: '', city: '', postalCode: '', country: 'LK' }
+const contactFields: { key: keyof BillingContact; label: string; required?: boolean; type?: string }[] = [
+  { key: 'fullName', label: 'Full name', required: true }, { key: 'email', label: 'Email', required: true, type: 'email' },
+  { key: 'phone', label: 'Phone', required: true, type: 'tel' }, { key: 'addressLine1', label: 'Address line 1', required: true },
+  { key: 'addressLine2', label: 'Address line 2 (optional)' }, { key: 'city', label: 'City', required: true },
+  { key: 'postalCode', label: 'Postal code', required: true },
+]
 export function Checkout() {
   const { viewer, refreshAccount } = useSession()
   const actor = actorIdOf(viewer)
   const [params] = useSearchParams()
-  const selected = params.get('plan')
   const nav = useNavigate()
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'checkout')
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [payment, setPayment] = useState<DemoPaymentInput>({ cardNumber: '', expiry: '', cardholderName: '' })
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof DemoPaymentInput, string>>>({})
-  const plan = value?.plans.find((p) => p.planName === selected && (p.planName === 'MONTHLY' || p.planName === 'YEARLY'))
+  const [contact, setContact] = useState<BillingContact>(emptyContact)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof BillingContact, string>>>({})
+  const [method, setMethod] = useState<'CARD_PREVIEW' | 'BANK_TRANSFER'>('CARD_PREVIEW')
+  const [brand, setBrand] = useState<CardBrand>('VISA')
+  const [reference, setReference] = useState('')
+  const [slip, setSlip] = useState<File | null>(null)
+  const [slipError, setSlipError] = useState<string | null>(null)
+  const plan = params.get('plan') === 'MONTHLY' && value && monthlyPreviewPlan(value)
   const submit = async () => {
-    if (actor == null || !plan || !value?.demoEnabled || saving) return
-    const validation = validateDemoPayment(payment)
+    if (actor == null || !plan || !value?.previewMode || saving) return
+    const validation = validateBilling(contact)
     setFieldErrors(validation)
-    if (Object.keys(validation).length) return
+    const fileError = method === 'BANK_TRANSFER' ? validateSlip(slip) : null
+    setSlipError(fileError)
+    if (Object.keys(validation).length || fileError) return
     setSaving(true); setSubmitError(null)
     try {
       const latest = await billing.plans()
-      if (!latest.demoEnabled || !latest.plans.some((p) => p.planName === plan.planName)) throw new Error('Demo checkout is no longer available.')
-      await billing.checkout(plan.planName as PlanChoice, payment, actor)
-      await refreshAccount().catch(() => undefined)
-      nav('/checkout/result', { replace: true, state: { completed: true } })
+      if (!latest.previewMode || !latest.plans.some((p) => p.planName === 'MONTHLY')) throw new Error('Monthly preview is no longer available.')
+      const order = method === 'CARD_PREVIEW' ? await billing.cardPreview(brand, contact, actor) : await billing.bankTransfer(contact, reference, slip, actor)
+      if (method === 'CARD_PREVIEW') await refreshAccount().catch(() => undefined)
+      nav('/checkout/result', { replace: true, state: { order } })
     } catch (cause) { setSubmitError(message(cause)) }
     finally { setSaving(false) }
   }
-  return <Page title="Activate a demo pass">
-    {loading && <p role="status">Loading demo plan…</p>}
+  return <Page title="Review monthly preview order">
+    {loading && <p role="status">Loading monthly plan…</p>}
     <Feedback error={error} retry={retry} />
-    {value && (!value.demoEnabled ? <p role="status">Demo checkout is unavailable. <Link to="/plans" className={link}>View passes</Link></p>
-      : !plan ? <p>Choose an available plan on the <Link to="/plans" className={link}>passes page</Link>.</p>
-      : <div className={box}>
-        <h2 className="text-xl font-bold">{plan.planName}</h2>
-        <p className="mt-2">{plan.durationDays} days · Demo price {plan.price} (currency not specified)</p>
-        <div className="mt-5 rounded border border-gold-400/40 bg-gold-400/8 p-4 text-sm text-ink-100">
-          <strong className="text-tone-gold-300">Synthetic test data only.</strong> Use the exact demo card <code>{DEMO_TEST_CARD}</code>. Other numbers beginning 4216 may fail the checksum. Use a future MM/YY expiry. Never enter a real card.
-        </div>
-        {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to activate</Link>
-          : <form className="mt-5 grid gap-4 sm:grid-cols-2" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void submit() }}>
-            <div className="sm:col-span-2"><Field label="TEST card number" required error={fieldErrors.cardNumber}>
-              <Input name="demo-card" inputMode="numeric" maxLength={19} value={payment.cardNumber} invalid={!!fieldErrors.cardNumber}
-                onChange={(event) => setPayment((p) => ({ ...p, cardNumber: event.target.value }))} placeholder={DEMO_TEST_CARD} />
-              <Button type="button" size="sm" className="mt-2" onClick={() => {
-                setPayment((p) => ({ ...p, cardNumber: DEMO_TEST_CARD }))
-                setFieldErrors((errors) => ({ ...errors, cardNumber: undefined }))
-              }}>Use test card</Button>
-            </Field></div>
-            <Field label="Future expiry (MM/YY)" required error={fieldErrors.expiry}>
-              <Input name="demo-expiry" inputMode="numeric" maxLength={5} value={payment.expiry} invalid={!!fieldErrors.expiry}
-                onChange={(event) => setPayment((p) => ({ ...p, expiry: event.target.value }))} placeholder="12/99" />
-            </Field>
-            <Field label="Test cardholder name" required error={fieldErrors.cardholderName}>
-              <Input name="demo-name" maxLength={80} value={payment.cardholderName} invalid={!!fieldErrors.cardholderName}
-                onChange={(event) => setPayment((p) => ({ ...p, cardholderName: event.target.value }))} placeholder="Demo Viewer" />
-            </Field>
-            <div className="sm:col-span-2"><Button type="submit" variant="primary" loading={saving} disabled={saving}>Validate test payment & activate</Button></div>
+    {value && (!value.previewMode ? <p role="status">Preview orders are unavailable. <Link to="/plans" className={link}>View plan</Link></p>
+      : !plan ? <p>Choose the monthly plan on the <Link to="/plans" className={link}>plans page</Link>.</p>
+      : <section className={box}>
+        <h2 className="text-xl font-bold">Monthly · LKR 500</h2>
+        <p className="mt-2">One-time simulated order · no automatic renewal</p>
+        {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to continue</Link>
+          : <form className="mt-5 space-y-5" noValidate onSubmit={(event) => { event.preventDefault(); void submit() }}>
+            <fieldset className="grid gap-4 sm:grid-cols-2"><legend className="mb-4 font-semibold">Billing contact</legend>
+              {contactFields.map(({ key, label, required, type }) => <Field key={key} label={label} required={required} error={fieldErrors[key]}>
+                <Input name={key} type={type} maxLength={key === 'email' ? 254 : 160} value={contact[key]} invalid={!!fieldErrors[key]}
+                  onChange={(event) => { setContact((previous) => ({ ...previous, [key]: event.target.value })); setFieldErrors((previous) => ({ ...previous, [key]: undefined })) }} />
+              </Field>)}
+              <Field label="Country"><Input value="Sri Lanka (LK)" readOnly /></Field>
+            </fieldset>
+            <fieldset className="border-t border-ink-700 pt-5"><legend className="font-semibold">Preview method</legend>
+              <div className="mt-3 flex gap-5"><label><input type="radio" name="method" checked={method === 'CARD_PREVIEW'} onChange={() => setMethod('CARD_PREVIEW')} /> Card preview</label>
+                <label><input type="radio" name="method" checked={method === 'BANK_TRANSFER'} onChange={() => setMethod('BANK_TRANSFER')} /> Bank transfer sample</label></div>
+              {method === 'CARD_PREVIEW' ? <div className="mt-4"><Field label="Card brand (visual preview only)"><Select value={brand} onChange={(event) => setBrand(event.target.value as CardBrand)}>
+                <option value="VISA">Visa</option><option value="MASTERCARD">Mastercard</option><option value="AMEX">Amex</option></Select></Field>
+                <p className="mt-2 text-sm text-ink-300">No card credentials are collected. The server may mark this simulation SIMULATED_APPROVED; this is not a charge.</p></div>
+                : <div className="mt-4 space-y-4 rounded border border-gold-400/40 p-4"><p className="font-semibold text-tone-gold-300">Sample bank instructions — not payable</p><p>{SAMPLE_BANK_INSTRUCTIONS}</p>
+                    <Field label="Sample reference (optional)"><Input value={reference} maxLength={100} onChange={(event) => setReference(event.target.value)} placeholder="SAMPLE-001" /></Field>
+                    <Field label="Sample slip (PDF or image, maximum 5 MB)" required error={slipError ?? undefined}>
+                      <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={(event) => { const file = event.target.files?.[0] ?? null; setSlip(file); setSlipError(validateSlip(file)) }} />
+                    </Field><p className="text-sm text-ink-300">Submitted samples remain PENDING_REVIEW. No premium access until an administrator approves.</p>
+                  </div>}
+            </fieldset>
+            <p className="text-sm font-semibold text-tone-gold-300">{disclaimer}</p>
+            <Button type="submit" variant="primary" loading={saving} disabled={saving}>{method === 'CARD_PREVIEW' ? 'Create simulated card preview' : 'Submit sample for admin review'}</Button>
           </form>}
-      </div>)}
+      </section>)}
     <Feedback error={submitError} />
   </Page>
 }
-
 export function CheckoutResult() {
   const location = useLocation()
-  const completed = (location.state as { completed?: boolean } | null)?.completed === true
-  return <Page title={completed ? 'Demo activation submitted' : 'No checkout result to show'}>
-    <p>{completed ? 'The server accepted the demo activation. Check your pass for its current status.' : 'Open a pass from the plans page to begin a demo activation.'}</p>
-    <Link to={completed ? '/subscription' : '/plans'} className={`${link} mt-4 inline-block`}>{completed ? 'View your pass' : 'View passes'}</Link>
+  const order = (location.state as { order?: OrderView } | null)?.order
+  return <Page title={order ? 'Preview order recorded' : 'No order result to show'}>
+    {order ? <><p>Order #{order.id} · {order.status}. {order.status === 'PENDING_REVIEW' ? 'Awaiting admin review. No premium access until approval.' : 'Simulated preview only; no charge occurred.'}</p>
+      <Link to="/subscription" className={`${link} mt-4 inline-block`}>View your subscription and orders</Link></>
+      : <Link to="/plans" className={link}>View monthly plan</Link>}
   </Page>
 }
-
 export function Subscription() {
   const { viewer, refreshAccount } = useSession()
   const actor = actorIdOf(viewer)
   const load = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.status(actor, signal), [actor])
   const { value, loading, error, retry } = useLoad<SubscriptionStatus>(load, String(actor))
-  const [busy, setBusy] = useState<'cancel' | PlanChoice | null>(null)
+  const loadOrders = useCallback((signal: AbortSignal) => actor == null ? Promise.reject(new Error('Sign in to continue.')) : billing.orders(actor, signal), [actor])
+  const orders = useLoad<OrderView[]>(loadOrders, `orders-${actor}`)
+  const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const alternative: PlanChoice | null = value?.planName === 'MONTHLY' ? 'YEARLY' : value?.planName === 'YEARLY' ? 'MONTHLY' : null
-
-  const changePlan = async (next: PlanChoice) => {
-    if (actor == null || busy) return
-    if (!window.confirm(`Change immediately to the ${next.toLowerCase()} demo pass? The server will replace the current term now; unused time is not carried over.`)) return
-    setBusy(next); setActionError(null)
-    try { await billing.changePlan(next, actor); await refreshAccount().catch(() => undefined); retry() }
-    catch (cause) { setActionError(message(cause)) }
-    finally { setBusy(null) }
-  }
-
-  return <Page title="Your demo pass">
+  return <Page title="Your subscription">
     {loading && <p role="status">Loading subscription…</p>}
     <Feedback error={error} retry={retry} />
     {value && <div className={box}>
@@ -160,27 +159,26 @@ export function Subscription() {
         <div><p className="letterboard text-ink-300">Status</p><p className="mt-1">{value.status ?? 'Not provided'}</p></div>
         <div><p className="letterboard text-ink-300">Term</p><p className="mt-1">{date(value.startDate)}<br />through {date(value.endDate)}</p></div>
       </div>
-      <p className="mt-5 text-ink-200">{value.adFree ? "Ad-free viewing is active until this pass ends." : "Viewing includes advertisements. An active monthly or yearly pass removes them."}</p>
-      {value.premium && <div className="mt-6 border-t border-ink-700 pt-5">
-        <h2 className="font-marquee text-lg font-bold text-fg">Manage this pass</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-300">Plan changes take effect immediately. The current term is replaced with a new term for the selected plan; unused demo time is not prorated or carried over.</p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          {alternative && <Button loading={busy === alternative} disabled={busy != null} onClick={() => void changePlan(alternative)}>Change to {alternative.toLowerCase()}</Button>}
-          <Button variant="danger" loading={busy === 'cancel'} disabled={busy != null} onClick={async () => {
-            if (actor == null || busy || !window.confirm('Cancel this demo subscription immediately? Premium access ends now.')) return
-            setBusy('cancel'); setActionError(null)
-            try { await billing.cancel(actor); await refreshAccount().catch(() => undefined); retry() }
-            catch (cause) { setActionError(message(cause)) }
-            finally { setBusy(null) }
-          }}>Cancel immediately</Button>
-        </div>
+      <p className="mt-5 text-ink-200">{value.adFree ? 'Ad-free viewing is active until this pass ends.' : 'Viewing includes advertisements. Pending sample orders do not grant access.'}</p>
+      {value.premium && <div className="mt-6 border-t border-ink-700 pt-5"><p className="mb-3 text-sm">Simulation—no real money or bank transfer.</p>
+        <Button variant="danger" loading={busy} disabled={busy} onClick={async () => {
+          if (actor == null || busy || !window.confirm('Cancel this simulated subscription immediately? Premium access ends now.')) return
+          setBusy(true); setActionError(null)
+          try { await billing.cancel(actor); await refreshAccount().catch(() => undefined); retry() }
+          catch (cause) { setActionError(message(cause)) } finally { setBusy(false) }
+        }}>Cancel immediately</Button>
       </div>}
       <Feedback error={actionError} />
     </div>}
-    <Link className={`${link} mt-5 inline-block`} to="/billing">Demo billing history & refunds</Link>
+    <section className="mt-6"><h2 className="mb-3 text-xl font-bold">Preview orders</h2>
+      {orders.loading ? <p role="status">Loading orders…</p> : orders.error ? <Feedback error={orders.error} retry={orders.retry} />
+        : orders.value?.length ? <ul className="space-y-3">{orders.value.map((order) => <li className={box} key={order.id}>#{order.id} · {order.planName} · {order.status}<p className="mt-1 text-sm text-ink-300">{order.status === 'PENDING_REVIEW' ? 'Pending admin review. No entitlement until approval.' : 'Simulation only; no payment was made.'}</p>{(order.decisionNote || order.note) && <p className="mt-1 text-sm">Review note: {order.decisionNote || order.note}</p>}</li>)}</ul>
+        : <p>No preview orders yet.</p>}
+      <Button className="mt-3" size="sm" onClick={() => { orders.retry(); retry() }}>Refresh status and orders</Button>
+    </section>
+    <Link className={`${link} mt-5 inline-block`} to="/billing">Historical demo billing records & refunds</Link>
   </Page>
 }
-
 export function BillingHistory() {
   const { viewer } = useSession()
   const actor = actorIdOf(viewer)

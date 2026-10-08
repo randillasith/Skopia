@@ -32,10 +32,11 @@ class BillingDisabledTest {
         v.setPasswordHash("test-only-hash");
         v = viewers.saveAndFlush(v);
         mvc.perform(get("/api/billing/plans"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.demoEnabled").value(false));
-        mvc.perform(post("/api/billing/checkout")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.demoEnabled").value(false))
+                .andExpect(jsonPath("$.previewMode").value(false));
+        mvc.perform(post("/api/billing/orders/card-preview")
                 .header("Authorization", "Bearer " + tokens.issue(v.getId()))
-                .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\",\"cardNumber\":\"4216000000000002\",\"expiry\":\"12/99\",\"cardholderName\":\"Demo Viewer\"}"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"planName\":\"MONTHLY\",\"brand\":\"VISA\",\"billing\":{\"fullName\":\"Demo Viewer\",\"email\":\"demo@example.test\",\"phone\":\"0771234567\",\"addressLine1\":\"Sample Street\",\"city\":\"Colombo\",\"postalCode\":\"00100\",\"country\":\"LK\"}}"))
                 .andExpect(status().isServiceUnavailable());
         assertThat(payments.count()).isZero();
     }
