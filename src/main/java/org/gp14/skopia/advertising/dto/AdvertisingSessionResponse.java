@@ -3,8 +3,9 @@ package org.gp14.skopia.advertising.dto;
 /**
  * Who the caller is, as far as advertising is concerned.
  *
- * <p>{@code actorId} is the value the client then sends back as {@code X-User-Id}
- * on every management call.
+ * <p>{@code actorId} identifies the authenticated account for display only. The
+ * API derives authority from the bearer-token principal and never trusts an
+ * actor id supplied by the browser.
  */
 public record AdvertisingSessionResponse(
         Long actorId,

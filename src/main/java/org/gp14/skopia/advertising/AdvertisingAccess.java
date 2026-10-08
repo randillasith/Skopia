@@ -1,10 +1,9 @@
 package org.gp14.skopia.advertising;
 
-import org.gp14.skopia.model.user.MarketingOfficer;
+import org.gp14.skopia.model.user.StaffType;
 import org.gp14.skopia.model.user.User;
-import org.gp14.skopia.repository.AdministratorRepository;
-import org.gp14.skopia.repository.MarketingOfficerRepository;
 import org.gp14.skopia.repository.UserRepository;
+import org.gp14.skopia.user.StaffRoleService;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,15 +31,11 @@ import org.springframework.stereotype.Component;
 public class AdvertisingAccess {
 
     private final UserRepository users;
-    private final MarketingOfficerRepository officers;
-    private final AdministratorRepository administrators;
+    private final StaffRoleService staffRoles;
 
-    public AdvertisingAccess(UserRepository users,
-                             MarketingOfficerRepository officers,
-                             AdministratorRepository administrators) {
+    public AdvertisingAccess(UserRepository users, StaffRoleService staffRoles) {
         this.users = users;
-        this.officers = officers;
-        this.administrators = administrators;
+        this.staffRoles = staffRoles;
     }
 
     /**
@@ -60,7 +55,8 @@ public class AdvertisingAccess {
             throw AdvertisingException.forbidden(
                     "This account is " + user.getAccountStatus().toLowerCase() + " and cannot manage advertising.");
         }
-        if (officers.existsById(actorId) || administrators.existsById(actorId)) {
+        if (staffRoles.hasRole(actorId, StaffType.MARKETING_OFFICER)
+                || staffRoles.hasRole(actorId, StaffType.ADMINISTRATOR)) {
             return user;
         }
         throw AdvertisingException.forbidden(
@@ -71,14 +67,16 @@ public class AdvertisingAccess {
      * The marketing officer a new campaign is attributed to.
      *
      * <p>Separate from {@link #require} because reading campaigns is open to both
-     * roles while owning one is not: {@code ad_campaigns.created_by} points at
-     * {@code marketing_officers}, and an administrator has no row there.
+     * roles while owning one is not. Campaign ownership points at the base user
+     * so a composed staff grant can own a booking without corrupting JOINED user
+     * inheritance; administrators still cannot create a booking themselves.
      */
-    public MarketingOfficer actingOfficer(Long actorId) {
-        require(actorId);
-        return officers.findById(actorId).orElseThrow(() -> AdvertisingException.forbidden(
+    public User actingOfficer(Long actorId) {
+        User user = require(actorId);
+        if (!staffRoles.hasRole(actorId, StaffType.MARKETING_OFFICER)) throw AdvertisingException.forbidden(
                 "Only a marketing officer can own a campaign. "
-                        + "An administrator can grant that role, but cannot hold the booking."));
+                        + "An administrator can grant that role, but cannot hold the booking.");
+        return user;
     }
 
     /** True when the caller may manage advertising, without throwing. */
@@ -110,7 +108,7 @@ public class AdvertisingAccess {
      * clearing up after a departed officer is exactly their job.
      */
     public void requireOwner(Long actorId, Long ownerId, String what) {
-        if (administrators.existsById(actorId)) {
+        if (staffRoles.hasRole(actorId, StaffType.ADMINISTRATOR)) {
             return;
         }
         if (ownerId == null || !ownerId.equals(actorId)) {

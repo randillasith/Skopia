@@ -4,6 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gp14.skopia.model.video.Category;
 import org.gp14.skopia.model.video.Video;
+import org.gp14.skopia.model.user.MarketingDepartment;
+import org.gp14.skopia.model.user.StaffAssignment;
+import org.gp14.skopia.model.user.StaffType;
+import org.gp14.skopia.model.user.User;
+import org.gp14.skopia.repository.StaffAssignmentRepository;
+import org.gp14.skopia.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,6 +48,8 @@ class AdvertisingApiIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired AdvertisingFixture fixture;
     @Autowired org.gp14.skopia.security.TokenService tokens;
+    @Autowired UserRepository users;
+    @Autowired StaffAssignmentRepository staffAssignments;
 
     /**
      * The test's own reader. Spring Boot 4 does not publish a Jackson 2
@@ -178,6 +186,39 @@ class AdvertisingApiIntegrationTest {
         mvc.perform(get("/api/ad-campaigns")
                         .header("Authorization", "Bearer " + tokens.issue(fixture.viewer().getId())))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("a composed marketing assignment can enter the console and own a campaign")
+    void letsComposedMarketingStaffUseThePanel() throws Exception {
+        User user = new User();
+        user.setUsername("composed_marketing");
+        user.setEmail("composed-marketing@example.test");
+        user.setPasswordHash("encoded");
+        user.setAccountStatus("ACTIVE");
+        user = users.saveAndFlush(user);
+
+        StaffAssignment assignment = new StaffAssignment();
+        assignment.setUser(user);
+        assignment.setStaffType(StaffType.MARKETING_OFFICER);
+        assignment.setDesignation("Marketing Officer");
+        assignment.setHireDate(LocalDate.of(2026, 10, 8));
+        assignment.setOfficerCode("MKT-COMPOSED-TEST");
+        assignment.setDepartment(MarketingDepartment.MARKETING);
+        staffAssignments.saveAndFlush(assignment);
+        String bearer = "Bearer " + tokens.issue(user.getId());
+
+        mvc.perform(get("/api/advertising/session").header("Authorization", bearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("marketing officer"))
+                .andExpect(jsonPath("$.canOwnCampaigns").value(true));
+
+        mvc.perform(post("/api/ad-campaigns")
+                        .header("Authorization", bearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(campaignBody("Composed assignment")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.createdById").value(user.getId()));
     }
 
     @Test

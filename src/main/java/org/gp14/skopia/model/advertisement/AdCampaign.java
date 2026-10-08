@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.gp14.skopia.advertising.CampaignStatus;
-import org.gp14.skopia.model.user.MarketingOfficer;
+import org.gp14.skopia.model.user.User;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,7 +34,7 @@ public class AdCampaign {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by", nullable = false)
-    private MarketingOfficer createdBy;
+    private User createdBy;
 
     @Column(name = "campaign_name", nullable = false, length = 100)
     private String campaignName;
