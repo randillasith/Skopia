@@ -3,6 +3,8 @@ package org.gp14.skopia.user;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.gp14.skopia.model.user.Administrator;
+import org.gp14.skopia.model.user.AdminLevel;
+import org.gp14.skopia.model.user.StaffType;
 import org.gp14.skopia.user.dto.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -100,14 +102,14 @@ class AdminUserControllerTest {
         request.setDesignation("Support Spec");
         request.setHireDate(LocalDate.now());
         request.setStaffType("SUPPORT_OFFICER");
-        request.setSupportLevel("LEVEL_2");
+        request.setSupportLevel("TIER_2");
         request.setShift("NIGHT");
 
         UserResponse response = UserResponse.builder()
                 .id(10L)
                 .username("support1")
                 .roleType("SUPPORT_OFFICER")
-                .supportLevel("LEVEL_2")
+                .supportLevel("TIER_2")
                 .build();
 
         when(userManagementService.createStaffMember(eq(actor), any(CreateStaffRequest.class), anyString()))
@@ -120,6 +122,38 @@ class AdminUserControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.username").value("support1"))
                 .andExpect(jsonPath("$.roleType").value("SUPPORT_OFFICER"));
+    }
+
+    @Test
+    void staffCatalogReturnsCanonicalDropdownValues() throws Exception {
+        mockMvc.perform(get("/api/admin/users/staff-catalog"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.staffTypes[0].value").value("ADMINISTRATOR"))
+                .andExpect(jsonPath("$.adminLevels[0].value").value("LEVEL_1"))
+                .andExpect(jsonPath("$.adminLevels[1].value").value("SUPER"))
+                .andExpect(jsonPath("$.supportLevels[0].value").value("TIER_1"));
+    }
+
+    @Test
+    void assignExistingAccountReturnsCreatedAssignment() throws Exception {
+        AssignStaffRequest request = new AssignStaffRequest();
+        request.setStaffType(StaffType.ADMINISTRATOR);
+        request.setDesignation("Administrator");
+        request.setHireDate(LocalDate.of(2026, 10, 8));
+        request.setAdminLevel(AdminLevel.SUPER);
+        UserResponse response = UserResponse.builder().id(12L).username("creator_admin")
+                .accountType("CONTENT_CREATOR").staffType("ADMINISTRATOR").adminLevel("SUPER").build();
+        when(userManagementService.assignStaff(eq(actor), eq(12L), any(AssignStaffRequest.class), anyString()))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/admin/users/12/staff-assignment")
+                        .principal(new UsernamePasswordAuthenticationToken(actor, null))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.accountType").value("CONTENT_CREATOR"))
+                .andExpect(jsonPath("$.staffType").value("ADMINISTRATOR"))
+                .andExpect(jsonPath("$.adminLevel").value("SUPER"));
     }
 
     @Test

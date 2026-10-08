@@ -20,6 +20,8 @@ public class UserManagementService {
 
     private final UserRepository userRepository;
     private final StaffRepository staffRepository;
+    private final StaffAssignmentRepository staffAssignmentRepository;
+    private final StaffRoleService staffRoles;
     private final AdministratorRepository administratorRepository;
     private final SupportOfficerRepository supportOfficerRepository;
     private final MarketingOfficerRepository marketingOfficerRepository;
@@ -31,6 +33,8 @@ public class UserManagementService {
 
     public UserManagementService(UserRepository userRepository,
                                  StaffRepository staffRepository,
+                                 StaffAssignmentRepository staffAssignmentRepository,
+                                 StaffRoleService staffRoles,
                                  AdministratorRepository administratorRepository,
                                  SupportOfficerRepository supportOfficerRepository,
                                  MarketingOfficerRepository marketingOfficerRepository,
@@ -41,6 +45,8 @@ public class UserManagementService {
                                  org.gp14.skopia.billing.BillingService billing) {
         this.userRepository = userRepository;
         this.staffRepository = staffRepository;
+        this.staffAssignmentRepository = staffAssignmentRepository;
+        this.staffRoles = staffRoles;
         this.administratorRepository = administratorRepository;
         this.supportOfficerRepository = supportOfficerRepository;
         this.marketingOfficerRepository = marketingOfficerRepository;
@@ -52,7 +58,7 @@ public class UserManagementService {
     }
 
     private UserResponse response(User user) {
-        return UserResponse.fromEntity(user, user instanceof RegisteredViewer && billing.hasActivePremium(user.getId()));
+        return staffRoles.apply(UserResponse.fromEntity(user, user instanceof RegisteredViewer && billing.hasActivePremium(user.getId())), user.getId());
     }
 
     @Transactional(readOnly = true)
@@ -93,72 +99,116 @@ public class UserManagementService {
     }
 
     public UserResponse createStaffMember(User actor, CreateStaffRequest request, String ipAddress) {
-        if (request.getPassword().getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must not exceed 72 UTF-8 bytes");
-        }
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username already exists: " + request.getUsername());
-        }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already exists: " + request.getEmail());
-        }
+        validatePassword(request.getPassword());
+        if (userRepository.existsByUsername(request.getUsername()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists: " + request.getUsername());
+        if (userRepository.existsByEmail(request.getEmail()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists: " + request.getEmail());
 
-        Staff createdStaff;
-        String staffType = request.getStaffType().toUpperCase();
+        User user = new User();
+        user.setUsername(request.getUsername().trim());
+        user.setEmail(request.getEmail().trim().toLowerCase());
+        user.setPasswordHash(passwordService.encode(request.getPassword()));
+        user.setFirstName(trim(request.getFirstName()));
+        user.setLastName(trim(request.getLastName()));
+        user.setAccountStatus("ACTIVE");
+        user = userRepository.saveAndFlush(user);
 
-        switch (staffType) {
-            case "ADMINISTRATOR":
-                Administrator admin = new Administrator();
-                populateBaseUserAndStaff(admin, request);
-                admin.setAdminLevel(request.getAdminLevel() != null ? request.getAdminLevel() : "LEVEL_1");
-                createdStaff = administratorRepository.save(admin);
-                break;
-            case "SUPPORT_OFFICER":
-                SupportOfficer support = new SupportOfficer();
-                populateBaseUserAndStaff(support, request);
-                support.setSupportLevel(request.getSupportLevel() != null ? request.getSupportLevel() : "TIER_1");
-                support.setShift(request.getShift() != null ? request.getShift() : "DAY");
-                createdStaff = supportOfficerRepository.save(support);
-                break;
-            case "MARKETING_OFFICER":
-                if (request.getOfficerCode() != null && marketingOfficerRepository.existsByOfficerCode(request.getOfficerCode())) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Officer code already exists: " + request.getOfficerCode());
-                }
-                MarketingOfficer marketing = new MarketingOfficer();
-                populateBaseUserAndStaff(marketing, request);
-                marketing.setOfficerCode(request.getOfficerCode() != null ? request.getOfficerCode() : "MKT-" + System.currentTimeMillis());
-                marketing.setDepartment(request.getDepartment() != null ? request.getDepartment() : "MARKETING");
-                createdStaff = marketingOfficerRepository.save(marketing);
-                break;
-            default:
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid staff type: " + staffType);
-        }
-
-        logActivity(actor, createdStaff, "STAFF_CREATED", "staff type: " + staffType, ipAddress);
-        return response(createdStaff);
+        AssignStaffRequest assignment = new AssignStaffRequest();
+        try { assignment.setStaffType(StaffType.valueOf(request.getStaffType().trim().toUpperCase())); }
+        catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid staff type"); }
+        assignment.setDesignation(request.getDesignation()); assignment.setHireDate(request.getHireDate());
+        assignment.setAdminLevel(parse(AdminLevel.class, request.getAdminLevel(), "admin level"));
+        assignment.setSupportLevel(parse(SupportLevel.class, request.getSupportLevel(), "support level"));
+        assignment.setShift(parse(SupportShift.class, request.getShift(), "support shift"));
+        assignment.setOfficerCode(request.getOfficerCode());
+        assignment.setDepartment(parse(MarketingDepartment.class, request.getDepartment(), "marketing department"));
+        saveAssignment(user, assignment);
+        logActivity(actor, user, "STAFF_CREATED", "staff type: " + assignment.getStaffType(), ipAddress);
+        return response(user);
     }
 
-    public UserResponse updateStaffProfile(User actor, Long staffId, UpdateStaffProfileRequest request, String ipAddress) {
-        Staff staff = staffRepository.findById(staffId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff member not found with ID: " + staffId));
+    public UserResponse assignStaff(User actor, Long userId, AssignStaffRequest request, String ipAddress) {
+        User user = userRepository.findByIdForStaffAssignment(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with ID: " + userId));
+        if (staffRoles.staffType(userId).isPresent())
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Account already has staff access");
+        saveAssignment(user, request);
+        user.setAuthVersion((user.getAuthVersion() == null ? 0L : user.getAuthVersion()) + 1L);
+        userRepository.save(user);
+        logActivity(actor, user, "STAFF_ACCESS_ASSIGNED", "staff type: " + request.getStaffType(), ipAddress);
+        return response(user);
+    }
 
-        if (request.getDesignation() != null) staff.setDesignation(request.getDesignation());
-        if (request.getFirstName() != null) staff.setFirstName(request.getFirstName());
-        if (request.getLastName() != null) staff.setLastName(request.getLastName());
+    public UserResponse updateStaffProfile(User actor, Long userId, UpdateStaffProfileRequest request, String ipAddress) {
+        User user = userRepository.findByIdForStaffAssignment(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with ID: " + userId));
+        StaffAssignment current = staffAssignmentRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff assignment not found with ID: " + userId));
+        AssignStaffRequest next = new AssignStaffRequest();
+        next.setStaffType(request.getStaffType() == null ? current.getStaffType() : request.getStaffType());
+        next.setDesignation(request.getDesignation() == null ? current.getDesignation() : request.getDesignation());
+        next.setHireDate(request.getHireDate() == null ? current.getHireDate() : request.getHireDate());
+        next.setAdminLevel(parse(AdminLevel.class, request.getAdminLevel(), "admin level"));
+        next.setSupportLevel(parse(SupportLevel.class, request.getSupportLevel(), "support level"));
+        next.setShift(parse(SupportShift.class, request.getShift(), "support shift"));
+        next.setOfficerCode(request.getOfficerCode());
+        next.setDepartment(parse(MarketingDepartment.class, request.getDepartment(), "marketing department"));
+        if (request.getFirstName() != null) user.setFirstName(trim(request.getFirstName()));
+        if (request.getLastName() != null) user.setLastName(trim(request.getLastName()));
+        applyAssignment(current, next);
+        staffAssignmentRepository.save(current);
+        user.setAuthVersion((user.getAuthVersion() == null ? 0L : user.getAuthVersion()) + 1L);
+        userRepository.save(user);
+        logActivity(actor, user, "STAFF_PROFILE_UPDATED", "staff type: " + current.getStaffType(), ipAddress);
+        return response(user);
+    }
 
-        if (staff instanceof Administrator admin) {
-            if (request.getAdminLevel() != null) admin.setAdminLevel(request.getAdminLevel());
-        } else if (staff instanceof SupportOfficer support) {
-            if (request.getSupportLevel() != null) support.setSupportLevel(request.getSupportLevel());
-            if (request.getShift() != null) support.setShift(request.getShift());
-        } else if (staff instanceof MarketingOfficer marketing) {
-            if (request.getOfficerCode() != null) marketing.setOfficerCode(request.getOfficerCode());
-            if (request.getDepartment() != null) marketing.setDepartment(request.getDepartment());
+    private void saveAssignment(User user, AssignStaffRequest request) {
+        StaffAssignment assignment = new StaffAssignment();
+        assignment.setUser(user);
+        applyAssignment(assignment, request);
+        staffAssignmentRepository.saveAndFlush(assignment);
+    }
+
+    private void applyAssignment(StaffAssignment target, AssignStaffRequest request) {
+        if (request.getStaffType() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Staff type is required");
+        if (request.getDesignation() == null || request.getDesignation().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Designation is required");
+        if (request.getHireDate() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hire date is required");
+        target.setStaffType(request.getStaffType()); target.setDesignation(request.getDesignation().trim()); target.setHireDate(request.getHireDate());
+        target.setAdminLevel(null); target.setSupportLevel(null); target.setShift(null); target.setOfficerCode(null); target.setDepartment(null);
+        switch (request.getStaffType()) {
+            case ADMINISTRATOR -> {
+                if (request.getAdminLevel() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin level is required");
+                reject(request.getSupportLevel()!=null || request.getShift()!=null || notBlank(request.getOfficerCode()) || request.getDepartment()!=null);
+                target.setAdminLevel(request.getAdminLevel());
+            }
+            case SUPPORT_OFFICER -> {
+                if (request.getSupportLevel() == null || request.getShift() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Support level and shift are required");
+                reject(request.getAdminLevel()!=null || notBlank(request.getOfficerCode()) || request.getDepartment()!=null);
+                target.setSupportLevel(request.getSupportLevel()); target.setShift(request.getShift());
+            }
+            case MARKETING_OFFICER -> {
+                if (!notBlank(request.getOfficerCode()) || request.getDepartment() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Officer code and department are required");
+                reject(request.getAdminLevel()!=null || request.getSupportLevel()!=null || request.getShift()!=null);
+                String code=request.getOfficerCode().trim();
+                StaffAssignment existing=staffAssignmentRepository.findAll().stream().filter(a -> code.equalsIgnoreCase(a.getOfficerCode())).findFirst().orElse(null);
+                if (existing != null && !java.util.Objects.equals(existing.getUserId(), target.getUserId())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Officer code already exists");
+                target.setOfficerCode(code); target.setDepartment(request.getDepartment());
+            }
         }
-
-        Staff updatedStaff = staffRepository.save(staff);
-        logActivity(actor, updatedStaff, "STAFF_PROFILE_UPDATED", null, ipAddress);
-        return response(updatedStaff);
+    }
+    private void reject(boolean invalid) { if (invalid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fields do not match selected staff type"); }
+    private boolean notBlank(String value) { return value != null && !value.isBlank(); }
+    private String trim(String value) { return value == null ? null : value.trim(); }
+    private void validatePassword(String value) {
+        if (value == null || value.length() < 8) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters");
+        if (value.getBytes(StandardCharsets.UTF_8).length > 72) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must not exceed 72 UTF-8 bytes");
+    }
+    private <T extends Enum<T>> T parse(Class<T> type, String value, String label) {
+        if (value == null || value.isBlank()) return null;
+        try { return Enum.valueOf(type, value.trim().toUpperCase()); }
+        catch (IllegalArgumentException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid " + label); }
     }
 
     public UserResponse updateCreatorVerification(User actor, Long creatorId, UpdateCreatorStatusRequest request, String ipAddress) {
@@ -202,10 +252,15 @@ public class UserManagementService {
         long suspendedUsers = userRepository.countByAccountStatus("SUSPENDED");
         long blockedUsers = userRepository.countByAccountStatus("BLOCKED");
 
-        long totalStaff = staffRepository.count();
-        long adminCount = administratorRepository.count();
-        long supportCount = supportOfficerRepository.count();
-        long marketingCount = marketingOfficerRepository.count();
+        long assigned = staffAssignmentRepository.count();
+        long legacyOnly = staffRepository.findAll().stream().filter(s -> !staffAssignmentRepository.existsById(s.getId())).count();
+        long totalStaff = assigned + legacyOnly;
+        long adminCount = staffAssignmentRepository.countByStaffType(StaffType.ADMINISTRATOR)
+                + administratorRepository.findAll().stream().filter(a -> !staffAssignmentRepository.existsById(a.getId())).count();
+        long supportCount = staffAssignmentRepository.countByStaffType(StaffType.SUPPORT_OFFICER)
+                + supportOfficerRepository.findAll().stream().filter(a -> !staffAssignmentRepository.existsById(a.getId())).count();
+        long marketingCount = staffAssignmentRepository.countByStaffType(StaffType.MARKETING_OFFICER)
+                + marketingOfficerRepository.findAll().stream().filter(a -> !staffAssignmentRepository.existsById(a.getId())).count();
 
         long totalCreators = contentCreatorRepository.count();
         long verifiedCreators = contentCreatorRepository.findByIsVerified(true).size();
@@ -250,14 +305,4 @@ public class UserManagementService {
         activityLogRepository.save(log);
     }
 
-    private void populateBaseUserAndStaff(Staff staff, CreateStaffRequest request) {
-        staff.setUsername(request.getUsername());
-        staff.setEmail(request.getEmail());
-        staff.setPasswordHash(passwordService.encode(request.getPassword()));
-        staff.setFirstName(request.getFirstName());
-        staff.setLastName(request.getLastName());
-        staff.setAccountStatus("ACTIVE");
-        staff.setDesignation(request.getDesignation());
-        staff.setHireDate(request.getHireDate());
-    }
 }

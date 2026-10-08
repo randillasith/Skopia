@@ -6,6 +6,7 @@ import org.gp14.skopia.model.user.*;
 import org.gp14.skopia.mail.BillingMailService;
 import org.gp14.skopia.mail.BillingMailAddress;
 import org.gp14.skopia.repository.*;
+import org.gp14.skopia.user.StaffRoleService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,14 +42,16 @@ public class SimulatedOrderService {
     // isolated compatibility tests; do not enable it for ordinary checkout.
     private final boolean legacyOrdersEnabled;
     private final Path storage;
+    private final StaffRoleService staffRoles;
 
     public SimulatedOrderService(BillingOrderRepository orders, UserRepository users, SubscriptionPlanRepository plans,
             SubscriptionRepository subscriptions, PaymentRepository payments, EntityManager em, BillingMailService billingMail,
+            StaffRoleService staffRoles,
             @Value("${skopia.billing.demo-enabled:false}") boolean enabled,
             @Value("${skopia.billing.legacy-orders-enabled:false}") boolean legacyOrdersEnabled,
             @Value("${skopia.billing.private-storage-dir:${user.home}/.skopia/private-billing-slips}") String storage) {
         this.orders=orders; this.users=users; this.plans=plans; this.subscriptions=subscriptions;
-        this.payments=payments; this.em=em; this.billingMail=billingMail; this.enabled=enabled;
+        this.payments=payments; this.em=em; this.billingMail=billingMail; this.staffRoles=staffRoles; this.enabled=enabled;
         this.legacyOrdersEnabled=legacyOrdersEnabled;
         this.storage=Path.of(storage).toAbsolutePath().normalize();
         if (this.storage.startsWith(Path.of("uploads").toAbsolutePath().normalize()) ||
@@ -252,7 +255,7 @@ public class SimulatedOrderService {
     }
     private Viewer lockViewer(Long id) { Viewer v=requireViewer(id); em.lock(v,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE); return v; }
     private void requireAdmin(User actor) {
-        if(!(actor instanceof Administrator) || !"ACTIVE".equals(actor.getAccountStatus()))
+        if(actor == null || !staffRoles.hasRole(actor.getId(), StaffType.ADMINISTRATOR) || !"ACTIVE".equals(actor.getAccountStatus()))
             throw new ResponseStatusException(actor==null?HttpStatus.UNAUTHORIZED:HttpStatus.FORBIDDEN);
     }
     private void checkEnabled() { if(!enabled) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Preview billing disabled"); }

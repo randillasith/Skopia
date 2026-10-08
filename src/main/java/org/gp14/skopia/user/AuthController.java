@@ -38,11 +38,12 @@ public class AuthController {
     private final BillingService billing;
     private final PasswordResetService passwordReset;
     private final WelcomeMailService welcomeMail;
+    private final StaffRoleService staffRoles;
 
     public AuthController(UserRepository users, RegisteredViewerRepository viewers,
                           ContentCreatorRepository creators, UserManagementService userManagement,
                           PasswordService passwords, TokenService tokens, BillingService billing,
-                          PasswordResetService passwordReset, WelcomeMailService welcomeMail) {
+                          PasswordResetService passwordReset, WelcomeMailService welcomeMail, StaffRoleService staffRoles) {
         this.users = users;
         this.viewers = viewers;
         this.creators = creators;
@@ -52,6 +53,7 @@ public class AuthController {
         this.billing = billing;
         this.passwordReset = passwordReset;
         this.welcomeMail = welcomeMail;
+        this.staffRoles = staffRoles;
     }
 
     public record ResetRequest(String email) {}
@@ -156,9 +158,11 @@ public class AuthController {
 
     private LoginResponse response(User user, String message) {
         var dto = org.gp14.skopia.user.dto.UserResponse.fromEntity(user);
+        String staffType = staffRoles.staffType(user.getId()).map(Enum::name).orElse(null);
         return LoginResponse.builder().id(user.getId()).userId(user.getId()).username(user.getUsername())
                 .email(user.getEmail()).firstName(user.getFirstName()).lastName(user.getLastName())
-                .displayName(dto.getDisplayName()).roleType(dto.getRoleType()).userType(dto.getRoleType())
+                .displayName(dto.getDisplayName()).roleType(staffType != null ? staffType : dto.getRoleType()).userType(dto.getRoleType())
+                .accountType(dto.getRoleType()).staffType(staffType)
                 .accountStatus(user.getAccountStatus()).isPremium(user instanceof RegisteredViewer && billing.hasActivePremium(user.getId()))
                 .isVerified(dto.getIsVerified())
                 .token(tokens.issue(user.getId())).message(message).build();
