@@ -29,6 +29,9 @@ public class BillingMailService {
                         : "This checkout used a test card. No payment was made, no money was charged, and there is no automatic renewal.\n");
         String event=(complimentary ? "COMPLIMENTARY_RECEIPT:" : "NO_CHARGE_RECEIPT:")+order.getId();
         String subject=complimentary ? "Skopia complimentary access confirmation" : "Skopia no-charge access confirmation";
+        // Billing contact may differ from the account receiving access. Always
+        // include that account; enqueue deduplicates addresses that are equal.
+        enqueue(event,s.getViewer().getEmail(),subject,body);
         enqueue(event,order.getEmail(),subject,body);
         enqueue(event,MAIN_ADMIN_RECIPIENT,subject,body);
     }

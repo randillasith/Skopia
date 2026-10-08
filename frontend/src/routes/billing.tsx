@@ -4,6 +4,7 @@ import { FrontOfHouse, useSession } from '@/components/Shell'
 import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/primitives'
 import { billing, monthlyPreviewPlan, REFUND_CATEGORIES, validateBilling, validateRefundReason, type BillingContact, type OrderView, type DemoPayment, type RefundCategory, type RefundEligibility, type RefundHistoryEntry, type RefundRequest, type PlansResponse, type SubscriptionStatus } from '@/lib/billing'
 import { actorId as actorIdOf } from '@/lib/session'
+import { ApiError } from '@/lib/api'
 import { ArrowRight, Check, ShieldCheck, Sparkles } from 'lucide-react'
 import './billing.css'
 
@@ -87,6 +88,7 @@ export function Checkout() {
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'checkout')
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [activePassConflict, setActivePassConflict] = useState(false)
   const [contact, setContact] = useState<BillingContact>(emptyContact)
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof BillingContact, string>>>({})
   const plan = params.get('plan') === 'MONTHLY' && value && monthlyPreviewPlan(value)
@@ -95,14 +97,23 @@ export function Checkout() {
     const validation = validateBilling(contact)
     setFieldErrors(validation)
     if (Object.keys(validation).length) return
-    setSaving(true); setSubmitError(null)
+    setSaving(true); setSubmitError(null); setActivePassConflict(false)
     try {
       const latest = await billing.plans()
       if (!latest.demoEnabled || !latest.plans.some((p) => p.planName === 'MONTHLY')) throw new Error('Monthly subscription is no longer available.')
       const order = await billing.complimentary(contact, actor)
       await refreshAccount().catch(() => undefined)
       nav('/checkout/result', { replace: true, state: { order } })
-    } catch (cause) { setSubmitError(message(cause)) }
+    } catch (cause) {
+      const status = cause instanceof ApiError ? cause.status : null
+      setActivePassConflict(status === 409)
+      setSubmitError(status === 409 ? 'You already have an active pass. No second activation was made.'
+        : status === 400 ? 'Please check your billing contact details and try again.'
+        : status === 401 ? 'Please sign in again before activating your pass.'
+        : status === 403 ? 'This account cannot activate a pass.'
+        : status === 503 ? 'Activation is temporarily unavailable. Please try again later.'
+        : message(cause))
+    }
     finally { setSaving(false) }
   }
   return <Page wide title="Your next 30 days start here." notice="Complimentary 30-day access · LKR 0 due · no automatic renewal.">
@@ -131,13 +142,14 @@ export function Checkout() {
           <span className="letterboard text-tone-cyan-300">02 / YOUR PASS</span>
           <div className="billing-pass-art mt-5" aria-hidden="true"><span>SKOPIA</span><Sparkles className="size-10" /><strong>30 DAYS</strong></div>
           <h2 className="font-marquee mt-6 text-xl font-bold text-fg">A month to explore.</h2>
-          <p className="mt-2 text-sm text-ink-200">Your access begins on activation and ends after 30 days. We use your billing email for the confirmation.</p>
+          <p className="mt-2 text-sm text-ink-200">Your access begins on activation and ends after 30 days. We send confirmation to your account email and billing email (if different).</p>
           <div className="mt-7 flex justify-between gap-4 border-t border-ink-700 pt-5 text-sm"><span className="text-ink-200">Listed monthly price</span><span>LKR {plan.price}</span></div>
           <div className="mt-3 flex justify-between gap-4 text-sm"><strong className="text-fg">Amount due today</strong><strong className="font-mono text-xl text-tone-cyan-300">LKR 0</strong></div>
           <p className="mt-3 text-xs text-ink-300">No card required · no automatic renewal</p>
         </aside>
       </section>)}
     <Feedback error={submitError} />
+    {activePassConflict && <Link to="/subscription" className={`${link} mt-3 inline-block`}>View your active subscription</Link>}
   </Page>
 }
 export function CheckoutResult() {
