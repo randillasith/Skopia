@@ -12,6 +12,34 @@ export type DemoPlan = {
 export type PlansResponse = { demoEnabled: boolean; previewMode: boolean; currency: string; plans: DemoPlan[] }
 export type BillingContact = { fullName: string; email: string; phone: string; addressLine1: string; addressLine2: string; city: string; postalCode: string; country: 'LK' }
 export type CardBrand = 'VISA' | 'MASTERCARD' | 'AMEX'
+
+// Only these locally generated, published synthetic examples are accepted. No card input leaves the browser.
+function luhn(number: string) {
+  let sum = 0
+  for (let i = number.length - 1, double = false; i >= 0; i--, double = !double) {
+    let digit = Number(number[i]) * (double ? 2 : 1)
+    if (digit > 9) digit -= 9
+    sum += digit
+  }
+  return sum % 10 === 0
+}
+export function testCardNumber(brand: 'VISA' | 'MASTERCARD') {
+  const base = brand === 'VISA' ? '4' + '1'.repeat(14) : '5' + '5'.repeat(14)
+  return base + Array.from({ length: 10 }, (_, digit) => digit).find((digit) => luhn(base + digit))
+}
+export function validateTestCard(number: string, expiry: string, now = new Date()): { brand: 'VISA' | 'MASTERCARD' } | { error: string } {
+  const digits = number.replace(/ /g, '')
+  if (!/^\d{16}$/.test(digits)) return { error: 'Enter a 16-digit published test card number.' }
+  const brand = /^4/.test(digits) ? 'VISA' : /^5[1-5]/.test(digits) ? 'MASTERCARD' : null
+  if (!brand) return { error: 'Only Visa or Mastercard test numbers are supported.' }
+  if (!luhn(digits)) return { error: 'Test card checksum is invalid. Use the example shown.' }
+  if (digits !== testCardNumber(brand)) return { error: 'Only the published test card number is accepted; never enter a real card.' }
+  const match = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(expiry)
+  if (!match) return { error: 'Enter expiration as MM/YY.' }
+  const year = 2000 + Number(match[2]); const month = Number(match[1])
+  if (year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)) return { error: 'Use a current or future expiration month.' }
+  return { brand }
+}
 export type OrderView = {
   id: number; planName: string; amount?: number; currency?: string; method?: string; paymentMethod?: string;
   brand?: CardBrand | null; cardBrand?: CardBrand | null; status: string; reference?: string | null;
@@ -30,6 +58,13 @@ export function validateBilling(billing: BillingContact): Partial<Record<keyof B
   if (!billing.city.trim() || billing.city.length > 80) errors.city = 'Enter your city.'
   if (!billing.postalCode.trim() || billing.postalCode.length > 20) errors.postalCode = 'Enter your postal code.'
   if (billing.country !== 'LK') errors.country = 'Only Sri Lanka is supported.'
+  for (const field of ['fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'city', 'postalCode'] as const) {
+    const candidates = billing[field].match(/(?<![0-9])(?:[0-9][ .-]?){12,18}[0-9](?![0-9])/g) ?? []
+    if (candidates.some((candidate) => {
+      const digits = candidate.replace(/[ .-]/g, '')
+      return /^(?:4|5[1-5]|2[2-7]|3[47]|6(?:0|4|5))[0-9]*$/.test(digits) && luhn(digits)
+    })) errors[field] = 'Card numbers are not allowed in billing contact details.'
+  }
   return errors
 }
 export function validateSlip(slip: File | null): string | null {
@@ -179,6 +214,12 @@ export function normalizeUnreadCount(payload: unknown) {
 export const billing = {
   plans: async (signal?: AbortSignal) => normalizePlans(await request<DemoPlan[] | { demoEnabled?: boolean; previewMode?: boolean; currency?: string; plans: DemoPlan[] }>('/api/billing/plans', { signal })),
   orders: (actorId: number, signal?: AbortSignal) => request<OrderView[]>('/api/billing/orders', { actorId, signal }),
+  noChargeCard: (number: string, expiry: string, contact: BillingContact, actorId: number, now = new Date()) => {
+    const result = validateTestCard(number, expiry, now)
+    if ('error' in result) throw new Error(result.error)
+    return request<OrderView>('/api/billing/orders/no-charge-card', { method: 'POST', actorId,
+      body: { planName: 'MONTHLY', brand: result.brand, billing: cleanBilling(contact) } })
+  },
   cardPreview: (brand: CardBrand, contact: BillingContact, actorId: number) => {
     if (!['VISA', 'MASTERCARD', 'AMEX'].includes(brand)) throw new Error('Choose a supported preview brand.')
     return request<OrderView>('/api/billing/orders/card-preview', { method: 'POST', actorId, body: { planName: 'MONTHLY', brand, billing: cleanBilling(contact) } })

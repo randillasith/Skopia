@@ -20,11 +20,13 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /** Test-only order flow. No bank verification, payment gateway, or money movement exists. */
 @Service
 public class SimulatedOrderService {
     private static final BigDecimal PRICE = new BigDecimal("500.00");
+    private static final Pattern CARD_CANDIDATE = Pattern.compile("(?<![0-9])(?:[0-9][ .-]?){12,18}[0-9](?![0-9])");
     private final BillingOrderRepository orders;
     private final UserRepository users;
     private final SubscriptionPlanRepository plans;
@@ -55,6 +57,21 @@ public class SimulatedOrderService {
         o.setStatus("SIMULATED_APPROVED");
         activate(o,owner,"CARD_PREVIEW_"+brand);
         return view(orders.saveAndFlush(o));
+    }
+
+    /** No-charge test-card UX: only a derived network brand reaches the server. No payment is recorded. */
+    @Transactional
+    public BillingDtos.OrderView noChargeCard(Long id, String plan, String brand, BillingDtos.BillingContact contact) {
+        checkEnabled(); checkPlan(plan);
+        if (!List.of("VISA", "MASTERCARD").contains(brand)) bad("Unsupported test-card brand");
+        Viewer owner=lockViewer(id);
+        BillingOrder order=create(owner,plan,"NO_CHARGE_TEST_CARD",brand,contact);
+        order.setReference("NC-"+UUID.randomUUID());
+        order.setAmount(BigDecimal.ZERO);
+        order.setStatus("NO_CHARGE_ACTIVE");
+        Subscription subscription=issueEntitlement(owner);
+        order.setSubscription(subscription);
+        return view(orders.saveAndFlush(order));
     }
 
     @Transactional
@@ -154,7 +171,7 @@ public class SimulatedOrderService {
         o.setCity(text(c.city(),100,"City")); o.setPostalCode(text(c.postalCode(),20,"Postal code"));
         o.setCountry("LK"); return o;
     }
-    private void activate(BillingOrder order,Viewer owner,String method) {
+    private Subscription issueEntitlement(Viewer owner) {
         var current=subscriptions.findByViewerIdAndSubStatusAndEndDateAfterOrderByEndDateDesc(owner.getId(),"ACTIVE",LocalDateTime.now());
         if(!current.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT,"An active pass already exists");
         SubscriptionPlan plan=plans.findByPlanName("MONTHLY")
@@ -163,6 +180,12 @@ public class SimulatedOrderService {
         Subscription s=new Subscription(); s.setViewer(owner); s.setPlan(plan); s.setStartDate(now);
         s.setEndDate(now.plusDays(30)); s.setSubStatus("ACTIVE"); s.setAutoRenew(false);
         s=subscriptions.saveAndFlush(s);
+        if(owner instanceof RegisteredViewer rv) rv.setIsPremium(true);
+        return s;
+    }
+    private void activate(BillingOrder order,Viewer owner,String method) {
+        Subscription s=issueEntitlement(owner);
+        LocalDateTime now=LocalDateTime.now();
         Payment p=new Payment(); p.setSubscription(s); p.setAmount(PRICE); p.setCurrency(Currency.LKR);
         p.setPaidDatetime(now); p.setPayMethod(method); p.setPayStatus("SIMULATED");
         p.setGatewayRef(order.getReference()); p=payments.saveAndFlush(p);
@@ -177,7 +200,9 @@ public class SimulatedOrderService {
                 o.getTransferReference(),o.getDecidedBy()==null?null:o.getDecidedBy().getId(),o.getDecidedAt(),
                 o.getDecisionNote(),o.getSubscription()==null?null:o.getSubscription().getId(),
                 o.getPayment()==null?null:o.getPayment().getId(),
-                "TEST ONLY: preview amount; no actual payment, bank transfer verification, or money movement.");
+                "NO_CHARGE_TEST_CARD".equals(o.getMethod())
+                    ? "No charge · test cards only · no payment. A 30-day nonrenewing access pass was issued."
+                    : "TEST ONLY: preview amount; no actual payment, bank transfer verification, or money movement.");
     }
     private Viewer requireViewer(Long id) {
         User u=id==null?null:users.findById(id).orElse(null);
@@ -194,7 +219,24 @@ public class SimulatedOrderService {
     private void checkPlan(String plan) { if(!"MONTHLY".equals(plan)) bad("Only MONTHLY is available"); }
     private String text(String value,int max,String field) {
         if(value==null || value.isBlank() || value.trim().length()>max || value.chars().anyMatch(c->c<32 || c==127)) bad("Invalid "+field);
+        if (containsCardNumber(value)) bad("Card numbers are not allowed in billing contact details");
         return value.trim();
+    }
+    private boolean containsCardNumber(String value) {
+        var matches=CARD_CANDIDATE.matcher(value);
+        while (matches.find()) {
+            String digits=matches.group().replaceAll("[ .-]", "");
+            // Plausible network prefix plus checksum; short phone numbers/postcodes do not qualify.
+            if (!digits.matches("(?:4|5[1-5]|2[2-7]|3[47]|6(?:0|4|5))[0-9]*")) continue;
+            int sum=0;
+            for (int i=digits.length()-1, position=0; i>=0; i--, position++) {
+                int digit=digits.charAt(i)-'0';
+                if (position%2==1) { digit*=2; if (digit>9) digit-=9; }
+                sum+=digit;
+            }
+            if (sum%10==0) return true;
+        }
+        return false;
     }
     private void bad(String message) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,message); }
     private String type(byte[] b) {
