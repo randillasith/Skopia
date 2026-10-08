@@ -82,41 +82,6 @@ class StaffAssignmentIntegrationTest {
     }
 
     @Test
-    void createsMarketingOfficerRowsAndAllowsMarketingPanelLogin() throws Exception {
-        User actor = user("marketing_creation_actor", "marketing-creation-actor@example.test");
-        CreateStaffRequest request = new CreateStaffRequest();
-        request.setUsername("new_marketing_account"); request.setEmail("new-marketing@example.test");
-        request.setPassword("temporary password"); request.setFirstName("New"); request.setLastName("Marketing");
-        request.setDesignation("Ignored title"); request.setOfficerCode("IGNORED-001");
-        request.setHireDate(LocalDate.of(2026, 10, 8)); request.setStaffType("MARKETING_OFFICER");
-        request.setDepartment("PARTNERSHIPS");
-
-        var response = management.createStaffMember(actor, request, "127.0.0.1");
-        MarketingOfficer marketing = marketingOfficers.findById(response.getId()).orElseThrow();
-        StaffAssignment assignment = assignments.findById(response.getId()).orElseThrow();
-        assertEquals("Marketing Officer", marketing.getDesignation());
-        assertEquals(assignment.getOfficerCode(), marketing.getOfficerCode());
-        assertEquals("PARTNERSHIPS", marketing.getDepartment());
-
-        UpdateStaffProfileRequest update = new UpdateStaffProfileRequest();
-        update.setStaffType(StaffType.MARKETING_OFFICER);
-        update.setHireDate(LocalDate.of(2026, 10, 9));
-        update.setDepartment("ADVERTISING");
-        management.updateStaffProfile(actor, response.getId(), update, "127.0.0.1");
-        MarketingOfficer updated = marketingOfficers.findById(response.getId()).orElseThrow();
-        assertEquals("ADVERTISING", updated.getDepartment());
-        assertEquals(LocalDate.of(2026, 10, 9), updated.getHireDate());
-        assertEquals(marketing.getOfficerCode(), updated.getOfficerCode());
-
-        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"identifier\":\"new_marketing_account\",\"password\":\"temporary password\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.roleType").value("MARKETING_OFFICER"))
-                .andExpect(jsonPath("$.staffType").value("MARKETING_OFFICER"))
-                .andExpect(jsonPath("$.token").isNotEmpty());
-    }
-
-    @Test
     void generatesCanonicalMarketingDesignationAndSequentialOfficerCodes() {
         User actor = user("marketing_actor", "marketing-actor@example.test");
         User first = user("marketing_one", "marketing-one@example.test");

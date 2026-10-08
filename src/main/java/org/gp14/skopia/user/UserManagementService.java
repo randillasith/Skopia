@@ -128,7 +128,16 @@ public class UserManagementService {
         user.setLastName(trim(request.getLastName()));
         user.setAccountStatus("ACTIVE");
         user = userRepository.saveAndFlush(user);
-        saveAssignment(user, assignment, generatedOfficerCode);
+
+        AssignStaffRequest assignment = new AssignStaffRequest();
+        try { assignment.setStaffType(StaffType.valueOf(request.getStaffType().trim().toUpperCase())); }
+        catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid staff type"); }
+        assignment.setHireDate(request.getHireDate());
+        assignment.setAdminLevel(parse(AdminLevel.class, request.getAdminLevel(), "admin level"));
+        assignment.setSupportLevel(parse(SupportLevel.class, request.getSupportLevel(), "support level"));
+        assignment.setShift(parse(SupportShift.class, request.getShift(), "support shift"));
+        assignment.setDepartment(parse(MarketingDepartment.class, request.getDepartment(), "marketing department"));
+        saveAssignment(user, assignment);
         logActivity(actor, user, "STAFF_CREATED", "staff type: " + assignment.getStaffType(), ipAddress);
         return response(user);
     }
@@ -197,8 +206,7 @@ public class UserManagementService {
             case MARKETING_OFFICER -> {
                 if (request.getDepartment() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Marketing department is required");
                 reject(request.getAdminLevel()!=null || request.getSupportLevel()!=null || request.getShift()!=null);
-                String code=notBlank(existingOfficerCode) ? existingOfficerCode
-                        : notBlank(generatedOfficerCode) ? generatedOfficerCode : officerCodes.nextMarketingCode();
+                String code=notBlank(existingOfficerCode) ? existingOfficerCode : officerCodes.nextMarketingCode();
                 target.setOfficerCode(code); target.setDepartment(request.getDepartment());
             }
         }
@@ -210,50 +218,6 @@ public class UserManagementService {
             case SUPPORT_OFFICER -> "Support Officer";
             case MARKETING_OFFICER -> "Marketing Officer";
         };
-    }
-    private User newStaffEntity(AssignStaffRequest assignment, String officerCode) {
-        if (assignment.getHireDate() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hire date is required");
-        String designation = defaultDesignation(assignment.getStaffType());
-        return switch (assignment.getStaffType()) {
-            case ADMINISTRATOR -> {
-                if (assignment.getAdminLevel() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin level is required");
-                Administrator admin = new Administrator();
-                admin.setDesignation(designation); admin.setHireDate(assignment.getHireDate());
-                admin.setAdminLevel(assignment.getAdminLevel().name());
-                yield admin;
-            }
-            case SUPPORT_OFFICER -> {
-                if (assignment.getSupportLevel() == null || assignment.getShift() == null)
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Support level and shift are required");
-                SupportOfficer support = new SupportOfficer();
-                support.setDesignation(designation); support.setHireDate(assignment.getHireDate());
-                support.setSupportLevel(assignment.getSupportLevel().name()); support.setShift(assignment.getShift().name());
-                yield support;
-            }
-            case MARKETING_OFFICER -> {
-                if (assignment.getDepartment() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Marketing department is required");
-                MarketingOfficer marketing = new MarketingOfficer();
-                marketing.setDesignation(designation); marketing.setHireDate(assignment.getHireDate());
-                marketing.setOfficerCode(officerCode); marketing.setDepartment(assignment.getDepartment().name());
-                yield marketing;
-            }
-        };
-    }
-    private StaffType legacyStaffType(User user) {
-        if (user instanceof Administrator) return StaffType.ADMINISTRATOR;
-        if (user instanceof SupportOfficer) return StaffType.SUPPORT_OFFICER;
-        if (user instanceof MarketingOfficer) return StaffType.MARKETING_OFFICER;
-        throw new IllegalArgumentException("Not a dedicated staff account");
-    }
-    private void syncLegacyStaffEntity(User user, StaffAssignment assignment) {
-        if (!(user instanceof Staff staff)) return;
-        staff.setDesignation(assignment.getDesignation()); staff.setHireDate(assignment.getHireDate());
-        if (user instanceof Administrator admin) admin.setAdminLevel(assignment.getAdminLevel().name());
-        else if (user instanceof SupportOfficer support) {
-            support.setSupportLevel(assignment.getSupportLevel().name()); support.setShift(assignment.getShift().name());
-        } else if (user instanceof MarketingOfficer marketing) {
-            marketing.setOfficerCode(assignment.getOfficerCode()); marketing.setDepartment(assignment.getDepartment().name());
-        }
     }
     private boolean notBlank(String value) { return value != null && !value.isBlank(); }
     private String trim(String value) { return value == null ? null : value.trim(); }
