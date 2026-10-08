@@ -7,7 +7,7 @@
  * disagreeing about the same campaign.
  */
 
-import { request, upload } from './api'
+import { request, requestBlob, upload } from './api'
 
 /* ------------------------------------------------------------- vocabulary */
 
@@ -232,6 +232,8 @@ export const ads = {
       request<Metrics>(`/api/ad-campaigns/${id}/metrics${range(from, to)}`, { actorId }),
     csvUrl: (id: number, from?: string, to?: string) =>
       `/api/ad-campaigns/${id}/metrics.csv${range(from, to)}`,
+    csv: (actorId: Actor, id: number, from?: string, to?: string) =>
+      requestBlob(`/api/ad-campaigns/${id}/metrics.csv${range(from, to)}`, { actorId }),
   },
 
   advertisements: {
@@ -285,10 +287,10 @@ export const ads = {
     // No viewer is passed: the server takes it from the bearer token, because a
     // delivery record naming a viewer the caller chose is not a record of
     // anything. A guest simply has no token and counts as a guest.
-    active: (videoId: number, slot: SlotPosition, opts: { device?: string } = {}) => {
+    active: (videoId: number, slot: SlotPosition, opts: { device?: string; signal?: AbortSignal } = {}) => {
       const query = new URLSearchParams({ videoId: String(videoId), slot })
       if (opts.device) query.set('device', opts.device)
-      return request<ServedAd[]>(`/api/ads/active?${query}`)
+      return request<ServedAd[]>(`/api/ads/active?${query}`, { signal: opts.signal })
     },
   },
 }

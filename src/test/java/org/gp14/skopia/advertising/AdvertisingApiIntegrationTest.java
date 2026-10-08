@@ -69,7 +69,7 @@ class AdvertisingApiIntegrationTest {
 
         /* 1. "I want to upload advertisement content such as video, images and links" */
         JsonNode uploaded = body(mvc.perform(multipart("/api/advertisements/media")
-                        .file(new MockMultipartFile("file", "trailer.mp4", "video/mp4", new byte[] { 1, 2 }))
+                        .file(new MockMultipartFile("file", "trailer.mp4", "video/mp4", AdMediaStorageServiceTest.MP4))
                         .header("Authorization", officer))
                 .andExpect(status().isOk())
                 .andReturn());

@@ -9,9 +9,9 @@ import {
   Modal, Section, Avatar, Meter, useToast, NotAvailableYet,
 } from '@/components/primitives'
 import { PosterPlate, Lightbox, BillingBoard, Letterboard } from '@/components/world'
-import { Player, ChapterList } from '@/components/player'
+import { ChapterList } from '@/components/player'
 import { FrontOfHouse, useSession } from '@/components/Shell'
-import { AdSlot } from '@/components/AdSlot'
+import { AdPlayback } from '@/components/AdPlayback'
 import {
   GENRES, fmt, clock, seconds, isVerified, tagsFor, type Video,
 } from '@/lib/data'
@@ -624,15 +624,6 @@ export function Watch() {
   const [theater, setTheater] = useState(false)
   const [autoplay, setAutoplay] = useState(true)
   const [at, setAt] = useState(0)
-  // FR5: the break before the feature is a real advertisement, chosen by the
-  // serving engine from what is booked against this title. The id is the one the
-  // catalogue already gave us — this used to search the API by title to find it
-  // back, from when the page rendered placeholder titles that had no id of their
-  // own.
-  const [finishedBreak, setFinishedBreak] = useState<string | null>(null)
-  const breakKey = `${numericId}:${actor ?? "guest"}`
-  const adShowing = finishedBreak !== breakKey
-  const backendVideoId = numericId
   const [comment, setComment] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
@@ -760,16 +751,10 @@ export function Watch() {
                   <p className="max-w-md text-sm text-ink-300">This premium title requires an active subscription. Playback is not available on this account.</p>
                   <Button variant="primary" onClick={() => nav('/plans')}>View plans</Button>
                 </div>
-              ) : adShowing ? (
-                /* ---- pre-roll, served by FR5 and always labelled as advertising ---- */
-                <AdSlot
-                  key={breakKey}
-                  videoId={resolving ? undefined : backendVideoId}
-                  slot="PREROLL"
-                  onFinished={() => setFinishedBreak(breakKey)}
-                />
               ) : (
-              <Player
+              <AdPlayback
+                key={`${numericId}:${actor ?? 'guest'}`}
+                videoId={resolving ? undefined : numericId}
                 video={v}
                 theater={theater}
                 onTheater={setTheater}

@@ -27,6 +27,7 @@ export function AdSlot({
   videoId,
   slot = 'PREROLL',
   onFinished,
+  compact = false,
 }: {
   /**
    * The backend's numeric video id. `undefined` means still being resolved —
@@ -40,6 +41,7 @@ export function AdSlot({
   // bearer token. A guest has none and is recorded as one.
   /** Called when the break is over — skipped, ended, or never filled. */
   onFinished: () => void
+  compact?: boolean
 }) {
   const [ad, setAd] = useState<ServedAd | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -49,6 +51,12 @@ export function AdSlot({
   // with a new closure, which would ask for a second advertisement and record a
   // second impression for one break.
   const finish = useRef(onFinished)
+  const finished = useRef(false)
+  const complete = () => {
+    if (finished.current) return
+    finished.current = true
+    finish.current()
+  }
   useEffect(() => { finish.current = onFinished }, [onFinished])
 
   useEffect(() => {
@@ -57,18 +65,19 @@ export function AdSlot({
     // Resolved to nothing: there is no title to serve against, so the break is
     // over before it started.
     if (videoId === null) {
-      finish.current()
+      complete()
       return
     }
     let live = true
+    const abort = new AbortController()
 
     ads.serving
-      .active(videoId, slot, { device: deviceKind() })
+      .active(videoId, slot, { device: deviceKind(), signal: abort.signal })
       .then((served) => {
         if (!live) return
         if (served.length === 0) {
           // Nothing booked here. That is ordinary, not a failure.
-          finish.current()
+          complete()
           return
         }
         setAd(served[0])
@@ -76,10 +85,10 @@ export function AdSlot({
       .catch(() => {
         // Advertising must never be what stops someone watching. If the serving
         // call fails, the break is simply over.
-        if (live) finish.current()
+        if (live) complete()
       })
 
-    return () => { live = false }
+    return () => { live = false; abort.abort() }
   }, [videoId, slot])
 
   // The countdown, and the automatic end of a video advertisement.
@@ -92,7 +101,7 @@ export function AdSlot({
   useEffect(() => {
     if (!ad) return
     const runsFor = ad.adType === 'VIDEO' && ad.adDuration > 0 ? ad.adDuration : 8
-    if (elapsed >= runsFor) finish.current()
+    if (elapsed >= runsFor) complete()
   }, [ad, elapsed])
 
   if (!ad) return null
@@ -102,19 +111,19 @@ export function AdSlot({
   const remaining = Math.max(0, runsFor - elapsed)
 
   return (
-    <div className="theme-media relative aspect-video overflow-hidden bg-ink-950">
+    <div aria-label={`${SLOT_LABEL[slot]} advertisement`} className={`theme-media relative aspect-video overflow-hidden bg-ink-950 ${compact ? 'w-full max-w-sm rounded-sm shadow-lg' : ''}`}>
       {ad.adType === 'VIDEO' ? (
         <video
           src={ad.mediaUrl}
           autoPlay
           muted
           playsInline
-          onEnded={() => finish.current()}
-          onError={() => finish.current()}
+          onEnded={complete}
+          onError={complete}
           className="size-full object-contain"
         />
       ) : (
-        <img src={ad.mediaUrl} alt={ad.adTitle} className="size-full object-cover" />
+        <img src={ad.mediaUrl} alt={ad.adTitle} onError={complete} className="size-full object-cover" />
       )}
 
       {/* The label is not optional and not configurable. */}
@@ -157,7 +166,7 @@ export function AdSlot({
           variant={canSkip ? 'primary' : 'quiet'}
           disabled={!canSkip}
           icon={<SkipForward className="size-4" />}
-          onClick={() => finish.current()}
+          onClick={complete}
         >
           {canSkip ? 'Skip advertisement' : `Skip in ${SKIP_AFTER - elapsed}s`}
         </Button>

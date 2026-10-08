@@ -17,11 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * The serving engine: given a video and a slot, which advertisement runs.
@@ -34,7 +30,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * query re-checks the dates, so an advertisement whose campaign ended a minute ago
  * drops out on the next request whether or not the expiry sweep has run.
  *
- * <p>Among equally-eligible placements, selection is random within a priority band.
+ * <p>Selection is delegated to {@link AdSelectionStrategy}. The default policy is
+ * random within a priority band; the optional stable policy uses placement IDs.
  * Strict ordering would hand every impression to one advertiser for the whole
  * booking; rotation spreads delivery without needing a cursor stored anywhere,
  * which matters because serving is the one path that has to stay cheap.
@@ -48,18 +45,21 @@ public class AdServingService {
     private final RegisteredViewerRepository viewers;
     private final BillingService billing;
     private final VideoAccessService access;
+    private final AdSelectionStrategy selection;
 
     public AdServingService(AdPlacementRepository placements,
                             AdImpressionRepository impressions,
                             VideoRepository videos,
                             RegisteredViewerRepository viewers,
-                            BillingService billing, VideoAccessService access) {
+                            BillingService billing, VideoAccessService access,
+                            AdSelectionStrategy selection) {
         this.placements = placements;
         this.impressions = impressions;
         this.videos = videos;
         this.viewers = viewers;
         this.billing = billing;
         this.access = access;
+        this.selection = selection;
     }
 
     /**
@@ -95,46 +95,13 @@ public class AdServingService {
             return List.of();
         }
 
-        List<AdPlacement> chosen = choose(eligible, want);
+        List<AdPlacement> chosen = selection.select(eligible, want);
         List<ServedAdResponse> served = new ArrayList<>(chosen.size());
         for (AdPlacement placement : chosen) {
             AdImpression impression = record(placement, video, viewerId, deviceType, now);
             served.add(present(placement, impression));
         }
         return served;
-    }
-
-    /**
-     * Pick up to {@code want} placements, one per advertisement.
-     *
-     * <p>De-duplicating by advertisement is the point: a title targeted directly and
-     * through its category produces two eligible placements for the same creative,
-     * and showing it twice in one break is the kind of thing a viewer notices and an
-     * advertiser is billed for.
-     */
-    private List<AdPlacement> choose(List<AdPlacement> eligible, int want) {
-        // findEligible returns priority-descending, so this keeps the bands in order
-        // while letting the members of each band be shuffled independently.
-        Map<Integer, List<AdPlacement>> bands = new LinkedHashMap<>();
-        for (AdPlacement p : eligible) {
-            bands.computeIfAbsent(p.getPriority() == null ? 1 : p.getPriority(),
-                    k -> new ArrayList<>()).add(p);
-        }
-
-        List<AdPlacement> picked = new ArrayList<>(want);
-        List<Long> seenAds = new ArrayList<>(want);
-        for (List<AdPlacement> band : bands.values()) {
-            List<AdPlacement> shuffled = new ArrayList<>(band);
-            Collections.shuffle(shuffled, ThreadLocalRandom.current());
-            for (AdPlacement p : shuffled) {
-                Long adId = p.getAdvertisement().getId();
-                if (seenAds.contains(adId)) continue;
-                picked.add(p);
-                seenAds.add(adId);
-                if (picked.size() == want) return picked;
-            }
-        }
-        return picked;
     }
 
     /* ------------------------------------------------------------- logging */

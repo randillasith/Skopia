@@ -402,6 +402,23 @@ class AdServingServiceTest {
         return serving.serve(video.getId(), SlotPosition.PREROLL, null, "desktop", 1);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(SlotPosition.class)
+    void eachPositionDeliversOnlyItsMatchingPlacement(SlotPosition slot) {
+        Long adId = live("Every position", t -> t.video(longExposure));
+        var initial = placements.forAdvertisement(actor, adId).get(0);
+        placements.retarget(actor, initial.id(), new PlacementRequest(
+                longExposure.getId(), null, slot, 1, null, null));
+        for (SlotPosition requested : SlotPosition.values()) {
+            var served = serving.serve(longExposure.getId(), requested, null, "desktop", 1);
+            if (requested == slot) {
+                assertThat(served).hasSize(1);
+                assertThat(served.get(0).slotPosition()).isEqualTo(slot);
+            } else assertThat(served).isEmpty();
+        }
+        assertThat(impressions.count()).isEqualTo(1);
+    }
+
     /** A campaign, an advertisement and a placement, confirmed and running now. */
     private Long live(String name, java.util.function.UnaryOperator<Target> target) {
         LocalDateTime now = LocalDateTime.now();

@@ -16,6 +16,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Where advertisement creative is stored, and what is allowed through.
@@ -25,10 +27,9 @@ import java.util.UUID;
  * this would use in production. The interface is a URL either way, so swapping the
  * backing store later does not reach the advertisement record.
  *
- * <p>Three things are checked, and the order matters. Extension and declared
- * content type are both checked because either alone is trivially wrong: a browser
- * will happily send {@code application/octet-stream} for a perfectly good MP4, and
- * an attacker will happily rename a script to {@code .png}. The stored filename is
+ * <p>Extension, declared content type, and container signature are checked before
+ * storing anything: an attacker may rename a script to {@code .png} and declare
+ * its type as an image. The stored filename is
  * then generated rather than taken from the upload, so whatever the client called
  * it cannot escape the directory or collide with somebody else's file.
  */
@@ -88,6 +89,27 @@ public class AdMediaStorageService {
             throw AdvertisingException.invalid(
                     "That file is named ." + extension + " but arrived as " + contentType + ".");
         }
+        // A matching extension and MIME label can still conceal a renamed script.
+        // Check the container signature before creating any storage directory.
+        try (InputStream in = file.getInputStream()) {
+            byte[] header = in.readNBytes(16);
+            boolean matches = switch (extension) {
+                case "png" -> header.length >= 8 && Arrays.equals(Arrays.copyOf(header, 8),
+                        new byte[]{(byte)137, 80, 78, 71, 13, 10, 26, 10});
+                case "jpg", "jpeg" -> header.length >= 3 && (header[0] & 255) == 255
+                        && (header[1] & 255) == 216 && (header[2] & 255) == 255;
+                case "gif" -> signature(header, 0, "GIF87a") || signature(header, 0, "GIF89a");
+                case "webp" -> signature(header, 0, "RIFF") && signature(header, 8, "WEBP");
+                case "mp4" -> signature(header, 4, "ftyp") && !signature(header, 8, "qt  ");
+                case "mov" -> signature(header, 4, "ftyp") && signature(header, 8, "qt  ");
+                case "webm" -> header.length >= 4 && Arrays.equals(Arrays.copyOf(header, 4),
+                        new byte[]{0x1a, 0x45, (byte)0xdf, (byte)0xa3});
+                default -> false;
+            };
+            if (!matches) throw AdvertisingException.invalid("The file contents do not match its media format.");
+        } catch (IOException e) {
+            throw AdvertisingException.invalid("The creative could not be read. Try uploading it again.");
+        }
 
         // Dated folders, generated names. The client's filename never reaches the
         // filesystem, so "../../etc/passwd.png" is just a name in the response.
@@ -125,6 +147,12 @@ public class AdMediaStorageService {
         if (filename == null) return "";
         int dot = filename.lastIndexOf('.');
         return dot < 0 ? "" : filename.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean signature(byte[] header, int offset, String value) {
+        byte[] expected = value.getBytes(StandardCharsets.US_ASCII);
+        return header.length >= offset + expected.length
+                && Arrays.equals(Arrays.copyOfRange(header, offset, offset + expected.length), expected);
     }
 
     private static String mb(long bytes) {

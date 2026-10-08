@@ -407,7 +407,7 @@ function CampaignWizard({ actorId }: { actorId: number }) {
    * with whatever did succeed — recoverable from the campaign's own page, rather
    * than silently half-built.
    */
-  const confirm = async () => {
+  const confirm = async (saveDraft = false) => {
     const e: Record<string, string> = {}
     if (!start) e.start = 'Set the date the campaign starts running.'
     if (!end) e.end = 'Set the date it stops.'
@@ -443,12 +443,14 @@ function CampaignWizard({ actorId }: { actorId: number }) {
         })
       }
 
-      await ads.advertisements.activate(actorId, ad.id)
-      const live = await ads.campaigns.confirm(actorId, campaign.id)
+      const live = saveDraft ? await ads.campaigns.get(actorId, campaign.id) : await (async () => {
+        await ads.advertisements.activate(actorId, ad.id)
+        return ads.campaigns.confirm(actorId, campaign.id)
+      })()
 
       setCreated(live)
       setStep(4)
-      toast({ title: 'Campaign confirmed and scheduled', tone: 'ok' })
+      toast({ title: saveDraft ? 'Campaign saved as draft' : 'Campaign confirmed and scheduled', tone: 'ok' })
     } catch (cause) {
       const error = cause instanceof ApiError ? cause : new ApiError(0, 'Something went wrong.')
       setErrors(error.fields && Object.keys(error.fields).length ? error.fields : {})
@@ -654,7 +656,8 @@ function CampaignWizard({ actorId }: { actorId: number }) {
               Always on. Delivery is decided by the dates, so this cannot be turned off.
             </p>
 
-            <Nav onBack={() => setStep(2)} onNext={confirm}
+            <Button disabled={saving} onClick={() => void confirm(true)}>Save draft</Button>
+            <Nav onBack={() => setStep(2)} onNext={() => void confirm()}
               nextLabel={saving ? 'Confirming…' : 'Confirm campaign'} busy={saving} primary />
           </Panel>
         )}
@@ -665,10 +668,10 @@ function CampaignWizard({ actorId }: { actorId: number }) {
             className="rounded-lg border border-success-500/35 bg-success-500/6 p-8 text-center">
             <Check className="mx-auto size-9 text-tone-success-400" />
             <h2 className="font-marquee mt-4 text-[24px] font-bold text-fg">
-              {created.campaignName} is {created.status === 'ACTIVE' ? 'running' : 'scheduled'}
+              {created.campaignName} is {created.status === 'DRAFT' ? 'saved as a draft' : created.status === 'ACTIVE' ? 'running' : 'scheduled'}
             </h2>
             <p className="mx-auto mt-2 max-w-[50ch] text-[14px] leading-relaxed text-ink-300">
-              It runs from {dateOnly(created.startDate)} to {dateOnly(created.endDate)} against{' '}
+              {created.status === 'DRAFT' ? 'Confirm and activate its creative when ready. Its planned window is' : 'It runs from'} {dateOnly(created.startDate)} to {dateOnly(created.endDate)} against{' '}
               {created.targets.length} target{created.targets.length === 1 ? '' : 's'}, and stops on
               its own afterwards.
             </p>
@@ -814,8 +817,10 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
   const campaign = useApiData(() => ads.campaigns.get(actorId, campaignId), [actorId, campaignId])
   const adverts = useApiData(
     () => ads.advertisements.forCampaign(actorId, campaignId), [actorId, campaignId])
+  const [metricRange, setMetricRange] = useState(defaultMetricRange)
   const metrics = useApiData<Metrics>(
-    () => ads.campaigns.metrics(actorId, campaignId), [actorId, campaignId])
+    () => ads.campaigns.metrics(actorId, campaignId, metricRange.from, metricRange.to),
+    [actorId, campaignId, metricRange.from, metricRange.to])
 
   const reloadAll = useCallback(() => {
     campaign.reload()
@@ -992,21 +997,16 @@ function CampaignDetailBody({ actorId, campaignId }: { actorId: number; campaign
             </Section>
           </div>
 
-          {metrics.data && metrics.data.impressions > 0 && (
-            <div className="mt-8">
-              <Section
-                title="Performance"
-                action={
-                  <a href={ads.campaigns.csvUrl(c.id)} download
-                    className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-fg">
-                    <Download className="size-3.5" /> Export CSV
-                  </a>
-                }
-              >
-                <Breakdowns metrics={metrics.data} />
-              </Section>
-            </div>
-          )}
+          <div className="mt-8">
+            <Section title="Performance" action={<CsvDownload actorId={actorId} campaignId={c.id} range={metricRange} />}>
+              <MetricRange value={metricRange} onApply={setMetricRange} />
+              {metrics.loading || (metrics.data && (metrics.data.from !== metricRange.from || metrics.data.to !== metricRange.to)) ? <Loading what="performance" /> : metrics.error ?
+                <Failed error={metrics.error} onRetry={metrics.reload} /> : metrics.data && <>
+                  <p className="my-4 text-sm">{metrics.data.impressions} impressions · {metrics.data.clicks} clicks · {metrics.data.ctr.toFixed(2)}% CTR</p>
+                  <Breakdowns metrics={metrics.data} />
+                </>}
+            </Section>
+          </div>
         </div>
 
         <aside>
@@ -1740,7 +1740,7 @@ function TargetPickerModal({
               ))}
             </Select>
           </Field>
-          <Field label="Priority" hint="1 is shown first">
+          <Field label="Priority" hint="Higher numbers are shown first">
             <Input type="number" min="1" value={priority}
               onChange={(e) => setPriority(e.target.value)} />
           </Field>
@@ -1868,7 +1868,7 @@ function PlacementEditModal({
               ))}
             </Select>
           </Field>
-          <Field label="Priority" hint="1 is shown first">
+          <Field label="Priority" hint="Higher numbers are shown first">
             <Input type="number" min="1" value={priority}
               onChange={(e) => setPriority(e.target.value)} />
           </Field>
@@ -1941,13 +1941,23 @@ export function CampaignPerformance() {
 
 function PerformanceBody({ actorId }: { actorId: number }) {
   const nav = useNavigate()
-  const { data, loading, error, reload } = useApiData<Campaign[]>(
-    () => ads.campaigns.list(actorId), [actorId])
+  const [metricRange, setMetricRange] = useState(defaultMetricRange)
+  const { data, loading, error, reload } = useApiData<{ campaigns: Campaign[]; from: string; to: string }>(async () => {
+    const campaigns = await ads.campaigns.list(actorId)
+    const rows = await Promise.all(campaigns.map(async (campaign) => {
+      const metrics = await ads.campaigns.metrics(actorId, campaign.id, metricRange.from, metricRange.to)
+      return { ...campaign, impressions: metrics.impressions, clicks: metrics.clicks, ctr: metrics.ctr }
+    }))
+    return { campaigns: rows, ...metricRange }
+  }, [actorId, metricRange.from, metricRange.to])
 
-  if (loading && !data) return <Loading what="performance" />
+  if (loading || (data && (data.from !== metricRange.from || data.to !== metricRange.to))) return <>
+    <MetricRange value={metricRange} onApply={setMetricRange} />
+    <Loading what="performance" />
+  </>
   if (error) return <Failed error={error} onRetry={reload} />
 
-  const all = data ?? []
+  const all = data?.campaigns ?? []
   const withData = all.filter((c) => c.impressions > 0)
   const maxImp = Math.max(...withData.map((c) => c.impressions), 1)
   const totalImpressions = all.reduce((s, c) => s + c.impressions, 0)
@@ -1969,7 +1979,8 @@ function PerformanceBody({ actorId }: { actorId: number }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <MetricRange value={metricRange} onApply={setMetricRange} />
+      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           ['Total impressions', fmt(totalImpressions)],
           ['Total clicks', fmt(totalClicks)],
@@ -2037,14 +2048,7 @@ function PerformanceBody({ actorId }: { actorId: number }) {
                 <Td numeric>{c.clicks.toLocaleString()}</Td>
                 <Td numeric>{c.ctr.toFixed(2)}%</Td>
                 <Td>
-                  <a
-                    href={ads.campaigns.csvUrl(c.id)}
-                    download
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-300 hover:text-fg"
-                  >
-                    <Download className="size-3.5" /> CSV
-                  </a>
+                  <CsvDownload actorId={actorId} campaignId={c.id} range={metricRange} label="CSV" />
                 </Td>
               </Tr>
             ))}
@@ -2053,4 +2057,58 @@ function PerformanceBody({ actorId }: { actorId: number }) {
       </div>
     </>
   )
+}
+
+
+type MetricWindow = { from: string; to: string }
+function defaultMetricRange(): MetricWindow {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - 29)
+  const format = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return { from: format(start), to: format(end) }
+}
+
+function MetricRange({ value, onApply }: { value: MetricWindow; onApply: (range: MetricWindow) => void }) {
+  const [from, setFrom] = useState(value.from)
+  const [to, setTo] = useState(value.to)
+  const [error, setError] = useState('')
+  return <form className="my-4 flex flex-wrap items-end gap-3" onSubmit={(event) => {
+    event.preventDefault()
+    if (!from || !to || from > to) { setError('Choose a start date on or before the end date.'); return }
+    setError('')
+    onApply({ from, to })
+  }}>
+    <label className="text-sm">From date<Input type="date" required aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+    <label className="text-sm">To date<Input type="date" required aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+    <Button type="submit">Apply date range</Button>
+    {error && <p role="alert" className="w-full text-sm text-tone-danger-400">{error}</p>}
+    <p className="w-full text-xs text-ink-300">Showing {value.from} to {value.to}, inclusive. CSV uses the same range.</p>
+  </form>
+}
+
+function CsvDownload({ actorId, campaignId, range, label = 'Export CSV' }: {
+  actorId: number; campaignId: number; range: MetricWindow; label?: string
+}) {
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  return <button type="button" disabled={busy}
+    className="inline-flex items-center gap-1.5 text-[13px] text-ink-300 hover:text-fg disabled:opacity-50"
+    onClick={async (event) => {
+      event.stopPropagation()
+      setBusy(true)
+      try {
+        const blob = await ads.campaigns.csv(actorId, campaignId, range.from, range.to)
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `campaign-${campaignId}-performance.csv`
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (cause) {
+        toast({ title: cause instanceof Error ? cause.message : 'CSV could not be downloaded.', tone: 'bad' })
+      } finally { setBusy(false) }
+    }}><Download className="size-3.5" />{busy ? 'Downloading…' : label}</button>
 }
