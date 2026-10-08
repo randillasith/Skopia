@@ -10,7 +10,7 @@ export function ThemeSelect() {
   const Icon = preference === 'system' ? Monitor : preference === 'light' ? Sun : Moon
   return (
     <label className="relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-sm border border-rule-strong bg-surface pl-2 text-fg">
-      <Icon aria-hidden="true" className="pointer-events-none size-3.5" />
+      <Icon aria-hidden="true" className="pointer-events-none size-3.5 max-[360px]:hidden" />
       <span className="sr-only">Appearance</span>
       <select
         aria-label="Appearance"

@@ -29,6 +29,11 @@ public class SimulatedOrderController {
         exact(body,Set.of("planName","brand","billing"),Set.of());
         return orders.noChargeCard(id(user),string(body,"planName"),string(body,"brand"),contact(body.get("billing")));
     }
+    @PostMapping("/orders/demo-card") @ResponseStatus(HttpStatus.CREATED)
+    public BillingDtos.OrderView demoCard(@AuthenticationPrincipal User user,@RequestBody JsonNode body) {
+        exact(body,Set.of("planName","brand","billing"),Set.of());
+        return orders.demoCard(id(user),string(body,"planName"),string(body,"brand"),contact(body.get("billing")));
+    }
     @PostMapping("/orders/complimentary") @ResponseStatus(HttpStatus.CREATED)
     public BillingDtos.OrderView complimentary(@AuthenticationPrincipal User user,@RequestBody JsonNode body) {
         exact(body,Set.of("planName","billing"),Set.of());

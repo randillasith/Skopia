@@ -56,6 +56,14 @@ describe('complimentary activation client', () => {
     expect(validateBilling({ ...contact, phone: '077' + '1234567890' }).phone).toBeUndefined()
     expect(fetch).not.toHaveBeenCalled()
   })
+  it('demo-card sends only derived brand and sanitized contact, never credentials', async () => {
+    const withExtra = { ...contact, cardNumber: '4' + '1'.repeat(15), expiry: '10/28', cvv: '000' }
+    await billing.demoCard(withExtra, 'VISA', 7)
+    const [path, init] = vi.mocked(fetch).mock.calls[0]
+    expect(path).toBe('/api/billing/orders/demo-card')
+    expect(JSON.parse(String(init?.body))).toEqual({ planName: 'MONTHLY', brand: 'VISA', billing: contact })
+    expect(localStorage.length).toBe(0)
+  })
   it('posts only the plan and billing contact, without brand or card fields', async () => {
     await billing.complimentary(contact, 7)
     const [path, init] = vi.mocked(fetch).mock.calls[0]

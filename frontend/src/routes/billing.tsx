@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FrontOfHouse, useSession } from '@/components/Shell'
 import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/primitives'
@@ -6,21 +6,57 @@ import { billing, monthlyPreviewPlan, REFUND_CATEGORIES, validateBilling, valida
 import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import { ArrowRight, Check, ShieldCheck, Sparkles } from 'lucide-react'
+import { DemoCardPreview } from '@/components/DemoCardPreview'
+import { DEMO_CARDS, demoBrand, formatCardNumber, formatExpiry, futureDemoExpiry, validateDemoCard, type DemoBrand } from '@/lib/demo-card'
 import './billing.css'
 
 const box = 'rounded-lg border border-ink-700 bg-ink-850 p-6'
-const link = 'text-tone-cyan-300 underline hover:text-tone-cyan-200'
+const link = 'billing-action billing-action-secondary'
 const message = (error: unknown) => error instanceof Error ? error.message : 'Please try again.'
-const date = (value: string | null) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : 'Not provided'
+const date = (value: string | null) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not provided'
 const disclaimer = 'Historical simulated billing records only; no money moved.'
 
+const planLabel = (name: string | null) => name === 'MONTHLY' ? 'Monthly pass' : name ? name.toLowerCase().replaceAll('_', ' ') : 'Free viewing'
+const statusLabel = (status: string | null) => ({ ACTIVE: 'Active', CANCELLED: 'Cancelled', EXPIRED: 'Expired', INACTIVE: 'Inactive' }[status ?? ''] ?? 'No active pass')
+function orderLabel(order: OrderView) {
+  if (order.method === 'NO_CHARGE_TEST_CARD' && order.status === 'NO_CHARGE_ACTIVE') return 'Demo checkout activation'
+  if (order.method === 'COMPLIMENTARY' && order.status === 'NO_CHARGE_ACTIVE') return 'Complimentary activation'
+  if (['PENDING_REVIEW', 'SUBMITTED'].includes(order.status)) return 'Awaiting review'
+  if (order.status === 'REJECTED') return 'Preview declined'
+  if (order.status === 'CANCELLED') return 'Cancelled request'
+  return 'Previous preview'
+}
+function MembershipPass() {
+  return <div className="membership-pass" data-membership-pass>
+    <div className="membership-pass-top"><span className="membership-brand">SKOPIA</span><Sparkles aria-hidden="true" className="size-5" /></div>
+    <div className="membership-chip" aria-hidden="true"><i /><i /><i /></div>
+    <div className="membership-pattern" aria-hidden="true">•••• &nbsp; •••• &nbsp; ••••</div>
+    <div className="membership-pass-bottom"><div><span className="membership-caption">Membership pass</span><strong>30-day access</strong></div><span className="membership-mark" aria-hidden="true">S.</span></div>
+    <p className="membership-caption membership-note">Decorative pass · not a payment card</p>
+  </div>
+}
+function OrderRecord({ order }: { order: OrderView }) {
+  const complimentary = ['COMPLIMENTARY', 'NO_CHARGE_TEST_CARD'].includes(order.method ?? '')
+  const submitted = order.submittedAt ?? order.createdAt
+  return <li data-subscription-order className="billing-order">
+    <div className="billing-order-heading"><h3>{orderLabel(order)}</h3><span className="billing-badge">{complimentary ? 'No charge' : 'Preview record'}</span></div>
+    <p className="mt-2 text-sm text-ink-200">{planLabel(order.planName)} · Order #{order.id}</p>
+    <dl className="billing-record-details">
+      {order.reference && <div><dt>Reference</dt><dd>{order.reference}</dd></div>}
+      {submitted && <div><dt>Recorded</dt><dd>{date(submitted)}</dd></div>}
+      {order.amount != null && <div><dt>{complimentary ? 'Amount due' : 'Recorded amount (simulated)'}</dt><dd>{order.currency ?? 'LKR'} {order.amount}</dd></div>}
+    </dl>
+    {(order.decisionNote || order.note) && <p className="mt-3 text-sm text-ink-200">Review note: {order.decisionNote || order.note}</p>}
+  </li>
+}
+
 function Page({ title, children, notice = disclaimer, wide = false }: { title: string; children: React.ReactNode; notice?: string; wide?: boolean }) {
-  return <FrontOfHouse><main className={`mx-auto px-4 py-10 sm:px-6 sm:py-14 ${wide ? 'max-w-6xl' : 'max-w-4xl'}`}>
+  return <FrontOfHouse><section aria-label={title} className={`mx-auto px-4 py-10 sm:px-6 sm:py-14 ${wide ? 'max-w-6xl' : 'max-w-4xl'}`}>
     <p className="letterboard text-tone-gold-400">30-day subscription · no automatic renewal</p>
     <h1 className="font-marquee mt-3 max-w-3xl text-3xl font-extrabold tracking-tight text-fg sm:text-5xl">{title}</h1>
     <p className="mt-5 inline-flex max-w-full items-center gap-2 rounded-md border border-gold-400/30 bg-gold-400/10 px-3 py-2 text-sm font-semibold text-tone-gold-300"><ShieldCheck aria-hidden="true" className="size-4 shrink-0" />{notice}</p>
     <div className="mt-7">{children}</div>
-  </main></FrontOfHouse>
+  </section></FrontOfHouse>
 }
 function Feedback({ error, retry }: { error: string | null; retry?: () => void }) {
   return error ? <div role="alert" className="mt-4 rounded border border-danger-500/40 p-4 text-tone-danger-400">{error} {retry && <Button size="sm" onClick={retry}>Retry</Button>}</div> : null
@@ -44,7 +80,7 @@ function useLoad<T>(load: (signal: AbortSignal) => Promise<T>, key: string) {
 export function Plans() {
   const { value, loading, error, retry } = useLoad<PlansResponse>(billing.plans, 'plans')
   const monthly = value && monthlyPreviewPlan(value)
-  return <Page wide title="A month of more to watch." notice="Complimentary 30-day access · LKR 0 due · no automatic renewal.">
+  return <Page wide title="A month of more to watch." notice="Demo · test cards only · no money charged.">
     <p className="mb-8 max-w-xl text-lg text-ink-200">Explore premium viewing for 30 days. One pass, no recurring charge, no automatic renewal.</p>
     {loading && <p role="status">Loading plans…</p>}
     <Feedback error={error} retry={retry} />
@@ -52,8 +88,8 @@ export function Plans() {
       <article className="billing-panel relative overflow-hidden rounded-2xl border border-violet-400/30 bg-ink-850 p-6 sm:p-9">
         <span className="letterboard text-tone-cyan-300">THE MONTHLY PASS</span>
         <h2 className="font-marquee mt-4 text-3xl font-bold text-fg">30 days, your way.</h2>
-        <p className="mt-5 text-sm text-ink-200">Listed plan price <span>LKR {monthly.price}</span></p>
-        <p className="mt-1 font-marquee text-5xl font-bold tracking-tight text-fg">LKR 0 <span className="text-base font-normal text-ink-200">due today</span></p>
+        <p className="mt-5 text-sm text-ink-200">Monthly subscription · 30 days</p>
+        <p className="mt-1 font-marquee text-5xl font-bold tracking-tight text-fg">LKR {monthly.price} <span className="ml-2 inline-block text-base font-normal text-ink-200">/ 30 days</span></p>
         <div className="my-7 h-px bg-ink-600" />
         <ul className="space-y-4 text-ink-100">
           <li className="flex gap-3"><Check aria-hidden="true" className="size-5 shrink-0 text-tone-cyan-300" />30 days of access</li>
@@ -61,11 +97,11 @@ export function Plans() {
           {monthly.benefit && !/test.only|preview|simulat/i.test(monthly.benefit) && <li className="flex gap-3"><Check aria-hidden="true" className="size-5 shrink-0 text-tone-cyan-300" />{monthly.benefit}</li>}
           <li className="flex gap-3"><Check aria-hidden="true" className="size-5 shrink-0 text-tone-cyan-300" />No automatic renewal</li>
         </ul>
-        {value.demoEnabled ? <Link to="/checkout?plan=MONTHLY" className="mt-9 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-violet-500 px-5 py-3 font-semibold text-white shadow-e2 transition-colors hover:bg-violet-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Continue to complimentary activation <ArrowRight aria-hidden="true" className="size-4" /></Link> : <p role="status" className="mt-8 text-tone-gold-400">Complimentary activation is unavailable.</p>}
-        <p className="mt-4 text-center text-xs text-ink-300">No charge today. No renewal later.</p>
+        {value.demoEnabled ? <Link to="/checkout?plan=MONTHLY" className="mt-9 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-violet-500 px-5 py-3 font-semibold text-white shadow-e2 transition-colors hover:bg-violet-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Continue to demo checkout <ArrowRight aria-hidden="true" className="size-4" /></Link> : <p role="status" className="mt-8 text-tone-gold-400">Demo checkout is unavailable.</p>}
+        <p className="mt-4 text-center text-xs text-ink-300">Demo charge: LKR 0. No automatic renewal.</p>
       </article>
       <aside className="billing-panel flex flex-col justify-center rounded-2xl border border-ink-700 bg-ink-850 p-7 sm:p-10">
-        <div className="flex size-12 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Sparkles aria-hidden="true" /></div>
+        <MembershipPass />
         <h2 className="font-marquee mt-6 text-2xl font-bold text-fg">Made for the next discovery.</h2>
         <p className="mt-3 leading-relaxed text-ink-200">Your pass starts when you activate it and ends after 30 days. Nothing renews behind the scenes.</p>
         <div className="mt-8 border-t border-ink-700 pt-6 text-sm text-ink-300">You can manage your access from your subscription page at any time.</div>
@@ -90,18 +126,31 @@ export function Checkout() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [activePassConflict, setActivePassConflict] = useState(false)
   const [contact, setContact] = useState<BillingContact>(emptyContact)
+  const [testNumber, setTestNumber] = useState('')
+  const [testExpiry, setTestExpiry] = useState('')
+  const [cardErrors, setCardErrors] = useState<{ number?: string; expiry?: string }>({})
+  const formRef = useRef<HTMLFormElement>(null)
+  const fillExample = (brand: DemoBrand) => { setTestNumber(formatCardNumber(DEMO_CARDS[brand])); setTestExpiry(futureDemoExpiry()); setCardErrors({}) }
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof BillingContact, string>>>({})
   const plan = params.get('plan') === 'MONTHLY' && value && monthlyPreviewPlan(value)
   const submit = async () => {
     if (actor == null || !plan || !value?.demoEnabled || saving) return
     const validation = validateBilling(contact)
     setFieldErrors(validation)
-    if (Object.keys(validation).length) return
+    const cardValidation = validateDemoCard(testNumber, testExpiry)
+    setCardErrors(cardValidation)
+    const brand = demoBrand(testNumber)
+    if (Object.keys(validation).length || Object.keys(cardValidation).length || !brand) {
+      const firstField = cardValidation.number ? 'testCardNumber' : cardValidation.expiry ? 'testCardExpiry' : Object.keys(validation)[0]
+      formRef.current?.querySelector<HTMLInputElement>(`input[name="${firstField}"]`)?.focus()
+      return
+    }
     setSaving(true); setSubmitError(null); setActivePassConflict(false)
     try {
       const latest = await billing.plans()
       if (!latest.demoEnabled || !latest.plans.some((p) => p.planName === 'MONTHLY')) throw new Error('Monthly subscription is no longer available.')
-      const order = await billing.complimentary(contact, actor)
+      const order = await billing.demoCard(contact, brand, actor)
+      setTestNumber(''); setTestExpiry('')
       await refreshAccount().catch(() => undefined)
       nav('/checkout/result', { replace: true, state: { order } })
     } catch (cause) {
@@ -116,36 +165,44 @@ export function Checkout() {
     }
     finally { setSaving(false) }
   }
-  return <Page wide title="Your next 30 days start here." notice="Complimentary 30-day access · LKR 0 due · no automatic renewal.">
+  return <Page wide title="Your next 30 days start here." notice="Demo · test cards only · no money charged.">
     {loading && <p role="status">Loading monthly plan…</p>}
     <Feedback error={error} retry={retry} />
-    {value && (!value.demoEnabled ? <p role="status">Complimentary activation is unavailable. <Link to="/plans" className={link}>View plan</Link></p>
+    {value && (!value.demoEnabled ? <p role="status">Demo checkout is unavailable. <Link to="/plans" className={link}>View plan</Link></p>
       : !plan ? <p>Choose the monthly plan on the <Link to="/plans" className={link}>plans page</Link>.</p>
       : <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)]">
         <div className="rounded-2xl border border-ink-700 bg-ink-850 p-5 sm:p-8">
-        <span className="letterboard text-tone-cyan-300">01 / ACTIVATION DETAILS</span>
+        <span className="letterboard text-tone-cyan-300">01 / CHECKOUT DETAILS</span>
         <h2 className="font-marquee mt-3 text-2xl font-bold">Monthly · 30 days</h2>
-        <p className="mt-2 text-sm text-ink-200">Listed plan price LKR {plan.price} · amount due LKR 0 · no automatic renewal</p>
+        <p className="mt-2 text-sm text-ink-200">LKR {plan.price} / 30 days · no automatic renewal</p>
         {!viewer ? <Link to="/login" className={`${link} mt-4 inline-block`}>Sign in to continue</Link>
-          : <form className="mt-5 space-y-5" noValidate onSubmit={(event) => { event.preventDefault(); void submit() }}>
-            <fieldset className="grid gap-4 sm:grid-cols-2"><legend className="mb-4 font-semibold text-fg">Billing contact</legend>
+          : <form ref={formRef} className="mt-5 space-y-6" autoComplete="off" noValidate onSubmit={(event) => { event.preventDefault(); void submit() }}>
+            <fieldset className="demo-card-fields"><legend className="mb-4 font-semibold text-fg">Card details <span className="billing-badge ml-2">Test only</span></legend>
+              <div className="demo-example-row"><span className="text-sm text-ink-300">Use a test example</span><button type="button" className="demo-example" onClick={() => fillExample('VISA')}>Visa</button><button type="button" className="demo-example" onClick={() => fillExample('MASTERCARD')}>Mastercard</button></div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_120px]">
+                <Field label="Test card number" required><Input name="testCardNumber" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={19} placeholder="0000 0000 0000 0000" value={testNumber} invalid={!!cardErrors.number} aria-invalid={!!cardErrors.number} aria-describedby="demo-card-number-help" required onChange={(event) => { setTestNumber(formatCardNumber(event.target.value)); setCardErrors((previous) => ({ ...previous, number: undefined })) }} /><span id="demo-card-number-help" className={`mt-2 block text-xs ${cardErrors.number ? 'text-tone-danger-400' : 'text-ink-300'}`} role={cardErrors.number ? 'alert' : undefined}>{cardErrors.number || 'Use only the supplied examples; never enter a real card.'}</span></Field>
+                <Field label="Expiry" required><Input name="testCardExpiry" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={5} placeholder="MM/YY" value={testExpiry} invalid={!!cardErrors.expiry} aria-invalid={!!cardErrors.expiry} aria-describedby="demo-card-expiry-help" required onChange={(event) => { setTestExpiry(formatExpiry(event.target.value)); setCardErrors((previous) => ({ ...previous, expiry: undefined })) }} /><span id="demo-card-expiry-help" className={`mt-2 block text-xs ${cardErrors.expiry ? 'text-tone-danger-400' : 'text-ink-300'}`} role={cardErrors.expiry ? 'alert' : undefined}>{cardErrors.expiry || 'MM/YY'}</span></Field>
+              </div>
+              <p className="mt-4 flex items-center gap-2 text-xs text-ink-300"><ShieldCheck aria-hidden="true" className="size-4 shrink-0" />Card details stay in this page. No security code is collected.</p>
+            </fieldset>
+            <fieldset className="grid gap-4 border-t border-ink-700 pt-5 sm:grid-cols-2"><legend className="mb-4 font-semibold text-fg">Billing contact</legend>
               {contactFields.map(({ key, label, required, type }) => <Field key={key} label={label} required={required} error={fieldErrors[key]}>
                 <Input name={key} type={type} maxLength={key === 'email' ? 254 : 160} value={contact[key]} invalid={!!fieldErrors[key]}
                   onChange={(event) => { setContact((previous) => ({ ...previous, [key]: event.target.value })); setFieldErrors((previous) => ({ ...previous, [key]: undefined })) }} />
               </Field>)}
               <Field label="Country"><Input value="Sri Lanka (LK)" readOnly /></Field>
             </fieldset>
-            <Button className="min-h-12 w-full sm:w-auto" type="submit" variant="primary" loading={saving} disabled={saving}>Activate 30-day access at LKR 0 <ArrowRight aria-hidden="true" className="size-4" /></Button>
+            <Button className="min-h-12 w-full sm:w-auto" type="submit" variant="primary" loading={saving} disabled={saving}>Complete demo checkout <ArrowRight aria-hidden="true" className="size-4" /></Button>
           </form>}
         </div>
         <aside className="rounded-2xl border border-ink-700 bg-ink-850 p-5 sm:p-7 lg:sticky lg:top-24">
-          <span className="letterboard text-tone-cyan-300">02 / YOUR PASS</span>
-          <div className="billing-pass-art mt-5" aria-hidden="true"><span>SKOPIA</span><Sparkles className="size-10" /><strong>30 DAYS</strong></div>
+          <span className="letterboard text-tone-cyan-300">02 / ORDER SUMMARY</span>
+          <div className="mt-5"><DemoCardPreview number={testNumber} expiry={testExpiry} name={contact.fullName} /></div>
           <h2 className="font-marquee mt-6 text-xl font-bold text-fg">A month to explore.</h2>
-          <p className="mt-2 text-sm text-ink-200">Your access begins on activation and ends after 30 days. We send confirmation to your account email and billing email (if different).</p>
-          <div className="mt-7 flex justify-between gap-4 border-t border-ink-700 pt-5 text-sm"><span className="text-ink-200">Listed monthly price</span><span>LKR {plan.price}</span></div>
-          <div className="mt-3 flex justify-between gap-4 text-sm"><strong className="text-fg">Amount due today</strong><strong className="font-mono text-xl text-tone-cyan-300">LKR 0</strong></div>
-          <p className="mt-3 text-xs text-ink-300">No card required · no automatic renewal</p>
+          <p className="mt-2 text-sm text-ink-200">Your access begins on activation and ends after 30 days. Confirmation is queued for your account email and billing email (if different) after activation.</p>
+          <div className="mt-7 flex justify-between gap-4 border-t border-ink-700 pt-5 text-sm"><span className="text-ink-200">Monthly subscription</span><span>LKR {plan.price}</span></div>
+          <div className="mt-3 flex justify-between gap-4 text-sm"><strong className="text-fg">Actual demo charge</strong><strong className="font-mono text-xl text-tone-cyan-300">LKR 0</strong></div>
+          <p className="mt-3 text-xs text-ink-300">Test cards only · no automatic renewal</p>
         </aside>
       </section>)}
     <Feedback error={submitError} />
@@ -155,14 +212,18 @@ export function Checkout() {
 export function CheckoutResult() {
   const location = useLocation()
   const order = (location.state as { order?: OrderView } | null)?.order
-  const active = order?.method === 'COMPLIMENTARY' && order.status === 'NO_CHARGE_ACTIVE'
-  return <Page title={active ? 'Your 30 days start now.' : order ? 'Order recorded' : 'No checkout result to show'} notice={active ? 'Complimentary activation · LKR 0 due · no automatic renewal.' : 'View your order and subscription details.'}>
+  const demo = order?.method === 'NO_CHARGE_TEST_CARD'
+  const active = (order?.method === 'COMPLIMENTARY' || demo) && order?.status === 'NO_CHARGE_ACTIVE'
+  return <Page title={active ? (demo ? 'Demo checkout complete' : 'Subscription activated') : order ? 'Order recorded' : 'No checkout result to show'} notice={active ? (demo ? 'Demo complete · no money charged · no automatic renewal.' : 'Complimentary activation · LKR 0 due · no automatic renewal.') : 'View your order and subscription details.'}>
     {order ? <section data-activation-result className="billing-panel rounded-2xl border border-violet-400/30 bg-ink-850 p-6 sm:p-10">
       <div className="flex size-12 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Check aria-hidden="true" /></div>
       <p className="letterboard mt-6 text-tone-cyan-300">{active ? 'ACCESS ACTIVATED' : 'ORDER UPDATE'}</p>
       <h2 className="font-marquee mt-2 text-2xl font-bold text-fg sm:text-3xl">{active ? 'Ready when you are.' : 'View your order details.'}</h2>
-      <p className="mt-3 max-w-xl text-ink-200">{active ? 'Your complimentary 30-day access is active. Amount due LKR 0; no payment was processed.' : 'This is a historical simulated order. See your subscription for current access.'}</p>
-      <div className="mt-7 flex flex-wrap gap-6 border-y border-ink-700 py-5 text-sm"><div><span className="block text-ink-300">Order</span><strong className="mt-1 block text-fg">#{order.id}</strong></div><div><span className="block text-ink-300">Status</span><strong className="mt-1 block text-fg">{order.status.replaceAll('_', ' ')}</strong></div>{active && <><div><span className="block text-ink-300">Listed monthly price</span><strong className="mt-1 block text-fg">LKR 500</strong></div><div><span className="block text-ink-300">Amount due</span><strong className="mt-1 block text-fg">LKR 0</strong></div></>}</div>
+      <p className="mt-3 max-w-xl text-ink-200">{active ? (demo ? 'Your 30-day access is active. The LKR 500 checkout was a demonstration; no money was charged.' : 'Your complimentary 30-day access is active. Amount due LKR 0; no payment was processed.') : order.method === 'COMPLIMENTARY' ? 'Your activation request was recorded. Check your subscription for current access.' : 'A previous preview record, not a payment. Check your subscription for current access.'}</p>
+      <div className="mt-7 flex flex-wrap gap-6 border-y border-ink-700 py-5 text-sm"><div><span className="block text-ink-300">Order</span><strong className="mt-1 block text-fg">#{order.id}</strong></div><div><span className="block text-ink-300">Status</span><strong className="mt-1 block text-fg">{orderLabel(order)}</strong></div>{active && <><div><span className="block text-ink-300">Listed monthly price</span><strong className="mt-1 block text-fg">LKR 500</strong></div><div><span className="block text-ink-300">Amount due</span><strong className="mt-1 block text-fg">LKR 0</strong></div></>}</div>
+      {order.reference && <p className="mt-4 break-all text-sm text-ink-200">Reference: {order.reference}</p>}
+      {order.submittedAt && <p className="mt-2 text-sm text-ink-200">Recorded: {date(order.submittedAt)}</p>}
+      {active && <p className="mt-4 text-sm text-ink-200">Confirmation queued for your account email and billing email (if different).</p>}
       <Link to="/subscription" className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-violet-500 px-6 py-3 font-semibold text-white transition-colors hover:bg-violet-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">View your subscription <ArrowRight aria-hidden="true" className="size-4" /></Link>
     </section> : <Link to="/plans" className={link}>View monthly plan</Link>}
   </Page>
@@ -176,18 +237,18 @@ export function Subscription() {
   const orders = useLoad<OrderView[]>(loadOrders, `orders-${actor}`)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  return <Page wide title="Your subscription" notice="Complimentary passes have LKR 0 due and no automatic renewal. Historical billing records are separate.">
+  return <Page wide title="Your subscription" notice="Your access, all in one place. No automatic renewal.">
     {loading && <p role="status">Loading subscription…</p>}
     <Feedback error={error} retry={retry} />
-    {value && <div data-subscription-summary className="billing-panel rounded-2xl border border-violet-400/30 bg-ink-850 p-6 sm:p-9">
+    {value && <div data-subscription-summary className="billing-panel billing-subscription-grid rounded-2xl border border-violet-400/30 bg-ink-850 p-6 sm:p-9"><div>
       <span className="letterboard text-tone-cyan-300">CURRENT ACCESS</span>
       <h2 className="font-marquee mt-3 text-2xl font-bold text-fg">{value.premium ? 'Premium access active' : 'No active premium pass'}</h2>
       <div className="mt-7 grid gap-5 border-t border-ink-700 pt-6 sm:grid-cols-3">
-        <div><p className="letterboard text-ink-300">Plan</p><p className="mt-2 text-lg font-semibold text-fg">{value.planName ?? 'None'}</p></div>
-        <div><p className="letterboard text-ink-300">Status</p><p className="mt-2 text-lg font-semibold text-fg">{value.status ?? 'Not provided'}</p></div>
-        <div><p className="letterboard text-ink-300">Term</p><p className="mt-2 text-sm text-fg">{date(value.startDate)}<br />through {date(value.endDate)}</p></div>
+        <div><p className="letterboard text-ink-300">Plan</p><p className="mt-2 text-lg font-semibold text-fg">{planLabel(value.planName)}</p></div>
+        <div><p className="letterboard text-ink-300">Status</p><p className="mt-2 text-lg font-semibold text-fg">{statusLabel(value.status)}</p></div>
+        <div><p className="letterboard text-ink-300">Term</p><p className="mt-2 text-sm text-fg">{value.startDate || value.endDate ? <>{value.startDate && date(value.startDate)}{value.startDate && value.endDate && <br />}{value.endDate && <>through {date(value.endDate)}</>}</> : 'No current term'}</p></div>
       </div>
-      <p className="mt-5 text-ink-200">{value.adFree ? 'Ad-free viewing is active until this pass ends.' : 'Viewing includes advertisements. Pending sample orders do not grant access.'}</p>
+      <p className="mt-5 text-ink-200">{value.adFree ? 'Ad-free viewing is active until this pass ends.' : 'You can keep watching the free collection, with advertisements.'}</p>
       {value.premium && <div className="mt-6 border-t border-ink-700 pt-5"><p className="mb-3 text-sm">Canceling ends access immediately. No payment or refund occurs for a no-charge pass.</p>
         <Button variant="danger" loading={busy} disabled={busy} onClick={async () => {
           if (actor == null || busy || !window.confirm('Cancel this subscription immediately? Access ends now.')) return
@@ -196,15 +257,18 @@ export function Subscription() {
           catch (cause) { setActionError(message(cause)) } finally { setBusy(false) }
         }}>Cancel immediately</Button>
       </div>}
+      <div className="mt-6 flex flex-wrap gap-3"><Link className="billing-action" to={value.premium ? '/browse' : '/plans'}>{value.premium ? 'Find something to watch' : 'Explore the monthly pass'}<ArrowRight aria-hidden="true" className="size-4" /></Link></div>
       <Feedback error={actionError} />
-    </div>}
-    <section className="mt-6"><h2 className="mb-3 text-xl font-bold">Subscription orders</h2>
-      {orders.loading ? <p role="status">Loading orders…</p> : orders.error ? <Feedback error={orders.error} retry={orders.retry} />
-        : orders.value?.length ? <ul className="grid gap-4 md:grid-cols-2">{orders.value.map((order) => <li data-subscription-order className="rounded-2xl border border-ink-700 bg-ink-850 p-5 sm:p-6" key={order.id}><span className="letterboard text-tone-cyan-300">ORDER #{order.id}</span><h3 className="font-marquee mt-3 text-lg font-semibold text-fg">{order.planName} · {order.status.replaceAll('_', ' ')}</h3><p className="mt-3 text-sm text-ink-300">{order.method === 'COMPLIMENTARY' ? 'Complimentary pass · listed price LKR 500 · amount due LKR 0 · no payment.' : order.method === 'NO_CHARGE_TEST_CARD' ? 'Historical test-card order · amount due LKR 0 · no payment.' : order.status === 'PENDING_REVIEW' ? 'Pending admin review. No entitlement until approval.' : 'Historical simulation only; no payment was made.'}</p>{(order.decisionNote || order.note) && <p className="mt-3 text-sm text-ink-200">Review note: {order.decisionNote || order.note}</p>}</li>)}</ul>
-        : <p>No subscription orders yet.</p>}
-      <Button className="mt-3" size="sm" onClick={() => { orders.retry(); retry() }}>Refresh status and orders</Button>
+    </div><aside className="billing-subscription-pass"><MembershipPass /><p className="mt-4 text-center text-sm text-ink-300">{value.premium ? 'Your membership, your time.' : 'A little preview of your next chapter.'}</p></aside></div>}
+    <section className="mt-8" aria-labelledby="subscription-orders-heading">
+      <div className="billing-section-heading"><div><h2 id="subscription-orders-heading" className="text-xl font-bold">Subscription orders</h2><p className="mt-1 text-sm text-ink-300">Records of requests, not your current access status.</p></div><Button size="sm" onClick={() => { orders.retry(); retry() }}>Refresh</Button></div>
+      {orders.loading ? <p role="status" className="mt-4">Loading orders…</p> : orders.error ? <Feedback error={orders.error} retry={orders.retry} />
+        : orders.value?.length ? <details className="billing-history mt-4"><summary>View order history <span className="billing-badge">{orders.value.length} records</span></summary>
+          <p className="px-5 pt-4 text-sm text-ink-300">Complimentary and demo activations cost LKR 0. Previous previews were simulations; no money moved.</p>
+          <ul className="grid gap-4 p-5 md:grid-cols-2">{[...orders.value].sort((a, b) => b.id - a.id).map((order) => <OrderRecord key={order.id} order={order} />)}</ul>
+        </details> : <div className="billing-order mt-4"><h3>No orders yet</h3><p className="mt-2 text-sm text-ink-300">When you activate a pass, your record will appear here.</p></div>}
     </section>
-    <Link className={`${link} mt-5 inline-block`} to="/billing">Historical demo billing records & refunds</Link>
+    <section className="billing-history-nav mt-6"><div><h2 className="font-semibold text-fg">Looking for earlier billing activity?</h2><p className="mt-2 text-sm text-ink-300">Previous simulated records and refund requests are kept separately.</p></div><Link className="billing-action billing-action-secondary" to="/billing">Billing history &amp; refunds <ArrowRight aria-hidden="true" className="size-4" /></Link></section>
   </Page>
 }
 export function BillingHistory() {
