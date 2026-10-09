@@ -56,6 +56,15 @@ class VideoServiceOwnershipTest {
         org.mockito.Mockito.lenient().when(videos.findById(9L)).thenReturn(Optional.of(video));
     }
 
+    @Test void missingArtworkDoesNotInventRemoteMedia() {
+        var response = service.getVideoById(9L, null);
+        org.assertj.core.api.Assertions.assertThat(response.getThumbnailUrl()).isNull();
+        org.assertj.core.api.Assertions.assertThat(response.getCreatorAvatar()).isNull();
+        video.setThumbnailUrl("/uploads/creator-art.png");
+        org.assertj.core.api.Assertions.assertThat(service.getVideoById(9L, null).getThumbnailUrl())
+                .isEqualTo("/uploads/creator-art.png");
+    }
+
     @Test
     void creatorCannotUpdateAnotherCreatorsVideo() {
         UpdateVideoRequest request = new UpdateVideoRequest();

@@ -8,6 +8,7 @@ import { Loading } from '@/components/Loading'
 import { Button } from '@/components/primitives'
 import { useCatalogue } from '@/lib/useCatalogue'
 import { Tile } from './viewer'
+import { PosterPlate } from '@/components/world'
 
 export function Lobby() {
   const { videos, categories, loading, error, refresh } = useCatalogue()
@@ -36,7 +37,7 @@ export function Lobby() {
               <Link to="/signup" className="screening-secondary">Create an account</Link>
             </div>
           </div>
-          <CinematicDeck />
+          {loading ? <Loading what="Loading featured videos" /> : error ? <p role="status" className="text-fg-muted">Featured videos couldn’t load.</p> : <CinematicDeck videos={available} />}
         </section>
         <section id="programme" className="screening-programme screening-width" aria-labelledby="programme-title">
           <div className="screening-section-head">
@@ -52,8 +53,10 @@ export function Lobby() {
         </section>
         <section id="experience" className="screening-experience screening-width" aria-labelledby="experience-title">
           <div className="screening-window theme-media">
-            <img src="/images/screening-forest.webp" alt="Sunlight reaching through a misty forest" width="1440" height="810" loading="lazy" />
-            <Link to="/browse" className="screening-play" aria-label="Browse the programme"><ArrowUpRight size={26} aria-hidden="true" /><span>Browse</span></Link>
+            {available[0] ? <>
+              <PosterPlate title={available[0].title} seed={available[0].seed} thumbnailUrl={available[0].thumbnailUrl} lettering={false} />
+              <Link to={`/watch/${available[0].id}`} className="screening-play" aria-label={`Watch ${available[0].title}`}><ArrowUpRight size={26} aria-hidden="true" /><span>Watch</span></Link>
+            </> : <p className="p-8 text-fg-muted">{loading ? 'Loading published artwork…' : error ? 'Artwork is currently unavailable.' : 'Artwork will appear when a creator publishes a video.'}</p>}
           </div>
           <div className="screening-experience-copy">
             <h2 id="experience-title">Your time.<br />Your kind of story.</h2>

@@ -1,17 +1,16 @@
 import { useRef, useState, type CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import type { Video } from '@/lib/data'
+import { PosterPlate } from './world'
 
-const scenes = [
-  { image: 'mountain', title: 'Find your next perspective', alt: 'Violet dusk falling across a mountain range' },
-  { image: 'city', title: 'Let a different world pull you in', alt: 'Rain reflecting the lights of a city at night' },
-  { image: 'forest', title: 'Make room for a little wonder', alt: 'Soft sunlight filtering through a forest canopy' },
-]
-
-/** Editorial imagery, independent of the live catalogue. Never advertises a playable title. */
-export function CinematicDeck() {
+/** Published catalogue artwork, linked to the actual watch page. */
+export function CinematicDeck({ videos }: { videos: Video[] }) {
+  const scenes = videos.slice(0, 3)
   const [active, setActive] = useState(0)
   const stage = useRef<HTMLDivElement>(null)
-  const move = (step: number) => setActive((current) => (current + step + scenes.length) % scenes.length)
+  const selected = scenes.length ? active % scenes.length : 0
+  const move = (step: number) => setActive((current) => (current % scenes.length + step + scenes.length) % scenes.length)
   const reset = () => {
     stage.current?.style.setProperty('--look-x', '0deg')
     stage.current?.style.setProperty('--look-y', '0deg')
@@ -25,22 +24,22 @@ export function CinematicDeck() {
         event.currentTarget.style.setProperty('--look-y', `${((event.clientY - box.top) / box.height - .5) * -3}deg`)
       }} onPointerLeave={reset}>
         {scenes.map((scene, index) => {
-          const depth = (index - active + scenes.length) % scenes.length
-          return <div key={scene.image} className="cinema-screen" data-depth={depth}
+          const depth = (index - selected + scenes.length) % scenes.length
+          return <Link to={`/watch/${scene.id}`} tabIndex={depth === 0 ? 0 : -1} aria-label={`Watch ${scene.title}`} key={scene.id} className="cinema-screen" data-depth={depth}
             style={{ '--depth': depth } as CSSProperties} aria-hidden={depth !== 0}>
-            <img src={`/images/screening-${scene.image}.webp`} alt={scene.alt}
-              width="1440" height="810" fetchPriority={index === 0 ? 'high' : 'auto'} draggable={false} />
-          </div>
+            <PosterPlate title={scene.title} seed={scene.seed} thumbnailUrl={scene.thumbnailUrl} lettering={false} />
+          </Link>
         })}
       </div>
+      {!scenes.length && <p className="text-fg-muted text-center">No published videos yet.</p>}
       <div className="cinema-caption">
         <div>
-          <p className="font-medium text-fg" aria-live="polite" aria-atomic="true">{scenes[active].title}</p>
-          <div className="cinema-progress" aria-hidden="true">{scenes.map((scene, index) => <span key={scene.image} className={index === active ? 'is-active' : ''} />)}</div>
+          <p className="font-medium text-fg" aria-live="polite" aria-atomic="true">{scenes[selected]?.title ?? 'Published stories will appear here'}</p>
+          <div className="cinema-progress" aria-hidden="true">{scenes.map((scene, index) => <span key={scene.id} className={index === selected ? 'is-active' : ''} />)}</div>
         </div>
         <div className="flex gap-2">
-          <button className="cinema-arrow" aria-label="Previous scene" onClick={() => move(-1)}><ArrowLeft size={18} /></button>
-          <button className="cinema-arrow" aria-label="Next scene" onClick={() => move(1)}><ArrowRight size={18} /></button>
+          <button disabled={scenes.length < 2} className="cinema-arrow" aria-label="Previous scene" onClick={() => move(-1)}><ArrowLeft size={18} /></button>
+          <button disabled={scenes.length < 2} className="cinema-arrow" aria-label="Next scene" onClick={() => move(1)}><ArrowRight size={18} /></button>
         </div>
       </div>
     </div>

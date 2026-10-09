@@ -202,7 +202,7 @@ Matte tonal layering supplies the ground; offset soft shadows supply lift. Light
 
 **The Offset Depth Rule.** Use the existing offset, softly blurred elevation vocabulary for lifted surfaces; inset sign rules belong to media frames.
 
-The cinematic screen deck is the dimensional signature: three photographic 16:9 screens recede in perspective, with brightness marking depth. The front frame spans 72% of its stage; the city frame spans 78% at a 16% offset, and the forest frame spans 72% at a 29% offset, keeping the screen fan within desktop and mobile layouts. Previous/next controls change the scene on demand; there is no autoplay. Mouse tilt writes local CSS properties and skips reduced-motion users. Deck transitions use 700ms marquee easing. The shared loading indicator echoes three layered film frames while an actual request is pending. Menus enter over 160ms; buttons transition over 200ms and press subtly.
+The cinematic screen deck is the dimensional signature: three photographic 16:9 screens recede in perspective, with brightness marking depth. The front frame spans 72% of its stage; the city frame spans 78% at a 16% offset, and the forest frame spans 72% at a 29% offset, keeping the screen fan within desktop and mobile layouts. Previous/next controls change the scene on demand; there is no autoplay. Mouse tilt writes local CSS properties and skips reduced-motion users. Deck transitions use 700ms marquee easing. The shared loading indicator keeps the supplied logo readable inside a violet-and-cyan orbit while an actual request is pending. The orbit turns linearly over 2.4 seconds; the logo gently scales from 0.97 to 1 with restrained opacity change. Menus enter over 160ms; buttons transition over 200ms and press subtly.
 
 Reduced motion disables deck transitions, tilt tracking, loader animation, and menu animation. Static deck rotations and rear-screen perspective remain in the current CSS. Reduced motion here means suppressing animated transitions and pointer response while preserving the static screen fan. Shared Motion-driven lightbox lift remains a pre-existing implementation limitation rather than a reduced-motion guarantee.
 
@@ -228,14 +228,14 @@ Inset background, small corners, a fine strong-rule border, 40px height, 12px ho
 The supplied brand mark sits alongside Archivo lettering. Shared navigation uses compact 13–14px interface text, semantic hover colors, and active-region markers. Account and notification menus escape sticky/transformed shells through portals. Menus focus their first item, support arrow/Home/End navigation, dismiss on Escape or outside interaction, and return focus to the trigger when dismissed by keyboard. Dialogs trap Tab focus and restore the prior focused element.
 
 ### Cinematic Deck and Loading Frames
-The deck uses generated mountain, city, and forest landscapes documented in `docs/design/image-provenance.json`. These are editorial images separate from server catalogue records. Its scene caption announces changes politely; only the active scene is exposed to assistive technology. Drawn SVG arrows have explicit previous/next labels and 44px targets. Loading uses a polite status label with decorative film frames hidden from assistive technology. Errors offer retry; empty catalogue states say what is missing without inserting fictional titles.
+The deck and experience window use published catalogue thumbnails and link to their actual watch pages. Missing artwork stays visibly unavailable; no generated landscape stands in for a creator upload. Its scene caption announces changes politely; only the active scene is exposed to assistive technology. Drawn SVG arrows have explicit previous/next labels and 44px targets. Loading uses a polite status label with the decorative logo and orbit hidden from assistive technology. Errors offer retry; empty catalogue states say what is missing without inserting fictional titles.
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** use the shared appearance store and semantic text tones in both modes.
 - **Do** use uploaded thumbnail URLs for catalogue media and show “No thumbnail” when absent or broken.
-- **Do** keep atmospheric generated imagery separate from playable catalogue entries and retain its provenance.
+- **Do** use published catalogue artwork for landing features and show missing media honestly.
 - **Do** retain visible focus, honest retry/empty/loading states, and viewport-bounded menus and dialogs.
 - **Do** preserve the pinned self-hosted fonts, supplied logo, and binding brand colors.
 

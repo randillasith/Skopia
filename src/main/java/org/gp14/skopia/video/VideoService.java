@@ -725,7 +725,7 @@ public class VideoService {
                 .category(categoryName)
                 .creatorId(creatorId)
                 .creatorName(creatorName)
-                .creatorAvatar("https://i.pravatar.cc/160?img=12")
+                .creatorAvatar(null)
                 .likeCount(likeCount)
                 .liked(liked)
                 .saved(saved)
@@ -736,7 +736,7 @@ public class VideoService {
     private String thumbnailUrl(Video video, Long viewerId) {
         String url = video.getThumbnailUrl();
         if (url == null || url.isBlank() || url.contains("default-thumbnail.jpg"))
-            return "https://picsum.photos/seed/" + (video.getId() == null ? 1 : video.getId()) + "/640/360";
+            return null;
         if (!access.isPublished(video) && url.startsWith("/uploads/") && viewerId != null)
             return url + "?access=" + tokens.issueMedia(video.getId(), url.substring("/uploads/".length()), viewerId);
         return url;

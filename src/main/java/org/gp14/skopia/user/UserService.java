@@ -20,9 +20,12 @@ public class UserService {
     @Autowired
     private org.gp14.skopia.billing.BillingService billing;
 
+    @Autowired
+    private StaffRoleService staffRoles;
+
     private UserResponse response(User user) {
-        return UserResponse.fromEntity(user, user instanceof org.gp14.skopia.model.user.RegisteredViewer
-                && billing.hasActivePremium(user.getId()));
+        return staffRoles.apply(UserResponse.fromEntity(user, user instanceof org.gp14.skopia.model.user.RegisteredViewer
+                && billing.hasActivePremium(user.getId())), user.getId());
     }
 
     public LoginResponse register(RegisterUserRequest request) {

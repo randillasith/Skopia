@@ -7,7 +7,7 @@
  * as "nothing at all".
  */
 
-import { AlertTriangle, Play } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { Button, EmptyState } from './primitives'
 import { cn } from '@/lib/cn'
 
@@ -18,9 +18,10 @@ export function Loading({ what = 'Loading', className }: { what?: string; classN
       aria-live="polite"
       className={cn('skopia-loading flex flex-col items-center justify-center gap-5 py-16 text-ink-300', className)}
     >
-      <span className="skopia-loader" aria-hidden="true">
-        <span className="skopia-loader__frame" /><span className="skopia-loader__frame" />
-        <span className="skopia-loader__frame"><Play className="size-5 fill-current" /></span>
+      <span className="skopia-logo-loader" aria-hidden="true">
+        <span className="skopia-logo-loader__track" />
+        <span className="skopia-logo-loader__orbit" />
+        <img className="skopia-logo-loader__mark" src="/skopia-logo.png" alt="" width="110" height="101" />
       </span>
       <span className="text-[13px] font-medium">{what}…</span>
     </div>

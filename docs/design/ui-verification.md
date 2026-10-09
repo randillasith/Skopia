@@ -1,8 +1,8 @@
 # UI verification and remaining service boundaries
 
-Verified on 2026-10-09 against the current local source.
+Updated on 2026-10-09 after integration with GitHub main.
 
-- Production frontend build succeeds; 64 frontend tests pass.
+- The production frontend build and tests are rerun after integration.
 - Public channel response and account access controls: 17 targeted backend tests pass.
 - Live MySQL-backed API returns the saved catalogue and public creator directory. No new demonstration accounts or catalogue records were inserted during verification.
 - Guest landing, catalogue filters and channel pages use API records. Missing thumbnails have an explicit neutral state. Decorative cinematic photographs do not advertise playable films.
@@ -12,7 +12,7 @@ Verified on 2026-10-09 against the current local source.
 
 ## Service boundaries
 
-The existing backend still lacks email password recovery, self-service viewer-to-creator conversion, channel moderator assignments, and offline downloads. Their UIs do not claim success. Playlists, queue and followed-channel selections remain account-scoped data stored in this browser; playlist sharing and channel alert promises are unavailable. Existing checkout/refund services explicitly simulate payment and never claim real money movement. Database records already present were preserved.
+GitHub main now supplies email password recovery and transactional email services; delivery depends on configured mail settings. The existing backend still lacks self-service viewer-to-creator conversion, channel moderator assignments, and offline downloads. Their UIs do not claim success. Playlists, queue and followed-channel selections remain account-scoped data stored in this browser; playlist sharing and channel alert promises are unavailable. Existing checkout/refund services explicitly simulate payment and never claim real money movement. Database records already present were preserved.
 
 ## Visual review
 
@@ -21,3 +21,9 @@ The Screening Room direction, photographic deck, softer light appearance and pop
 ## Local development
 
 The frontend is served at http://127.0.0.1:5175 and proxies the current Spring Boot API at port 8081. Start the configured MySQL service before starting the backend. Development seeding remains opt-in; live data is not replaced by fixtures on an API failure.
+
+## Latest integration and media checks
+
+The landing deck and experience window now read published catalogue artwork and link to real watch pages. Missing thumbnail URLs return null rather than random images; missing video files show unavailable and cannot simulate playback. Existing development-seeded records were preserved, so genuine media must be uploaded through the creator workflow.
+
+Java 17 backend tests: 242 tests, zero failures or errors (full suite plus the affected media regression). Frontend build and suite pass; missing-file playback has an explicit regression test. Live browser checks cover desktop/mobile light and dark overflow, unavailable video state, and the logo orbit with reduced motion.

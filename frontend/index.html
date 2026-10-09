@@ -1,8 +1,16 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Run before any external asset reference; never persist the single-use token.
+      if (location.pathname === '/reset/confirm') {
+        window.__skopiaResetToken = new URLSearchParams(location.hash.slice(1)).get('token') || null;
+        if (location.hash || location.search) history.replaceState(history.state, '', location.pathname);
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#ffffff" />
     <script>
       // Apply before styles/React load to avoid flashing the wrong appearance.

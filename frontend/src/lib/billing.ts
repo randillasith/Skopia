@@ -1,6 +1,6 @@
 import { request, requestBlob, submitForm } from './api'
 
-/** Billing preview is server-backed simulation only. No card credentials or real-money checkout. */
+/** Complimentary activation is free; historical simulated billing remains separate. */
 export type DemoPlan = {
   id: number
   planName: string
@@ -12,12 +12,23 @@ export type DemoPlan = {
 export type PlansResponse = { demoEnabled: boolean; previewMode: boolean; currency: string; plans: DemoPlan[] }
 export type BillingContact = { fullName: string; email: string; phone: string; addressLine1: string; addressLine2: string; city: string; postalCode: string; country: 'LK' }
 export type CardBrand = 'VISA' | 'MASTERCARD' | 'AMEX'
+
+// Check contact fields for plausible card sequences without accepting payment credentials.
+function luhn(number: string) {
+  let sum = 0
+  for (let i = number.length - 1, double = false; i >= 0; i--, double = !double) {
+    let digit = Number(number[i]) * (double ? 2 : 1)
+    if (digit > 9) digit -= 9
+    sum += digit
+  }
+  return sum % 10 === 0
+}
 export type OrderView = {
   id: number; planName: string; amount?: number; currency?: string; method?: string; paymentMethod?: string;
   brand?: CardBrand | null; cardBrand?: CardBrand | null; status: string; reference?: string | null;
   createdAt?: string | null; submittedAt?: string | null; billing?: BillingContact | null;
   fullName?: string | null; email?: string | null; note?: string | null; decisionNote?: string | null;
-  hasSlip?: boolean; slipAvailable?: boolean
+  hasSlip?: boolean; slipAvailable?: boolean; paymentId?: number | null; simulation?: boolean
 }
 export const SAMPLE_BANK_INSTRUCTIONS = 'Sample only: use a fictional reference such as SAMPLE-001. Do not send money to any bank account or upload a real transfer receipt.'
 export function validateBilling(billing: BillingContact): Partial<Record<keyof BillingContact, string>> {
@@ -30,6 +41,13 @@ export function validateBilling(billing: BillingContact): Partial<Record<keyof B
   if (!billing.city.trim() || billing.city.length > 80) errors.city = 'Enter your city.'
   if (!billing.postalCode.trim() || billing.postalCode.length > 20) errors.postalCode = 'Enter your postal code.'
   if (billing.country !== 'LK') errors.country = 'Only Sri Lanka is supported.'
+  for (const field of ['fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'city', 'postalCode'] as const) {
+    const candidates = billing[field].match(/(?<![0-9])(?:[0-9][ .-]?){12,18}[0-9](?![0-9])/g) ?? []
+    if (candidates.some((candidate) => {
+      const digits = candidate.replace(/[ .-]/g, '')
+      return luhn(digits)
+    })) errors[field] = 'Card numbers are not allowed in billing contact details.'
+  }
   return errors
 }
 export function validateSlip(slip: File | null): string | null {
@@ -41,7 +59,7 @@ export function validateSlip(slip: File | null): string | null {
 function cleanBilling(input: BillingContact) {
   const errors = validateBilling(input)
   if (Object.keys(errors).length) throw new Error(Object.values(errors)[0])
-  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value.trim()])) as BillingContact
+  return Object.fromEntries((['fullName', 'email', 'phone', 'addressLine1', 'addressLine2', 'city', 'postalCode', 'country'] as const).map((key) => [key, input[key].trim()])) as BillingContact
 }
 export type SubscriptionStatus = {
   adFree: boolean
@@ -179,10 +197,14 @@ export function normalizeUnreadCount(payload: unknown) {
 export const billing = {
   plans: async (signal?: AbortSignal) => normalizePlans(await request<DemoPlan[] | { demoEnabled?: boolean; previewMode?: boolean; currency?: string; plans: DemoPlan[] }>('/api/billing/plans', { signal })),
   orders: (actorId: number, signal?: AbortSignal) => request<OrderView[]>('/api/billing/orders', { actorId, signal }),
-  cardPreview: (brand: CardBrand, contact: BillingContact, actorId: number) => {
-    if (!['VISA', 'MASTERCARD', 'AMEX'].includes(brand)) throw new Error('Choose a supported preview brand.')
-    return request<OrderView>('/api/billing/orders/card-preview', { method: 'POST', actorId, body: { planName: 'MONTHLY', brand, billing: cleanBilling(contact) } })
+  demoCard: (contact: BillingContact, brand: 'VISA' | 'MASTERCARD', actorId: number) => {
+    if (!['VISA', 'MASTERCARD'].includes(brand)) throw new Error('Unsupported test-card brand.')
+    return request<OrderView>('/api/billing/orders/demo-card', { method: 'POST', actorId,
+      body: { planName: 'MONTHLY', brand, billing: cleanBilling(contact) } })
   },
+  complimentary: (contact: BillingContact, actorId: number) =>
+    request<OrderView>('/api/billing/orders/complimentary', { method: 'POST', actorId,
+      body: { planName: 'MONTHLY', billing: cleanBilling(contact) } }),
   bankTransfer: (contact: BillingContact, reference: string, slip: File | null, actorId: number) => {
     const billingContact = cleanBilling(contact)
     const error = validateSlip(slip)

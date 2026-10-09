@@ -103,9 +103,9 @@ it('never presents caption labels as actual tracks without a source; slider keys
 })
 
 it('does not draw fabricated captions for a playing title with only a language label', async () => {
-  await mount(<Player video={{...VIDEOS[0], captions: ['English'], mediaUrl: undefined}} theater={false}
+  await mount(<Player video={{...VIDEOS[0], captions: ['English'], mediaUrl: '/uploads/test-video.mp4'}} theater={false}
     onTheater={() => {}} autoplay={false} onAutoplay={() => {}} onReport={() => {}} />)
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Play"]')!.click())
+  await act(async () => host.querySelector<HTMLVideoElement>('video')!.dispatchEvent(new Event('play')))
   expect(host.textContent).not.toContain('placeholder caption line')
   expect(host.querySelector('button[aria-label="Captions unavailable"]')).toHaveProperty('disabled', true)
 })

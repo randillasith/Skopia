@@ -36,10 +36,14 @@ public class AuthController {
     private final PasswordService passwords;
     private final TokenService tokens;
     private final BillingService billing;
+    private final PasswordResetService passwordReset;
+    private final WelcomeMailService welcomeMail;
+    private final StaffRoleService staffRoles;
 
     public AuthController(UserRepository users, RegisteredViewerRepository viewers,
                           ContentCreatorRepository creators, UserManagementService userManagement,
-                          PasswordService passwords, TokenService tokens, BillingService billing) {
+                          PasswordService passwords, TokenService tokens, BillingService billing,
+                          PasswordResetService passwordReset, WelcomeMailService welcomeMail, StaffRoleService staffRoles) {
         this.users = users;
         this.viewers = viewers;
         this.creators = creators;
@@ -47,6 +51,27 @@ public class AuthController {
         this.passwords = passwords;
         this.tokens = tokens;
         this.billing = billing;
+        this.passwordReset = passwordReset;
+        this.welcomeMail = welcomeMail;
+        this.staffRoles = staffRoles;
+    }
+
+    public record ResetRequest(String email) {}
+    public record ResetConfirm(String token, String newPassword) {}
+
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<Map<String,String>> requestPasswordReset(@RequestBody ResetRequest request, HttpServletRequest servletRequest) {
+        if(!passwordReset.isConfigured())
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message","Password reset is temporarily unavailable."));
+        return ResponseEntity.ok(Map.of("message",passwordReset.request(request.email(),clientIp(servletRequest))));
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<Map<String,String>> confirmPasswordReset(@RequestBody ResetConfirm request) {
+        if(!passwordReset.confirm(request.token(),request.newPassword()))
+            return ResponseEntity.badRequest().body(Map.of("message","Invalid or expired reset request or password."));
+        return ResponseEntity.ok(Map.of("message","Password updated. Sign in with your new password."));
     }
 
     @PostMapping("/register")
@@ -83,6 +108,7 @@ public class AuthController {
             created = viewers.save(viewer);
         }
         userManagement.logActivity(created, creatorRole ? "CREATOR_REGISTERED" : "VIEWER_REGISTERED", clientIp(servletRequest));
+        welcomeMail.queue(created.getEmail());
         return ResponseEntity.status(HttpStatus.CREATED).body(response(created, "Account created"));
     }
 
@@ -132,9 +158,11 @@ public class AuthController {
 
     private LoginResponse response(User user, String message) {
         var dto = org.gp14.skopia.user.dto.UserResponse.fromEntity(user);
+        String staffType = staffRoles.staffType(user.getId()).map(Enum::name).orElse(null);
         return LoginResponse.builder().id(user.getId()).userId(user.getId()).username(user.getUsername())
                 .email(user.getEmail()).firstName(user.getFirstName()).lastName(user.getLastName())
-                .displayName(dto.getDisplayName()).roleType(dto.getRoleType()).userType(dto.getRoleType())
+                .displayName(dto.getDisplayName()).roleType(staffType != null ? staffType : dto.getRoleType()).userType(dto.getRoleType())
+                .accountType(dto.getRoleType()).staffType(staffType)
                 .accountStatus(user.getAccountStatus()).isPremium(user instanceof RegisteredViewer && billing.hasActivePremium(user.getId()))
                 .isVerified(dto.getIsVerified())
                 .token(tokens.issue(user.getId())).message(message).build();
@@ -143,5 +171,12 @@ public class AuthController {
     private ResponseEntity<LoginResponse> bad(String message) { return ResponseEntity.badRequest().body(LoginResponse.builder().message(message).build()); }
     private ResponseEntity<LoginResponse> conflict(String message) { return ResponseEntity.status(HttpStatus.CONFLICT).body(LoginResponse.builder().message(message).build()); }
     private String nonBlank(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
-    private String clientIp(HttpServletRequest request) { return request.getRemoteAddr() == null ? "unknown" : request.getRemoteAddr(); }
+    private String clientIp(HttpServletRequest request) {
+        String peer=request.getRemoteAddr();
+        if("127.0.0.1".equals(peer) || "::1".equals(peer)) {
+            String real=request.getHeader("X-Real-IP");
+            if(real!=null && real.matches("[0-9a-fA-F:.]{2,45}") && !real.contains("..")) return real;
+        }
+        return peer==null ? "unknown" : peer;
+    }
 }

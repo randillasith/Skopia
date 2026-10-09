@@ -1,6 +1,8 @@
 package org.gp14.skopia.security;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.gp14.skopia.model.user.User;
+import org.gp14.skopia.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -15,19 +17,24 @@ public class TokenService {
     private final byte[] secret;
     private final long ttlSeconds;
     private final Clock clock;
+    private final UserRepository users;
 
     public TokenService(@Value("${skopia.auth.secret}") String secret,
-                        @Value("${skopia.auth.ttl-seconds:3600}") long ttlSeconds) {
+                        @Value("${skopia.auth.ttl-seconds:3600}") long ttlSeconds, UserRepository users) {
         if (secret == null || secret.length() < 32) {
             throw new IllegalStateException("skopia.auth.secret must contain at least 32 characters");
         }
         this.secret = secret.getBytes(StandardCharsets.UTF_8);
         this.ttlSeconds = ttlSeconds;
         this.clock = Clock.systemUTC();
+        this.users = users;
     }
 
     public String issue(Long userId) {
-        String payload = userId + ":" + Instant.now(clock).plusSeconds(ttlSeconds).getEpochSecond();
+        long version = users.findById(userId)
+                .map(user -> user.getAuthVersion() == null ? 0L : user.getAuthVersion())
+                .orElse(0L);
+        String payload = userId + ":" + Instant.now(clock).plusSeconds(ttlSeconds).getEpochSecond() + ":" + version;
         String encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         return encoded + "." + sign(encoded);
     }
@@ -39,11 +46,21 @@ public class TokenService {
         try {
             String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
             String[] values = payload.split(":", -1);
-            if (values.length != 2 || Long.parseLong(values[1]) <= Instant.now(clock).getEpochSecond()) return null;
+            if ((values.length != 2 && values.length != 3) || Long.parseLong(values[1]) <= Instant.now(clock).getEpochSecond()) return null;
             return Long.parseLong(values[0]);
         } catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    public boolean verifyForUser(String token, User user) {
+        if(token==null || !user.getId().equals(verifyAndGetUserId(token))) return false;
+        try {
+            String payload=new String(Base64.getUrlDecoder().decode(token.split("\\.", -1)[0]), StandardCharsets.UTF_8);
+            String[] parts=payload.split(":", -1);
+            return (parts.length==2 ? 0L : Long.parseLong(parts[2]))==
+                    (user.getAuthVersion()==null ? 0L : user.getAuthVersion());
+        } catch(RuntimeException ex) { return false; }
     }
 
     /** Short-lived URL scoped to one media file and user. Does not expose the bearer token. */

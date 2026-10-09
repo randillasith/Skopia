@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.*;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@TestPropertySource(properties = "skopia.billing.demo-enabled=true")
+@TestPropertySource(properties = {"skopia.billing.demo-enabled=true", "skopia.billing.legacy-orders-enabled=true"})
 @Transactional
 class VideoSecurityIntegrationTest {
     @Autowired MockMvc mvc;

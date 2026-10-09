@@ -10,6 +10,8 @@ import { request, ApiError } from './api'
 import type { ServerVideo } from './catalogue'
 import type { Account, AccountStatus, StaffRole } from './session'
 import { channelByHandle } from './session'
+import type { StaffCatalog, StaffFormValues, StaffType } from './staff'
+import { buildStaffAssignmentPayload } from './staff'
 
 /* ------------------------------------------------------------ server shape */
 
@@ -24,6 +26,8 @@ export type ServerAccount = {
   displayName: string | null
   roleType: string | null
   userType: string | null
+  accountType?: string | null
+  staffType?: StaffType | null
   accountStatus: string | null
   isPremium: boolean | null
   isVerified: boolean | null
@@ -82,7 +86,7 @@ function statusFrom(accountStatus: string | null | undefined): AccountStatus {
  */
 export function toAccount(server: ServerAccount): Account {
   const userId = server.userId ?? server.id
-  const role = (server.roleType ?? server.userType ?? '').toUpperCase()
+  const role = (server.accountType ?? server.userType ?? server.roleType ?? '').toUpperCase()
   const creator = role.includes('CREATOR')
   const channel = creator ? channelByHandle(server.username) : null
 
@@ -99,7 +103,7 @@ export function toAccount(server: ServerAccount): Account {
     joined: '',
     lastSeen: 'now',
     status: statusFrom(server.accountStatus),
-    staff: staffFrom(server.roleType ?? server.userType),
+    staff: staffFrom(server.staffType ?? server.roleType ?? server.userType),
     channelId: creator && userId != null ? String(userId) : channel?.id ?? null,
     isContentCreator: creator,
     isPremium: server.isPremium === true,
@@ -135,6 +139,16 @@ export const accounts = {
   signUp: (input: SignUpInput) =>
     request<ServerAccount>('/api/auth/register', { method: 'POST', body: input }),
 
+  requestPasswordReset: (email: string) =>
+    request<void>('/api/auth/password-reset/request', {
+      method: 'POST', body: { email }, anonymous: true, referrerPolicy: 'no-referrer',
+    }),
+
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    request<void>('/api/auth/password-reset/confirm', {
+      method: 'POST', body: { token, newPassword }, anonymous: true, referrerPolicy: 'no-referrer',
+    }),
+
   /** Re-resolve the account represented by the stored signed bearer token. */
   me: () => request<ServerAccount>('/api/auth/me'),
 
@@ -167,11 +181,16 @@ export type ServerUserRow = {
   registeredDate: string | null
   roleType?: string | null
   userType?: string | null
+  accountType?: string | null
+  staffType?: StaffType | null
   designation?: string | null
   adminLevel?: string | null
   officerCode?: string | null
   supportLevel?: string | null
+  shift?: string | null
   channelName?: string | null
+  hireDate?: string | null
+  department?: string | null
   isVerified?: boolean | null
   isPremium?: boolean | null
   totalUploads?: number | null
@@ -179,7 +198,7 @@ export type ServerUserRow = {
 
 /** Read an account row as the session's `Account`, grants and all. */
 export function rowToAccount(row: ServerUserRow): Account {
-  const staff = staffFrom(row.roleType ?? row.userType)
+  const staff = staffFrom(row.staffType ?? row.roleType ?? row.userType)
   if (staff.length === 0 && row.adminLevel != null) staff.push('admin')
   else if (staff.length === 0 && row.officerCode != null) staff.push('marketing')
   else if (staff.length === 0 && row.supportLevel != null) staff.push('support')
@@ -225,8 +244,13 @@ export const administration = {
     }),
   createStaff: (input: CreateStaffInput) =>
     request<ServerUserRow>('/api/admin/users/staff', { method: 'POST', body: input }),
+  staffCatalog: () => request<StaffCatalog>('/api/admin/users/staff-catalog'),
+  assignStaff: (userId: number, input: StaffFormValues) =>
+    request<ServerUserRow>(`/api/admin/users/${userId}/staff-assignment`, {
+      method: 'POST', body: buildStaffAssignmentPayload(input, 'assign'),
+    }),
   updateStaff: (userId: number, input: UpdateStaffInput) =>
-    request<ServerUserRow>(`/api/admin/users/staff/${userId}`, { method: 'PATCH', body: input }),
+    request<ServerUserRow>(`/api/admin/users/${userId}/staff-assignment`, { method: 'PATCH', body: input }),
   setCreatorVerified: (userId: number, isVerified: boolean) =>
     request<ServerUserRow>(`/api/admin/users/${userId}/creator-verification`, {
       method: 'PATCH', body: { isVerified },
@@ -280,7 +304,7 @@ export type CreateStaffInput = {
   department?: string
 }
 
-export type UpdateStaffInput = Partial<Omit<CreateStaffInput, 'username' | 'email' | 'password' | 'hireDate' | 'staffType'>>
+export type UpdateStaffInput = Partial<Omit<CreateStaffInput, 'username' | 'email' | 'password'>>
 
 /** What an account holder can change about themselves. */
 export type ProfileChanges = {

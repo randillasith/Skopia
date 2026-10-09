@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.gp14.skopia.model.user.Administrator;
+import org.gp14.skopia.model.user.User;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -31,7 +31,7 @@ public class Refund {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "processed_by")
-    private Administrator processedBy;
+    private User processedBy;
 
     @Column(name = "refund_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal refundAmount;

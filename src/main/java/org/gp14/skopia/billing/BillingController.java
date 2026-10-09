@@ -45,7 +45,7 @@ public class BillingController {
     /** Explicitly reject legacy PAN-bearing routes; no card fields are parsed or stored. */
     @PostMapping({"/checkout", "/change-plan"})
     public void removedCheckout() {
-        throw new ResponseStatusException(HttpStatus.GONE, "Legacy checkout removed; use test-only card-brand preview");
+        throw new ResponseStatusException(HttpStatus.GONE, "Legacy checkout retired; use complimentary activation");
     }
 
     @PostMapping("/cancel")

@@ -27,6 +27,7 @@ public class SecurityConfig {
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, ex) -> response.sendError(401)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/check-handle").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/password-reset/request", "/api/auth/password-reset/confirm").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/billing/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers(HttpMethod.GET, "/api/billing/plans").permitAll()

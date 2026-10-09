@@ -29,14 +29,14 @@ class DemoPlanCatalog {
             SubscriptionPlan plan = existing.get();
             plan.setPrice(new BigDecimal("500.00"));
             plan.setDurationDays(30);
-            plan.setBenefit("Test-only preview; one-time 30-day access, no charge and no automatic renewal");
+            plan.setBenefit("30 days of premium access with no automatic renewal");
             plans.save(plan);
             return;
         }
         SubscriptionPlan plan = new SubscriptionPlan();
         plan.setPlanName(name); plan.setDurationDays(days);
         plan.setPrice(new BigDecimal("500.00"));
-        plan.setBenefit("Test-only preview; one-time 30-day access, no charge and no automatic renewal");
+        plan.setBenefit("30 days of premium access with no automatic renewal");
         plans.save(plan);
     }
 }

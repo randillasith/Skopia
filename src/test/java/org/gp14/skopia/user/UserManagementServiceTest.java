@@ -29,6 +29,12 @@ class UserManagementServiceTest {
     @Mock
     private StaffRepository staffRepository;
     @Mock
+    private StaffAssignmentRepository staffAssignmentRepository;
+    @Mock
+    private StaffRoleService staffRoles;
+    @Mock
+    private StaffOfficerCodeService officerCodes;
+    @Mock
     private AdministratorRepository administratorRepository;
     @Mock
     private SupportOfficerRepository supportOfficerRepository;
@@ -61,6 +67,7 @@ class UserManagementServiceTest {
         actor = new Administrator();
         actor.setId(99L);
         actor.setUsername("admin_actor");
+        lenient().when(staffRoles.apply(any(UserResponse.class), anyLong())).thenAnswer(i -> i.getArgument(0));
     }
 
     @Test
@@ -125,28 +132,24 @@ class UserManagementServiceTest {
         request.setDesignation("Lead Administrator");
         request.setHireDate(LocalDate.now());
         request.setStaffType("ADMINISTRATOR");
-        request.setAdminLevel("SUPER_ADMIN");
+        request.setAdminLevel("SUPER");
 
         when(userRepository.existsByUsername("admin1")).thenReturn(false);
         when(userRepository.existsByEmail("admin1@skopia.com")).thenReturn(false);
 
-        Administrator savedAdmin = new Administrator();
-        savedAdmin.setId(2L);
-        savedAdmin.setUsername(request.getUsername());
-        savedAdmin.setEmail(request.getEmail());
-        savedAdmin.setAccountStatus("ACTIVE");
-        savedAdmin.setDesignation(request.getDesignation());
-        savedAdmin.setHireDate(request.getHireDate());
-        savedAdmin.setAdminLevel(request.getAdminLevel());
-
-        when(administratorRepository.save(any(Administrator.class))).thenReturn(savedAdmin);
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> { User u=i.getArgument(0); u.setId(2L); return u; });
+        when(staffAssignmentRepository.saveAndFlush(any(StaffAssignment.class))).thenAnswer(i -> i.getArgument(0));
+        when(staffRoles.apply(any(UserResponse.class), eq(2L))).thenAnswer(i -> {
+            UserResponse dto=i.getArgument(0); dto.setStaffType("ADMINISTRATOR"); dto.setAdminLevel("SUPER"); return dto;
+        });
 
         UserResponse response = userManagementService.createStaffMember(actor, request, "127.0.0.1");
 
         assertNotNull(response);
-        assertEquals("ADMINISTRATOR", response.getRoleType());
+        assertEquals("USER", response.getRoleType());
+        assertEquals("ADMINISTRATOR", response.getStaffType());
         assertEquals("admin1", response.getUsername());
-        assertEquals("SUPER_ADMIN", response.getAdminLevel());
+        assertEquals("SUPER", response.getAdminLevel());
     }
 
     @Test
@@ -174,10 +177,14 @@ class UserManagementServiceTest {
         when(userRepository.countByAccountStatus("ACTIVE")).thenReturn(8L);
         when(userRepository.countByAccountStatus("SUSPENDED")).thenReturn(1L);
         when(userRepository.countByAccountStatus("BLOCKED")).thenReturn(1L);
-        when(staffRepository.count()).thenReturn(3L);
-        when(administratorRepository.count()).thenReturn(1L);
-        when(supportOfficerRepository.count()).thenReturn(1L);
-        when(marketingOfficerRepository.count()).thenReturn(1L);
+        when(staffAssignmentRepository.count()).thenReturn(3L);
+        when(staffAssignmentRepository.countByStaffType(StaffType.ADMINISTRATOR)).thenReturn(1L);
+        when(staffAssignmentRepository.countByStaffType(StaffType.SUPPORT_OFFICER)).thenReturn(1L);
+        when(staffAssignmentRepository.countByStaffType(StaffType.MARKETING_OFFICER)).thenReturn(1L);
+        when(staffRepository.findAll()).thenReturn(List.of());
+        when(administratorRepository.findAll()).thenReturn(List.of());
+        when(supportOfficerRepository.findAll()).thenReturn(List.of());
+        when(marketingOfficerRepository.findAll()).thenReturn(List.of());
         when(contentCreatorRepository.count()).thenReturn(2L);
         when(contentCreatorRepository.findByIsVerified(true)).thenReturn(Collections.emptyList());
         when(registeredViewerRepository.count()).thenReturn(5L);

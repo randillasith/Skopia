@@ -32,6 +32,10 @@ import {
   GRANTS, STAFF_ROLES,
   type Account, type StaffRole,
 } from '@/lib/session'
+import {
+  buildStaffAssignmentPayload, designationForStaffType, passwordValidationMessage,
+  type StaffCatalog, type StaffFormValues, type StaffType,
+} from '@/lib/staff'
 
 export { AdminPlans, AdminRefunds, AdminAnnouncements } from './admin-billing'
 
@@ -220,6 +224,42 @@ export function AdminDashboard() {
 
 /* ============================================================== accounts */
 
+const EMPTY_DETAILS: StaffFormValues = {
+  staffType: 'SUPPORT_OFFICER', designation: 'Support Officer', hireDate: '',
+  supportLevel: '', shift: '', adminLevel: '', officerCode: '', department: '',
+}
+
+function StaffFields({ value, onChange, catalog }: {
+  value: StaffFormValues
+  onChange: (next: StaffFormValues) => void
+  catalog: StaffCatalog | null
+}) {
+  const set = (field: keyof StaffFormValues, next: string) => onChange({ ...value, [field]: next })
+  const options = (items: { value: string; label: string }[] | undefined) =>
+    (items ?? []).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)
+  return <>
+    <Field label="Staff type" required>
+      <Select value={value.staffType} onChange={(e) => {
+        const staffType = e.target.value as StaffType
+        onChange({ ...EMPTY_DETAILS, designation: designationForStaffType(staffType), hireDate: value.hireDate, staffType })
+      }}>
+        {options(catalog?.staffTypes)}
+      </Select>
+    </Field>
+    <Field label="Designation" hint="Automatic"><Input readOnly value={designationForStaffType(value.staffType)} /></Field>
+    <Field label="Hire date" required><Input required type="date" value={value.hireDate} onChange={(e) => set('hireDate', e.target.value)} /></Field>
+    {value.staffType === 'ADMINISTRATOR' && <Field label="Admin level" required><Select required value={value.adminLevel ?? ''} onChange={(e) => set('adminLevel', e.target.value)}><option value="">Select a level</option>{options(catalog?.adminLevels)}</Select></Field>}
+    {value.staffType === 'SUPPORT_OFFICER' && <>
+      <Field label="Support level" required><Select required value={value.supportLevel ?? ''} onChange={(e) => set('supportLevel', e.target.value)}><option value="">Select a level</option>{options(catalog?.supportLevels)}</Select></Field>
+      <Field label="Shift" required><Select required value={value.shift ?? ''} onChange={(e) => set('shift', e.target.value)}><option value="">Select a shift</option>{options(catalog?.supportShifts)}</Select></Field>
+    </>}
+    {value.staffType === 'MARKETING_OFFICER' && <>
+      <Field label="Officer code" hint="Automatic"><Input readOnly value={value.officerCode ?? ''} placeholder="Generated when saved" /></Field>
+      <Field label="Department" required><Select required value={value.department ?? ''} onChange={(e) => set('department', e.target.value)}><option value="">Select a department</option>{options(catalog?.marketingDepartments)}</Select></Field>
+    </>}
+  </>
+}
+
 export function AdminAccounts() {
   const [q, setQ] = useState('')
   const [role, setRole] = useState('All')
@@ -231,6 +271,8 @@ export function AdminAccounts() {
   const [statusReason, setStatusReason] = useState('')
   
   const [editingStaff, setEditingStaff] = useState<{ row: ServerUserRow; form: UpdateStaffInput } | null>(null)
+  const [assigningStaff, setAssigningStaff] = useState<{ row: ServerUserRow; form: StaffFormValues } | null>(null)
+  const [staffCatalog, setStaffCatalog] = useState<StaffCatalog | null>(null)
   const [busy, setBusy] = useState(false)
   const toast = useToast()
 
@@ -261,6 +303,8 @@ export function AdminAccounts() {
       })
     return () => abort.abort()
   }, [nonce])
+
+  useEffect(() => { administration.staffCatalog().then(setStaffCatalog).catch(() => setStaffCatalog(null)) }, [])
 
   const list = useMemo(
     () =>
@@ -349,9 +393,10 @@ export function AdminAccounts() {
       setEditingStaff({
         row,
         form: {
+          staffType: row.staffType ?? 'SUPPORT_OFFICER', hireDate: row.hireDate ?? '',
           designation: row.designation ?? '', firstName: row.firstName ?? '', lastName: row.lastName ?? '',
-          adminLevel: row.adminLevel ?? undefined, supportLevel: row.supportLevel ?? undefined,
-          officerCode: row.officerCode ?? undefined,
+          adminLevel: row.adminLevel ?? undefined, supportLevel: row.supportLevel ?? undefined, shift: row.shift ?? undefined,
+          officerCode: row.officerCode ?? undefined, department: row.department ?? undefined,
         },
       })
     } catch (cause) {
@@ -365,7 +410,7 @@ export function AdminAccounts() {
     if (!editingStaff) return
     setBusy(true)
     try {
-      await administration.updateStaff(editingStaff.row.id, editingStaff.form)
+      await administration.updateStaff(editingStaff.row.id, buildStaffAssignmentPayload(editingStaff.form as StaffFormValues, 'edit'))
       toast({ title: `@${editingStaff.row.username} updated`, tone: 'ok' })
       setEditingStaff(null)
       refresh()
@@ -374,6 +419,20 @@ export function AdminAccounts() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const openAssignment = (row: ServerUserRow) => setAssigningStaff({ row, form: { ...EMPTY_DETAILS } })
+  const saveAssignment = async () => {
+    if (!assigningStaff) return
+    setBusy(true)
+    try {
+      await administration.assignStaff(assigningStaff.row.id, assigningStaff.form)
+      toast({ title: `Staff access assigned to @${assigningStaff.row.username}`, tone: 'ok' })
+      setAssigningStaff(null)
+      refresh()
+    } catch (cause) {
+      toast({ title: cause instanceof ApiError ? cause.message : 'Staff access could not be assigned.', tone: 'bad' })
+    } finally { setBusy(false) }
   }
 
   return (
@@ -432,7 +491,7 @@ export function AdminAccounts() {
                         <Avatar name={a.name} size={32} />
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-fg">{a.name}</span>
-                          <span className="block truncate font-mono text-[11px] text-ink-300">
+                          <span className="block break-all font-mono text-[11px] text-ink-300 md:truncate">
                             @{a.handle} · #{a.id} {a.email ? `· ${a.email}` : ''}
                           </span>
                         </span>
@@ -471,28 +530,33 @@ export function AdminAccounts() {
                     </Td>
                     <Td><span className="font-mono tabular-nums text-ink-300">{a.joined || '—'}</span></Td>
                     <Td>
-                      <div className="flex justify-end gap-1.5">
+                      <div className="grid grid-cols-1 gap-2 md:flex md:justify-end">
                         {a.staff.length > 0 && (
-                          <Button size="sm" variant="quiet" disabled={busy} onClick={() => openStaffEditor(a)}>
+                          <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="quiet" disabled={busy} onClick={() => openStaffEditor(a)}>
                             Edit staff
                           </Button>
                         )}
+                        {a.staff.length === 0 && row && a.status === 'Active' && (
+                          <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="primary" disabled={busy || !staffCatalog} onClick={() => openAssignment(row)}>
+                            Assign staff
+                          </Button>
+                        )}
                         {a.isContentCreator && (
-                          <Button size="sm" variant="quiet" disabled={busy} onClick={() => setCreatorVerification(a)}>
+                          <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="quiet" disabled={busy} onClick={() => setCreatorVerification(a)}>
                             {a.isVerified ? 'Unverify' : 'Verify'}
                           </Button>
                         )}
                         {a.status === 'Active' ? (
                           <>
-                            <Button size="sm" variant="quiet" disabled={busy} onClick={() => openStatusModal(a, 'SUSPENDED')}>
+                            <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="quiet" disabled={busy} onClick={() => openStatusModal(a, 'SUSPENDED')}>
                               Suspend
                             </Button>
-                            <Button size="sm" variant="danger" icon={<Ban className="size-3.5" />} disabled={busy} onClick={() => openStatusModal(a, 'BLOCKED')}>
+                            <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="danger" icon={<Ban className="size-3.5" />} disabled={busy} onClick={() => openStatusModal(a, 'BLOCKED')}>
                               {a.isContentCreator ? 'Ban Channel' : 'Ban User'}
                             </Button>
                           </>
                         ) : (
-                          <Button size="sm" variant="primary" icon={<CheckCircle2 className="size-3.5" />} disabled={busy} onClick={() => openStatusModal(a, 'ACTIVE')}>
+                          <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="primary" icon={<CheckCircle2 className="size-3.5" />} disabled={busy} onClick={() => openStatusModal(a, 'ACTIVE')}>
                             Restore
                           </Button>
                         )}
@@ -603,12 +667,18 @@ export function AdminAccounts() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="First name"><Input value={editingStaff.form.firstName ?? ''} onChange={(e) => setEditingStaff({ ...editingStaff, form: { ...editingStaff.form, firstName: e.target.value } })} /></Field>
             <Field label="Last name"><Input value={editingStaff.form.lastName ?? ''} onChange={(e) => setEditingStaff({ ...editingStaff, form: { ...editingStaff.form, lastName: e.target.value } })} /></Field>
-            <Field label="Designation"><Input value={editingStaff.form.designation ?? ''} onChange={(e) => setEditingStaff({ ...editingStaff, form: { ...editingStaff.form, designation: e.target.value } })} /></Field>
-            {editingStaff.row.roleType === 'ADMINISTRATOR' && <Field label="Admin level"><Input value={editingStaff.form.adminLevel ?? ''} onChange={(e) => setEditingStaff({ ...editingStaff, form: { ...editingStaff.form, adminLevel: e.target.value } })} /></Field>}
-            {editingStaff.row.roleType === 'SUPPORT_OFFICER' && <Field label="Support level"><Input value={editingStaff.form.supportLevel ?? ''} onChange={(e) => setEditingStaff({ ...editingStaff, form: { ...editingStaff.form, supportLevel: e.target.value } })} /></Field>}
-            {editingStaff.row.roleType === 'MARKETING_OFFICER' && <Field label="Officer code"><Input value={editingStaff.form.officerCode ?? ''} onChange={(e) => setEditingStaff({ ...editingStaff, form: { ...editingStaff.form, officerCode: e.target.value } })} /></Field>}
+            <StaffFields value={editingStaff.form as StaffFormValues} catalog={staffCatalog} onChange={(form) => setEditingStaff({ ...editingStaff, form })} />
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!assigningStaff} onClose={() => setAssigningStaff(null)} title={assigningStaff ? `Assign staff access to @${assigningStaff.row.username}` : 'Assign staff access'} width="lg"
+        footer={<><Button variant="quiet" onClick={() => setAssigningStaff(null)}>Cancel</Button><Button loading={busy} disabled={!staffCatalog || !assigningStaff?.form.designation || !assigningStaff?.form.hireDate} onClick={saveAssignment}>Assign staff access</Button></>}>
+        {assigningStaff && <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void saveAssignment() }}>
+          <div className="rounded-lg border border-ink-700 bg-ink-850 p-3"><p className="font-medium text-fg">@{assigningStaff.row.username}</p><p className="text-xs text-ink-300">{assigningStaff.row.email}</p></div>
+          <p className="text-sm text-ink-300">This grants staff access without changing the password, creator channel, viewer history or account ID.</p>
+          <div className="grid gap-4 sm:grid-cols-2"><StaffFields value={assigningStaff.form} catalog={staffCatalog} onChange={(form) => setAssigningStaff({ ...assigningStaff, form })} /></div>
+        </form>}
       </Modal>
     </BackOfHouse>
   )
@@ -618,68 +688,84 @@ export function AdminAccounts() {
 
 const EMPTY_STAFF: CreateStaffInput = {
   username: '', email: '', password: '', firstName: '', lastName: '',
-  designation: '', hireDate: '', staffType: 'SUPPORT_OFFICER',
+  designation: 'Support Officer', hireDate: '', staffType: 'SUPPORT_OFFICER', supportLevel: '', shift: '',
 }
 
 export function AdminRoles() {
   const toast = useToast()
   const [creating, setCreating] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState('')
   const [saving, setSaving] = useState(false)
   const [staffForm, setStaffForm] = useState<CreateStaffInput>(EMPTY_STAFF)
-  const [roleAccounts, setRoleAccounts] = useState<Account[]>([])
+  const [assignForm, setAssignForm] = useState<StaffFormValues>({ ...EMPTY_DETAILS })
+  const [roleRows, setRoleRows] = useState<ServerUserRow[]>([])
+  const [catalog, setCatalog] = useState<StaffCatalog | null>(null)
   const [roleNonce, setRoleNonce] = useState(0)
 
   useEffect(() => {
     const abort = new AbortController()
-    administration.users(abort.signal)
-      .then((rows) => setRoleAccounts(rows.map(rowToAccount)))
-      .catch(() => setRoleAccounts([]))
+    administration.users(abort.signal).then(setRoleRows).catch(() => setRoleRows([]))
+    administration.staffCatalog().then((next) => {
+      setCatalog(next)
+      setStaffForm((current) => ({ ...current,
+        staffType: (next.staffTypes[0]?.value ?? current.staffType) as StaffType,
+        adminLevel: next.adminLevels[0]?.value, supportLevel: next.supportLevels[0]?.value,
+        shift: next.supportShifts[0]?.value, department: next.marketingDepartments[0]?.value,
+      }))
+      setAssignForm((current) => ({ ...current,
+        staffType: (next.staffTypes[0]?.value ?? current.staffType) as StaffType,
+        adminLevel: next.adminLevels[0]?.value, supportLevel: next.supportLevels[0]?.value,
+        shift: next.supportShifts[0]?.value, department: next.marketingDepartments[0]?.value,
+      }))
+    }).catch(() => setCatalog(null))
     return () => abort.abort()
   }, [roleNonce])
 
-  const staffCounts = (Object.keys(STAFF_ROLES) as StaffRole[]).map((r) => ({
-    role: r,
-    holders: roleAccounts.filter((a) => a.staff.includes(r)),
-  }))
+  const roleAccounts = roleRows.map(rowToAccount)
+  const eligible = roleRows.filter((row) => !row.staffType && row.accountStatus?.toUpperCase() === 'ACTIVE')
+  const staffCounts = (Object.keys(STAFF_ROLES) as StaffRole[]).map((role) => ({ role, holders: roleAccounts.filter((a) => a.staff.includes(role)) }))
 
   const createStaff = async () => {
+    const passwordError = passwordValidationMessage(staffForm.password)
+    if (passwordError) { toast({ title: passwordError, tone: 'bad' }); return }
     setSaving(true)
     try {
-      await administration.createStaff(staffForm)
+      await administration.createStaff(buildStaffAssignmentPayload(staffForm as StaffFormValues, 'create') as CreateStaffInput)
       toast({ title: `@${staffForm.username} created as staff`, tone: 'ok' })
-      setRoleNonce((n) => n + 1)
-      setStaffForm(EMPTY_STAFF)
-      setCreating(false)
-    } catch (cause) {
-      toast({ title: cause instanceof ApiError ? cause.message : 'The staff account could not be created.', tone: 'bad' })
-    } finally {
-      setSaving(false)
-    }
+      setRoleNonce((n) => n + 1); setStaffForm(EMPTY_STAFF); setCreating(false)
+    } catch (cause) { toast({ title: cause instanceof ApiError ? cause.message : 'The staff account could not be created.', tone: 'bad' }) }
+    finally { setSaving(false) }
+  }
+
+  const assignStaff = async () => {
+    const id = Number(selectedUserId)
+    if (!Number.isFinite(id)) return
+    setSaving(true)
+    try {
+      await administration.assignStaff(id, assignForm)
+      const row = roleRows.find((candidate) => candidate.id === id)
+      toast({ title: `Staff access assigned to @${row?.username ?? id}`, tone: 'ok' })
+      setRoleNonce((n) => n + 1); setSelectedUserId(''); setAssigning(false)
+    } catch (cause) { toast({ title: cause instanceof ApiError ? cause.message : 'Staff access could not be assigned.', tone: 'bad' }) }
+    finally { setSaving(false) }
   }
 
   return (
-    <BackOfHouse title="Roles &amp; Permissions" actions={<Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>Create staff</Button>}>
-      <Section title="Platform Staff Roles" className="mt-4">
+    <BackOfHouse title="Roles &amp; Permissions">
+      <div className="mt-2 grid gap-2 sm:flex sm:justify-end">
+        <Button className="min-h-11 sm:min-h-10" variant="primary" icon={<ShieldCheck className="size-4" />} disabled={!catalog || eligible.length === 0} onClick={() => setAssigning(true)}>Assign existing account</Button>
+        <Button className="min-h-11 sm:min-h-10" icon={<Plus className="size-4" />} disabled={!catalog} onClick={() => setCreating(true)}>Create new staff</Button>
+      </div>
+      <Section title="Platform Staff Roles" className="mt-6">
         <div className="grid gap-4 sm:grid-cols-3">
           {staffCounts.map(({ role, holders }) => (
             <div key={role} className="rounded-lg border border-ink-700 bg-ink-850 p-4">
               <p className="letterboard text-ink-300">{STAFF_ROLES[role].console}</p>
-              <p className="font-marquee mt-1 text-[15px] font-bold text-fg">
-                {STAFF_ROLES[role].label}
-              </p>
-              <p className="font-marquee mt-3 text-[30px] font-bold tabular-nums leading-none text-fg">
-                {holders.length}
-              </p>
+              <p className="font-marquee mt-1 text-[15px] font-bold text-fg">{STAFF_ROLES[role].label}</p>
+              <p className="font-marquee mt-3 text-[30px] font-bold tabular-nums leading-none text-fg">{holders.length}</p>
               <ul className="mt-3 space-y-1 border-t border-ink-800 pt-3">
-                {holders.length === 0 ? (
-                  <li className="font-mono text-[12px] text-ink-400">None registered</li>
-                ) : (
-                  holders.map((h) => (
-                    <li key={h.id} className="truncate font-mono text-[12px] text-ink-300">
-                      @{h.handle}
-                    </li>
-                  ))
-                )}
+                {holders.length === 0 ? <li className="font-mono text-[12px] text-ink-400">None registered</li> : holders.map((holder) => <li key={holder.id} className="truncate font-mono text-[12px] text-ink-300">@{holder.handle}</li>)}
               </ul>
             </div>
           ))}
@@ -687,66 +773,30 @@ export function AdminRoles() {
       </Section>
 
       <Section title="Platform Permissions Matrix" className="mt-10">
-        <div className="rounded-lg border border-ink-700 bg-ink-850">
-          <Table labels={['Capability', 'Scope', 'Granted By']}>
-            <thead>
-              <tr><Th className="w-[46%]">Capability</Th><Th>Scope</Th><Th>Granted By</Th></tr>
-            </thead>
-            <tbody>
-              {GRANTS.map((g) => (
-                <Tr key={g.what}>
-                  <Td className="font-medium text-fg">{g.what}</Td>
-                  <Td>
-                    <Letterboard
-                      tone={
-                        g.scope === 'Platform' ? 'soon'
-                          : g.scope === 'Channel' ? 'live'
-                            : g.scope === 'Account' ? 'neutral' : 'dead'
-                      }
-                    >
-                      {g.scope}
-                    </Letterboard>
-                  </Td>
-                  <Td className="text-ink-300">{g.by}</Td>
-                </Tr>
-              ))}
-            </tbody>
-          </Table>
-        </div>
+        <div className="rounded-lg border border-ink-700 bg-ink-850"><Table labels={['Capability', 'Scope', 'Granted By']}><thead><tr><Th className="w-[46%]">Capability</Th><Th>Scope</Th><Th>Granted By</Th></tr></thead>
+          <tbody>{GRANTS.map((grant) => <Tr key={grant.what}><Td className="font-medium text-fg">{grant.what}</Td><Td><Letterboard tone={grant.scope === 'Platform' ? 'soon' : grant.scope === 'Channel' ? 'live' : grant.scope === 'Account' ? 'neutral' : 'dead'}>{grant.scope}</Letterboard></Td><Td className="text-ink-300">{grant.by}</Td></Tr>)}</tbody>
+        </Table></div>
       </Section>
 
-      <Modal
-        open={creating}
-        onClose={() => setCreating(false)}
-        title="Create staff account"
-        width="lg"
-        footer={
-          <>
-            <Button variant="quiet" onClick={() => setCreating(false)}>Cancel</Button>
-            <Button
-              loading={saving}
-              disabled={!staffForm.username || !staffForm.email || staffForm.password.length < 8 || !staffForm.designation || !staffForm.hireDate}
-              onClick={createStaff}
-            >Create staff</Button>
-          </>
-        }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Username"><Input value={staffForm.username} onChange={(e) => setStaffForm({ ...staffForm, username: e.target.value })} /></Field>
-          <Field label="Email"><Input type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} /></Field>
+      <Modal open={creating} onClose={() => setCreating(false)} title="Create staff account" width="lg"
+        footer={<><Button variant="quiet" onClick={() => setCreating(false)}>Cancel</Button><Button loading={saving} disabled={!staffForm.username || !staffForm.email || !!passwordValidationMessage(staffForm.password) || !staffForm.designation || !staffForm.hireDate} onClick={createStaff}>Create staff</Button></>}>
+        <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); void createStaff() }}>
+          <Field label="Username" required><Input required value={staffForm.username} onChange={(e) => setStaffForm({ ...staffForm, username: e.target.value })} /></Field>
+          <Field label="Email" required><Input required type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} /></Field>
           <Field label="First name"><Input value={staffForm.firstName} onChange={(e) => setStaffForm({ ...staffForm, firstName: e.target.value })} /></Field>
           <Field label="Last name"><Input value={staffForm.lastName} onChange={(e) => setStaffForm({ ...staffForm, lastName: e.target.value })} /></Field>
-          <Field label="Role">
-            <Select value={staffForm.staffType} onChange={(e) => setStaffForm({ ...staffForm, staffType: e.target.value as CreateStaffInput['staffType'] })}>
-              <option value="ADMINISTRATOR">Administrator</option>
-              <option value="SUPPORT_OFFICER">Support officer</option>
-              <option value="MARKETING_OFFICER">Marketing officer</option>
-            </Select>
-          </Field>
-          <Field label="Designation"><Input value={staffForm.designation} onChange={(e) => setStaffForm({ ...staffForm, designation: e.target.value })} /></Field>
-          <Field label="Hire date"><Input type="date" value={staffForm.hireDate} onChange={(e) => setStaffForm({ ...staffForm, hireDate: e.target.value })} /></Field>
-          <Field label="Temporary password" hint="At least 8 characters"><Input type="password" maxLength={72} value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} /></Field>
-        </div>
+          <Field label="Temporary password" hint="8–72 UTF-8 bytes" required><Input required type="password" autoComplete="new-password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} /></Field>
+          <StaffFields value={staffForm as StaffFormValues} catalog={catalog} onChange={(form) => setStaffForm({ ...staffForm, ...form })} />
+        </form>
+      </Modal>
+
+      <Modal open={assigning} onClose={() => setAssigning(false)} title="Assign staff access" width="lg"
+        footer={<><Button variant="quiet" onClick={() => setAssigning(false)}>Cancel</Button><Button loading={saving} disabled={!selectedUserId || !assignForm.designation || !assignForm.hireDate} onClick={assignStaff}>Assign staff access</Button></>}>
+        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void assignStaff() }}>
+          <Field label="Existing active account" required><Select required value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}><option value="">Select an account</option>{eligible.map((row) => <option key={row.id} value={row.id}>@{row.username} · {row.email}{row.channelName ? ' · Creator' : ''}</option>)}</Select></Field>
+          <p className="-mt-2 text-xs text-ink-300">Password and account history stay unchanged. Staff access is added without replacing creator/viewer data, credentials or the account ID.</p>
+          <div className="grid gap-4 sm:grid-cols-2"><StaffFields value={assignForm} catalog={catalog} onChange={setAssignForm} /></div>
+        </form>
       </Modal>
     </BackOfHouse>
   )

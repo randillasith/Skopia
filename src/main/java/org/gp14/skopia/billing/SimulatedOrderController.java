@@ -19,14 +19,32 @@ public class SimulatedOrderController {
 
     @PostMapping("/orders/card-preview") @ResponseStatus(HttpStatus.CREATED)
     public BillingDtos.OrderView card(@AuthenticationPrincipal User user,@RequestBody JsonNode body) {
+        orders.checkLegacyOrdersEnabled();
         exact(body,Set.of("planName","brand","billing"),Set.of());
         return orders.card(id(user),string(body,"planName"),string(body,"brand"),contact(body.get("billing")));
+    }
+    @PostMapping("/orders/no-charge-card") @ResponseStatus(HttpStatus.CREATED)
+    public BillingDtos.OrderView noChargeCard(@AuthenticationPrincipal User user,@RequestBody JsonNode body) {
+        orders.checkLegacyOrdersEnabled();
+        exact(body,Set.of("planName","brand","billing"),Set.of());
+        return orders.noChargeCard(id(user),string(body,"planName"),string(body,"brand"),contact(body.get("billing")));
+    }
+    @PostMapping("/orders/demo-card") @ResponseStatus(HttpStatus.CREATED)
+    public BillingDtos.OrderView demoCard(@AuthenticationPrincipal User user,@RequestBody JsonNode body) {
+        exact(body,Set.of("planName","brand","billing"),Set.of());
+        return orders.demoCard(id(user),string(body,"planName"),string(body,"brand"),contact(body.get("billing")));
+    }
+    @PostMapping("/orders/complimentary") @ResponseStatus(HttpStatus.CREATED)
+    public BillingDtos.OrderView complimentary(@AuthenticationPrincipal User user,@RequestBody JsonNode body) {
+        exact(body,Set.of("planName","billing"),Set.of());
+        return orders.complimentary(id(user),string(body,"planName"),contact(body.get("billing")));
     }
     @PostMapping(value="/orders/bank-transfer",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public BillingDtos.OrderView bank(@AuthenticationPrincipal User user,@RequestParam String planName,
             @RequestParam String billing,@RequestParam(required=false) String reference,
             @RequestPart("slip") MultipartFile slip,jakarta.servlet.http.HttpServletRequest request) {
+        orders.checkLegacyOrdersEnabled();
         if(!request.getParameterMap().keySet().stream()
                 .allMatch(key->Set.of("planName","billing","reference").contains(key)))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unexpected form field");

@@ -17,7 +17,7 @@ class UploadedMediaControllerTest {
     @Test void refusesUnreferencedAndRequiresSignedPremiumAccessOnRange() throws Exception {
         VideoRepository videos = mock(VideoRepository.class);
         VideoAccessService access = mock(VideoAccessService.class);
-        TokenService tokens = new TokenService("test-only-secret-at-least-thirty-two-characters-long", 3600);
+        TokenService tokens = new TokenService("test-only-secret-at-least-thirty-two-characters-long", 3600, org.mockito.Mockito.mock(org.gp14.skopia.repository.UserRepository.class));
         UploadedMediaController controller = new UploadedMediaController(videos, access, tokens);
         String filename = UUID.randomUUID() + ".mp4";
         Path file = Path.of("uploads", filename);
