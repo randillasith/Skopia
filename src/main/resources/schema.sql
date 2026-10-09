@@ -434,7 +434,7 @@ CREATE TABLE IF NOT EXISTS ad_campaigns (
     campaign_status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES marketing_officers(employee_no) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE RESTRICT,
     -- The serving query filters on status and intersects the window; without
     -- these it is a full scan on every pre-roll.
     INDEX ix_campaign_status (campaign_status),

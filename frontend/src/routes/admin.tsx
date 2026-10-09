@@ -271,7 +271,6 @@ export function AdminAccounts() {
   const [statusReason, setStatusReason] = useState('')
   
   const [editingStaff, setEditingStaff] = useState<{ row: ServerUserRow; form: UpdateStaffInput } | null>(null)
-  const [assigningStaff, setAssigningStaff] = useState<{ row: ServerUserRow; form: StaffFormValues } | null>(null)
   const [staffCatalog, setStaffCatalog] = useState<StaffCatalog | null>(null)
   const [busy, setBusy] = useState(false)
   const toast = useToast()
@@ -421,19 +420,6 @@ export function AdminAccounts() {
     }
   }
 
-  const openAssignment = (row: ServerUserRow) => setAssigningStaff({ row, form: { ...EMPTY_DETAILS } })
-  const saveAssignment = async () => {
-    if (!assigningStaff) return
-    setBusy(true)
-    try {
-      await administration.assignStaff(assigningStaff.row.id, assigningStaff.form)
-      toast({ title: `Staff access assigned to @${assigningStaff.row.username}`, tone: 'ok' })
-      setAssigningStaff(null)
-      refresh()
-    } catch (cause) {
-      toast({ title: cause instanceof ApiError ? cause.message : 'Staff access could not be assigned.', tone: 'bad' })
-    } finally { setBusy(false) }
-  }
 
   return (
     <BackOfHouse title="Accounts &amp; Channels">
@@ -536,11 +522,7 @@ export function AdminAccounts() {
                             Edit staff
                           </Button>
                         )}
-                        {a.staff.length === 0 && row && a.status === 'Active' && (
-                          <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="primary" disabled={busy || !staffCatalog} onClick={() => openAssignment(row)}>
-                            Assign staff
-                          </Button>
-                        )}
+
                         {a.isContentCreator && (
                           <Button size="sm" className="min-h-11 w-full md:min-h-8 md:w-auto" variant="quiet" disabled={busy} onClick={() => setCreatorVerification(a)}>
                             {a.isVerified ? 'Unverify' : 'Verify'}
@@ -672,14 +654,7 @@ export function AdminAccounts() {
         )}
       </Modal>
 
-      <Modal open={!!assigningStaff} onClose={() => setAssigningStaff(null)} title={assigningStaff ? `Assign staff access to @${assigningStaff.row.username}` : 'Assign staff access'} width="lg"
-        footer={<><Button variant="quiet" onClick={() => setAssigningStaff(null)}>Cancel</Button><Button loading={busy} disabled={!staffCatalog || !assigningStaff?.form.designation || !assigningStaff?.form.hireDate} onClick={saveAssignment}>Assign staff access</Button></>}>
-        {assigningStaff && <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void saveAssignment() }}>
-          <div className="rounded-lg border border-ink-700 bg-ink-850 p-3"><p className="font-medium text-fg">@{assigningStaff.row.username}</p><p className="text-xs text-ink-300">{assigningStaff.row.email}</p></div>
-          <p className="text-sm text-ink-300">This grants staff access without changing the password, creator channel, viewer history or account ID.</p>
-          <div className="grid gap-4 sm:grid-cols-2"><StaffFields value={assigningStaff.form} catalog={staffCatalog} onChange={(form) => setAssigningStaff({ ...assigningStaff, form })} /></div>
-        </form>}
-      </Modal>
+
     </BackOfHouse>
   )
 }
@@ -694,11 +669,8 @@ const EMPTY_STAFF: CreateStaffInput = {
 export function AdminRoles() {
   const toast = useToast()
   const [creating, setCreating] = useState(false)
-  const [assigning, setAssigning] = useState(false)
-  const [selectedUserId, setSelectedUserId] = useState('')
   const [saving, setSaving] = useState(false)
   const [staffForm, setStaffForm] = useState<CreateStaffInput>(EMPTY_STAFF)
-  const [assignForm, setAssignForm] = useState<StaffFormValues>({ ...EMPTY_DETAILS })
   const [roleRows, setRoleRows] = useState<ServerUserRow[]>([])
   const [catalog, setCatalog] = useState<StaffCatalog | null>(null)
   const [roleNonce, setRoleNonce] = useState(0)
@@ -713,17 +685,11 @@ export function AdminRoles() {
         adminLevel: next.adminLevels[0]?.value, supportLevel: next.supportLevels[0]?.value,
         shift: next.supportShifts[0]?.value, department: next.marketingDepartments[0]?.value,
       }))
-      setAssignForm((current) => ({ ...current,
-        staffType: (next.staffTypes[0]?.value ?? current.staffType) as StaffType,
-        adminLevel: next.adminLevels[0]?.value, supportLevel: next.supportLevels[0]?.value,
-        shift: next.supportShifts[0]?.value, department: next.marketingDepartments[0]?.value,
-      }))
     }).catch(() => setCatalog(null))
     return () => abort.abort()
   }, [roleNonce])
 
   const roleAccounts = roleRows.map(rowToAccount)
-  const eligible = roleRows.filter((row) => !row.staffType && row.accountStatus?.toUpperCase() === 'ACTIVE')
   const staffCounts = (Object.keys(STAFF_ROLES) as StaffRole[]).map((role) => ({ role, holders: roleAccounts.filter((a) => a.staff.includes(role)) }))
 
   const createStaff = async () => {
@@ -738,24 +704,11 @@ export function AdminRoles() {
     finally { setSaving(false) }
   }
 
-  const assignStaff = async () => {
-    const id = Number(selectedUserId)
-    if (!Number.isFinite(id)) return
-    setSaving(true)
-    try {
-      await administration.assignStaff(id, assignForm)
-      const row = roleRows.find((candidate) => candidate.id === id)
-      toast({ title: `Staff access assigned to @${row?.username ?? id}`, tone: 'ok' })
-      setRoleNonce((n) => n + 1); setSelectedUserId(''); setAssigning(false)
-    } catch (cause) { toast({ title: cause instanceof ApiError ? cause.message : 'Staff access could not be assigned.', tone: 'bad' }) }
-    finally { setSaving(false) }
-  }
 
   return (
     <BackOfHouse title="Roles &amp; Permissions">
       <div className="mt-2 grid gap-2 sm:flex sm:justify-end">
-        <Button className="min-h-11 sm:min-h-10" variant="primary" icon={<ShieldCheck className="size-4" />} disabled={!catalog || eligible.length === 0} onClick={() => setAssigning(true)}>Assign existing account</Button>
-        <Button className="min-h-11 sm:min-h-10" icon={<Plus className="size-4" />} disabled={!catalog} onClick={() => setCreating(true)}>Create new staff</Button>
+        <Button className="min-h-11 sm:min-h-10" icon={<Plus className="size-4" />} disabled={!catalog} onClick={() => setCreating(true)}>Create staff account</Button>
       </div>
       <Section title="Platform Staff Roles" className="mt-6">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -790,14 +743,7 @@ export function AdminRoles() {
         </form>
       </Modal>
 
-      <Modal open={assigning} onClose={() => setAssigning(false)} title="Assign staff access" width="lg"
-        footer={<><Button variant="quiet" onClick={() => setAssigning(false)}>Cancel</Button><Button loading={saving} disabled={!selectedUserId || !assignForm.designation || !assignForm.hireDate} onClick={assignStaff}>Assign staff access</Button></>}>
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void assignStaff() }}>
-          <Field label="Existing active account" required><Select required value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}><option value="">Select an account</option>{eligible.map((row) => <option key={row.id} value={row.id}>@{row.username} · {row.email}{row.channelName ? ' · Creator' : ''}</option>)}</Select></Field>
-          <p className="-mt-2 text-xs text-ink-300">Password and account history stay unchanged. Staff access is added without replacing creator/viewer data, credentials or the account ID.</p>
-          <div className="grid gap-4 sm:grid-cols-2"><StaffFields value={assignForm} catalog={catalog} onChange={setAssignForm} /></div>
-        </form>
-      </Modal>
+
     </BackOfHouse>
   )
 }

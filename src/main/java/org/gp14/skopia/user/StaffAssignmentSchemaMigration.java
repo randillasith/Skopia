@@ -55,6 +55,7 @@ class StaffAssignmentSchemaMigration implements ApplicationRunner {
         }
         rewireToUsers("refunds", "processed_by", "fk_refunds_processed_user", "set null");
         rewireToUsers("announcements", "published_by", "fk_announcements_publisher_user", "restrict");
+        rewireToUsers("ad_campaigns", "created_by", "fk_ad_campaigns_creator_user", "restrict");
     }
 
     private void rewireToUsers(String table, String column, String expectedName, String onDelete) {

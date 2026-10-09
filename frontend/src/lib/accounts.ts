@@ -10,8 +10,7 @@ import { request, ApiError } from './api'
 import type { ServerVideo } from './catalogue'
 import type { Account, AccountStatus, StaffRole } from './session'
 import { channelByHandle } from './session'
-import type { StaffCatalog, StaffFormValues, StaffType } from './staff'
-import { buildStaffAssignmentPayload } from './staff'
+import type { StaffCatalog, StaffType } from './staff'
 
 /* ------------------------------------------------------------ server shape */
 
@@ -245,10 +244,6 @@ export const administration = {
   createStaff: (input: CreateStaffInput) =>
     request<ServerUserRow>('/api/admin/users/staff', { method: 'POST', body: input }),
   staffCatalog: () => request<StaffCatalog>('/api/admin/users/staff-catalog'),
-  assignStaff: (userId: number, input: StaffFormValues) =>
-    request<ServerUserRow>(`/api/admin/users/${userId}/staff-assignment`, {
-      method: 'POST', body: buildStaffAssignmentPayload(input, 'assign'),
-    }),
   updateStaff: (userId: number, input: UpdateStaffInput) =>
     request<ServerUserRow>(`/api/admin/users/${userId}/staff-assignment`, { method: 'PATCH', body: input }),
   setCreatorVerified: (userId: number, isVerified: boolean) =>
