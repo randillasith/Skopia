@@ -13,9 +13,9 @@ import { useCatalogue } from '@/lib/useCatalogue'
 import { useLibrary, type Playlist, type PlaylistVisibility } from '@/lib/library'
 
 const VISIBILITY: Record<PlaylistVisibility, { icon: typeof Lock; note: string }> = {
-  Private: { icon: Lock, note: 'Only you can open it.' },
-  Unlisted: { icon: Link2, note: 'Anyone with the link can open it.' },
-  Public: { icon: Globe, note: 'Listed on your profile.' },
+  Private: { icon: Lock, note: 'Saved only in this browser for this account.' },
+  Unlisted: { icon: Link2, note: 'Sharing is not supported yet.' },
+  Public: { icon: Globe, note: 'Public playlists are not supported yet.' },
 }
 
 /**
@@ -67,8 +67,7 @@ export function SaveToPlaylist({
         <li>
           <button
             onClick={() => {
-              const added = toggleWatchLater(videoId)
-              toast({ title: added ? 'Saved to Watch later' : 'Removed from Watch later' })
+              void toggleWatchLater(videoId).then(active => toast({ title: active ? 'Saved to Watch later' : 'Removed from Watch later' })).catch(cause => toast({ title: cause instanceof Error ? cause.message : 'Could not save the title.', tone: 'bad' }))
             }}
             className="flex w-full items-center gap-3 rounded-sm px-2 py-2.5 text-left transition-colors hover:bg-ink-800"
           >
@@ -131,7 +130,7 @@ export function SaveToPlaylist({
                 value={visibility}
                 onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
               >
-                {(Object.keys(VISIBILITY) as PlaylistVisibility[]).map((v) => (
+                {(['Private'] as PlaylistVisibility[]).map((v) => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </Select>
@@ -188,7 +187,7 @@ function PlaylistCard({ p }: { p: Playlist }) {
         </Link>
         <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-300">
           <Icon className="size-3" />
-          {p.visibility}
+          On this device
           <span aria-hidden>·</span>
           <span className="font-mono tabular-nums">{totalRuntime(p.videoIds, byId)}</span>
         </p>
@@ -293,7 +292,7 @@ export function Playlists() {
           </Field>
           <Field label="Visibility" hint={VISIBILITY[visibility].note}>
             <Select value={visibility} onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}>
-              {(Object.keys(VISIBILITY) as PlaylistVisibility[]).map((v) => (
+              {(['Private'] as PlaylistVisibility[]).map((v) => (
                 <option key={v} value={v}>{v}</option>
               ))}
             </Select>
@@ -352,7 +351,7 @@ export function PlaylistDetail() {
             </h1>
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-300">
               <Icon className="size-3.5" />
-              {p.visibility}
+              On this device
               <span aria-hidden>·</span>
               <span className="tabular-nums">{items.length} videos</span>
               <span aria-hidden>·</span>

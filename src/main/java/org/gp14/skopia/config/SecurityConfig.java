@@ -32,7 +32,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/billing/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers(HttpMethod.GET, "/api/billing/plans").permitAll()
                         .requestMatchers("/api/billing/**").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/health", "/api/categories", "/api/deployment").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/health", "/api/categories", "/api/channels", "/api/deployment").permitAll()
                         .requestMatchers("/api/announcements/admin", "/api/announcements/admin/**").hasRole("ADMINISTRATOR")
                         .requestMatchers("/api/notifications/**", "/api/announcements").authenticated()
                         .requestMatchers("/api/auth/me", "/api/users/me", "/api/users/me/**").authenticated()

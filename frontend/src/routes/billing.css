@@ -1,5 +1,5 @@
 .billing-panel {
-  background-image: radial-gradient(circle at 94% 4%, rgb(117 89 255 / 0.12), transparent 45%);
+  background-image: none;
 }
 .membership-pass {
   position: relative;
@@ -38,10 +38,10 @@
 .membership-mark { font-size: 34px; font-weight: 900; opacity: .75; }
 .membership-note { margin-top: 18px; font-size: 11px; }
 .billing-action { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 10px; border: 1px solid transparent; border-radius: 10px; padding: 11px 18px; background: var(--color-violet-500); color: white; font-weight: 600; font-size: 14px; text-decoration: none; transition: background-color .15s, border-color .15s; }
-.billing-action:hover { background: var(--color-violet-400); }
+.billing-action:hover { background: var(--color-brand-hi); }
 .billing-action-secondary { border-color: var(--color-ink-600); background: var(--color-ink-800); color: var(--color-fg); }
 .billing-action-secondary:hover { border-color: var(--color-violet-400); background: var(--color-ink-750); }
-.billing-action:focus-visible, .billing-history summary:focus-visible { outline: 2px solid var(--color-cyan-300); outline-offset: 4px; }
+.billing-action:focus-visible, .billing-history summary:focus-visible { outline: 2px solid var(--color-tone-cyan-300); outline-offset: 4px; }
 .billing-subscription-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: center; gap: 36px; }
 .billing-subscription-grid > *, .billing-order { min-width: 0; }
 .billing-section-heading, .billing-history-nav { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
@@ -49,7 +49,7 @@
 .billing-history-nav .billing-action { flex-shrink: 0; }
 .billing-history { border: 1px solid var(--color-ink-700); border-radius: 16px; background: var(--color-ink-850); overflow: hidden; }
 .billing-history summary { cursor: pointer; padding: 20px; font-weight: 600; }
-.billing-history summary::marker { color: var(--color-cyan-300); }
+.billing-history summary::marker { color: var(--color-tone-cyan-300); }
 .billing-history summary .billing-badge { margin-left: 10px; }
 .billing-order { padding: 20px; border: 1px solid var(--color-ink-700); border-radius: 12px; background: var(--color-ink-900); }
 .billing-order-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
@@ -94,7 +94,7 @@
 .demo-card-back-note { margin: 15px 0 18px; color: #e2dbee; font-size: 11px; line-height: 1.6; }
 .demo-card-flip { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px; margin: 10px auto 0; border-radius: 6px; color: var(--color-fg-muted); font-size: 12px; cursor: pointer; }
 .demo-card-flip:hover { color: var(--color-tone-cyan-300); background: var(--color-ink-800); }
-.demo-card-flip:focus-visible, .demo-example:focus-visible { outline: 2px solid var(--color-cyan-300); outline-offset: 3px; }
+.demo-card-flip:focus-visible, .demo-example:focus-visible { outline: 2px solid var(--color-tone-cyan-300); outline-offset: 3px; }
 .demo-example-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .demo-example-row > span { margin-right: auto; }
 .demo-example { min-height: 40px; border: 1px solid var(--color-ink-600); border-radius: 8px; padding: 8px 13px; background: var(--color-ink-900); color: var(--color-fg); font-size: 13px; font-weight: 600; cursor: pointer; }

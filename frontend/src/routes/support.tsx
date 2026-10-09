@@ -123,7 +123,7 @@ export function SupportQueue() {
       title="Complaint queue"
       actions={
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-success-400">
+          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-tone-success-400">
             <span className="size-2 rounded-full bg-success-500 animate-pulse" />
             Live real-time
           </span>

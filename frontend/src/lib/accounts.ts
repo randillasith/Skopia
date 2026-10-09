@@ -103,7 +103,7 @@ export function toAccount(server: ServerAccount): Account {
     lastSeen: 'now',
     status: statusFrom(server.accountStatus),
     staff: staffFrom(server.staffType ?? server.roleType ?? server.userType),
-    channelId: channel?.id ?? null,
+    channelId: creator && userId != null ? String(userId) : channel?.id ?? null,
     isContentCreator: creator,
     isPremium: server.isPremium === true,
     isVerified: server.isVerified === true,

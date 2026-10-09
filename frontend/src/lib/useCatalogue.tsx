@@ -11,7 +11,8 @@
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react'
-import { ApiError } from './api'
+import { ApiError, request } from './api'
+import { replaceChannels, type Channel } from './session'
 import { catalogue, toVideo, type ServerCategory, type ServerComment } from './catalogue'
 import type { Video } from './data'
 import { useSession } from './session-context'
@@ -23,6 +24,7 @@ type CatalogueValue = {
   loading: boolean
   /** Why the catalogue is not here, or null when it is. */
   error: string | null
+  channelError: string | null
   /** Re-read the catalogue. Used after anything that changes it. */
   refresh: () => void
   byId: (id: string) => Video | undefined
@@ -37,6 +39,7 @@ const CatalogueCtx = createContext<CatalogueValue>({
   categories: [],
   loading: false,
   error: null,
+  channelError: null,
   refresh: () => {},
   byId: () => undefined,
   categoryId: () => undefined,
@@ -53,6 +56,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<ServerCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [channelError, setChannelError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
   // The catalogue is re-read when the acting account changes, because liked,
@@ -65,8 +69,11 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
     Promise.all([
       catalogue.videos({}, actor, abort.signal),
       catalogue.categories(abort.signal),
+      request<Channel[]>('/api/channels', { signal: abort.signal }).then(rows => { if (!abort.signal.aborted) setChannelError(null); return rows }).catch(() => { if (!abort.signal.aborted) setChannelError('Channels could not be loaded. Please try again.'); return [] as Channel[] }),
     ])
-      .then(([rows, cats]) => {
+      .then(([rows, cats, channels]) => {
+        if (abort.signal.aborted) return
+        replaceChannels(channels.map((c) => ({ ...c, moderators: [], subscribers: null, location: '', tagline: c.about })))
         setVideos(rows.map(toVideo))
         setCategories(cats)
         setError(null)
@@ -75,6 +82,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
         if (cause instanceof DOMException && cause.name === 'AbortError') return
         setError(cause instanceof ApiError ? cause.message : 'Could not load the catalogue.')
         setVideos([])
+        replaceChannels([])
       })
       .finally(() => {
         if (!abort.signal.aborted) setLoading(false)
@@ -91,6 +99,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
       categories,
       loading,
       error,
+      channelError,
       refresh: () => setNonce((n) => n + 1),
       byId: (id: string) => index.current.get(id),
       categoryId: (name: string) =>
@@ -98,7 +107,7 @@ export function CatalogueProvider({ children }: { children: React.ReactNode }) {
       patch: (id, changes) =>
         setVideos((list) => list.map((v) => (v.id === id ? { ...v, ...changes } : v))),
     }),
-    [videos, categories, loading, error],
+    [videos, categories, loading, error, channelError],
   )
 
   return <CatalogueCtx.Provider value={value}>{children}</CatalogueCtx.Provider>

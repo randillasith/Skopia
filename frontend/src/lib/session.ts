@@ -37,45 +37,17 @@ export type Channel = {
   moderators: string[]
   tagline: string
   about: string
-  subscribers: number
+  subscribers: number | null
+  verified?: boolean
   location: string
 }
 
-/**
- * Every creator in the catalogue has a channel, because a viewer who clicks a
- * name expects to arrive somewhere. Three of them are owned by accounts in
- * ACCOUNTS; the rest exist so the catalogue is not full of dead ends.
- */
-export const CHANNELS: Channel[] = [
-  { id: 'ch-01', name: 'Meridian Films', handle: 'meridian', created: '2026-04-01', moderators: ['u-1003', 'u-1007'],
-    tagline: 'Long-form documentary, mostly outdoors, mostly in winter.',
-    about: 'A four-person documentary outfit working out of Kandy. We shoot slowly — most films here took more than a year — and we publish when the cut is finished rather than to a schedule.',
-    subscribers: 184_200, location: 'Kandy, Sri Lanka' },
-  { id: 'ch-02', name: 'Harbour Studio', handle: 'harbour', created: '2026-04-14', moderators: [],
-    tagline: 'Industry, ports, and the people who keep them running.',
-    about: 'Harbour Studio makes films about work. Shipping, freight, repair, the night shift. Founded 2024.',
-    subscribers: 96_400, location: 'Colombo, Sri Lanka' },
-  { id: 'ch-03', name: 'Basement Tapes', handle: 'basement', created: '2026-06-02', moderators: ['u-1007'],
-    tagline: 'Archive recovery and conversations that run long.',
-    about: 'We find tape nobody has played in thirty years, work out who is on it, and then talk to whoever is still around.',
-    subscribers: 141_900, location: 'Colombo, Sri Lanka' },
-  { id: 'ch-04', name: 'Aster Lane', handle: 'asterlane', created: '2026-03-18', moderators: [],
-    tagline: 'Short fiction, usually about strangers.',
-    about: 'Two writers and a borrowed camera. Everything here is under half an hour.',
-    subscribers: 52_700, location: 'Galle, Sri Lanka' },
-  { id: 'ch-05', name: 'Cadence Hall', handle: 'cadence', created: '2026-02-09', moderators: [],
-    tagline: 'One take, one room, no overdubs.',
-    about: 'Live sessions recorded in empty halls, early in the morning, before anyone else arrives.',
-    subscribers: 78_300, location: 'Colombo, Sri Lanka' },
-  { id: 'ch-06', name: 'Fern & Field', handle: 'fernandfield', created: '2026-01-22', moderators: [],
-    tagline: 'How things work, explained properly.',
-    about: 'Science and craft, taken at the pace the subject actually needs. No thirty-second explainers.',
-    subscribers: 402_100, location: 'Nuwara Eliya, Sri Lanka' },
-  { id: 'ch-07', name: 'Northbound', handle: 'northbound', created: '2026-05-03', moderators: [],
-    tagline: 'Episodic drama and the occasional long look at a trade.',
-    about: 'Currently making Night Shift. New episodes most weeks while a series is running.',
-    subscribers: 128_500, location: 'Jaffna, Sri Lanka' },
-]
+/** Public channel directory, populated from the server alongside the catalogue. */
+export let CHANNELS: Channel[] = []
+const channelListeners = new Set<() => void>()
+export const channelSnapshot = () => CHANNELS
+export const subscribeChannels = (listener: () => void) => { channelListeners.add(listener); return () => { channelListeners.delete(listener) } }
+export function replaceChannels(rows: Channel[]) { CHANNELS = rows; channelListeners.forEach(listener => listener()) }
 
 export const channelById = (id: string | null) => CHANNELS.find((c) => c.id === id) ?? null
 export const channelByHandle = (h: string) => CHANNELS.find((c) => c.handle === h) ?? null
@@ -115,18 +87,7 @@ export type Account = {
 /** The id to send as X-User-Id, or null when this session cannot act server-side. */
 export const actorId = (v: Viewer): number | null => v?.userId ?? null
 
-export const ACCOUNTS: Account[] = [
-  { id: 'u-1001', name: 'Punsara P. S.', handle: 'p.punsara', email: 'p.punsara@skopia.test', joined: '2026-02-11', lastSeen: '4 min ago', status: 'Active', staff: ['admin'], channelId: null },
-  { id: 'u-1002', name: 'Laknadi K. S. S.', handle: 'k.laknadi', email: 'k.laknadi@skopia.test', joined: '2026-02-11', lastSeen: '1 h ago', status: 'Active', staff: ['support'], channelId: null },
-  { id: 'u-1003', name: 'Dhananjana W. M. I.', handle: 'd.fernando', email: 'd.fernando@skopia.test', joined: '2026-03-02', lastSeen: '12 min ago', status: 'Active', staff: [], channelId: null },
-  { id: 'u-1004', name: 'Madhusara J. P. M.', handle: 'm.madhusara', email: 'm.madhusara@skopia.test', joined: '2026-03-20', lastSeen: '2 h ago', status: 'Active', staff: ['marketing'], channelId: null },
-  { id: 'u-1005', name: 'Nimali Ratnayake', handle: 'meridian', email: 'nimali@meridianfilms.test', joined: '2026-04-01', lastSeen: 'yesterday', status: 'Active', staff: [], channelId: 'ch-01' },
-  { id: 'u-1006', name: 'Harbour Studio', handle: 'harbour', email: 'post@harbour.test', joined: '2026-04-14', lastSeen: '3 days ago', status: 'Active', staff: [], channelId: 'ch-02' },
-  { id: 'u-1007', name: 'R. Perera', handle: 'r.perera', email: 'r.perera@skopia.test', joined: '2026-05-06', lastSeen: '20 min ago', status: 'Active', staff: [], channelId: null },
-  { id: 'u-1008', name: 'M. Silva', handle: 'm.silva', email: 'm.silva@skopia.test', joined: '2026-05-19', lastSeen: '1 week ago', status: 'Suspended', staff: [], channelId: null },
-  { id: 'u-1009', name: 'Kasun Alwis', handle: 'basement', email: 'kasun@basementtapes.test', joined: '2026-06-02', lastSeen: '5 h ago', status: 'Active', staff: [], channelId: 'ch-03' },
-  { id: 'u-1010', name: 'T. Nadeeka', handle: 't.nadeeka', email: 't.nadeeka@skopia.test', joined: '2026-06-28', lastSeen: '3 weeks ago', status: 'Blocked', staff: [], channelId: null },
-]
+export const ACCOUNTS: Account[] = []
 
 export const accountById = (id: string) => ACCOUNTS.find((a) => a.id === id) ?? null
 
@@ -139,7 +100,7 @@ export const isSignedIn = (v: Viewer): v is Account => v !== null
 export const hasStaff = (v: Viewer, role: StaffRole) => !!v?.staff.includes(role)
 /** An administrator reaches every staff console; the other two do not overlap. */
 export const canStaff = (v: Viewer, role: StaffRole) => hasStaff(v, role) || hasStaff(v, 'admin')
-export const ownedChannel = (v: Viewer) => (v ? channelById(v.channelId) : null)
+export const ownedChannel = (v: Viewer) => (v?.isContentCreator ? channelById(String(v.userId)) : null)
 /** Owning a channel here, or being a creator account on the server. */
 export const isCreator = (v: Viewer) => ownedChannel(v) !== null || v?.isContentCreator === true
 

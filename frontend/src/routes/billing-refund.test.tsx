@@ -19,7 +19,7 @@ async function mount() {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   await act(async () => { root!.render(<MemoryRouter><BillingHistory /></MemoryRouter>) })
 }
-function button(label: string) { return [...host.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === label)! }
+function button(label: string) { return [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === label)! }
 async function click(label: string) { await act(async () => { button(label).click() }) }
 beforeEach(() => {
   requests = []
@@ -34,7 +34,7 @@ describe('refundable simulated billing', () => {
     await mount()
     expect(host.textContent).toContain('LKR 500')
     await click('Request refund')
-    const reason = host.querySelector('textarea')!
+    const reason = document.querySelector('[role="dialog"] textarea')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(reason, 'Purchased by mistake')
       reason.dispatchEvent(new Event('input', { bubbles: true }))
@@ -62,7 +62,7 @@ describe('refundable simulated billing', () => {
   })
   it('refreshes on focus and visibility without resetting an open request draft, and removes listeners', async () => {
     await mount(); await click('Request refund')
-    const reason = host.querySelector('textarea')!
+    const reason = document.querySelector('[role="dialog"] textarea')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(reason, 'My unfinished refund reason')
       reason.dispatchEvent(new Event('input', { bubbles: true }))
@@ -71,7 +71,7 @@ describe('refundable simulated billing', () => {
     await act(async () => { window.dispatchEvent(new Event('focus')) })
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')) })
     expect(billing.refunds).toHaveBeenCalledTimes(calls + 2)
-    expect(host.querySelector('textarea')?.value).toBe('My unfinished refund reason')
+    expect(document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')?.value).toBe('My unfinished refund reason')
     await act(async () => { root!.unmount() }); root = undefined
     const afterUnmount = vi.mocked(billing.refunds).mock.calls.length
     await act(async () => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')) })

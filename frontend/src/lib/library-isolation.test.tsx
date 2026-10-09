@@ -8,7 +8,7 @@ import { catalogue } from './catalogue'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('./session-context', () => ({ useSession: vi.fn() }))
-vi.mock('./catalogue', () => ({ catalogue: { watchlist: vi.fn(), history: vi.fn() } }))
+vi.mock('./catalogue', () => ({ catalogue: { watchlist: vi.fn(), history: vi.fn(), toggleSaved: vi.fn() } }))
 const session = vi.mocked(useSession)
 const watchlist = vi.mocked(catalogue.watchlist)
 const history = vi.mocked(catalogue.history)
@@ -59,4 +59,26 @@ it('recovers legacy local-only data only after explicit import and keeps the ori
     expect(lib.playlists).toEqual([])
     expect(host.textContent).toContain('Legacy available')
   } finally { await act(async () => root.unmount()); host.remove() }
+})
+
+it('confirms saves through the API, coalesces duplicate requests, and preserves state on failure', async () => {
+  session.mockReturnValue({viewer: account(1), resolving: false} as unknown as ReturnType<typeof useSession>)
+  const save = vi.mocked(catalogue.toggleSaved)
+  let finish!: (value: {active: boolean}) => void
+  save.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const host = document.createElement('div'); document.body.append(host)
+  const root = createRoot(host)
+  try {
+    await act(async () => root.render(<LibraryProvider><Probe /></LibraryProvider>))
+    const first = lib.toggleWatchLater('12')
+    const second = lib.toggleWatchLater('12')
+    expect(first).toBe(second)
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(lib.watchLater).toEqual([])
+    await act(async () => { finish({active: true}); await first })
+    expect(lib.watchLater).toEqual(['12'])
+    save.mockRejectedValueOnce(new Error('Offline'))
+    await act(async () => { await expect(lib.toggleWatchLater('12')).rejects.toThrow('Offline') })
+    expect(lib.watchLater).toEqual(['12'])
+  } finally { await act(async () => root.unmount()); host.remove(); save.mockReset() }
 })

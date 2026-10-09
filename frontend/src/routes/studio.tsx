@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import {
   Button, Field, Input, Select, Textarea, Table, Th, Td, Tr, EmptyState,
-  Modal, Placeholder, useToast, Checkbox, Section, Avatar,
+  Modal, Placeholder, useToast, Checkbox, Section,
 } from '@/components/primitives'
 import { PosterPlate, Letterboard, BillingBoard, Stations, Lightbox } from '@/components/world'
 import { BackOfHouse, FrontOfHouse, useSession } from '@/components/Shell'
@@ -19,7 +19,7 @@ import { actorId as actorIdOf } from '@/lib/session'
 import { ApiError } from '@/lib/api'
 import { Resolve } from '@/components/Loading'
 import { billing } from '@/lib/billing'
-import { ACCOUNTS, accountById, ownedChannel } from '@/lib/session'
+import { ownedChannel } from '@/lib/session'
 
 const EASE = [0.16, 1, 0.3, 1] as const
 const isPublicVideo = (status?: string | null) => ['PUBLISHED', 'PUBLIC'].includes((status ?? '').toUpperCase())
@@ -502,7 +502,7 @@ export function StudioUpload() {
                   <Checkbox checked onChange={() => {}} label="Allow this video to be shared" />
                   <Checkbox checked={premium} onChange={(checked) => { if (hasPass || !checked) setPremium(checked) }} label="Premium — requires an active pass" />
                 </div>
-                {!hasPass && <p className="mt-3 text-[12.5px] text-gold-300">Your account is Free. <Link className="underline" to="/plans">Activate a TEST pass</Link> to select Premium.</p>}
+                {!hasPass && <p className="mt-3 text-[12.5px] text-tone-gold-400">Your account is Free. <Link className="underline" to="/plans">Activate a TEST pass</Link> to select Premium.</p>}
                 <p className="mt-3 text-[12.5px] text-ink-300">
                   Initial playback quality levels are not yet specified: <Placeholder>{UNDECIDED}</Placeholder>
                 </p>
@@ -897,127 +897,9 @@ export function CreateChannel() {
  * wrong is how a permission model quietly becomes a lie.
  */
 export function ChannelModerators() {
-  const { viewer } = useSession()
-  const channel = ownedChannel(viewer)!
-  const toast = useToast()
-  const [mods, setMods] = useState<string[]>(channel.moderators)
-  const [query, setQuery] = useState('')
-  const [confirm, setConfirm] = useState<string | null>(null)
-
-  const candidates = ACCOUNTS.filter(
-    (a) =>
-      a.id !== viewer?.id &&
-      !mods.includes(a.id) &&
-      query.length > 1 &&
-      (a.name.toLowerCase().includes(query.toLowerCase()) ||
-        a.handle.toLowerCase().includes(query.toLowerCase())),
-  ).slice(0, 4)
-
-  const grant = (a: (typeof ACCOUNTS)[number]) => {
-    setMods((m) => [...m, a.id])
-    setQuery('')
-    toast({ title: `${a.name} can now moderate comments on ${channel.name}.`, tone: 'ok' })
-  }
-
-  const revoke = (id: string) => {
-    const a = accountById(id)
-    setMods((m) => m.filter((x) => x !== id))
-    setConfirm(null)
-    toast({ title: `${a?.name ?? 'That account'} no longer moderates ${channel.name}.` })
-  }
-
-  const target = confirm ? accountById(confirm) : null
-
-  return (
-    <BackOfHouse title="Moderators">
-      <p className="max-w-[70ch] text-[14px] leading-relaxed text-ink-300">
-        Moderators you appoint can publish, remove and block comments on{' '}
-        <span className="text-ink-100">{channel.name}</span> — and nowhere else. They cannot touch
-        your videos, your analytics or your channel settings, and the role does not carry to any
-        other channel. Only you can grant it here; an administrator cannot appoint a moderator on
-        your behalf.
-      </p>
-
-      <Section title={`Moderating ${channel.name}`} className="mt-8">
-        {mods.length === 0 ? (
-          <EmptyState
-            icon={<ShieldHalf className="size-6" />}
-            title="No moderators yet"
-            body="You are moderating this channel on your own. Appoint someone below when the comments outgrow you."
-          />
-        ) : (
-          <ul className="divide-y divide-ink-800 rounded-lg border border-ink-700 bg-ink-850">
-            {mods.map((id) => {
-              const a = accountById(id)!
-              return (
-                <li key={id} className="flex flex-wrap items-center gap-3 p-3.5">
-                  <Avatar name={a.name} size={34} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium text-fg">{a.name}</p>
-                    <p className="truncate font-mono text-[12px] text-ink-300">@{a.handle}</p>
-                  </div>
-                  <Letterboard tone="neutral">Comments only</Letterboard>
-                  <Button size="sm" variant="danger" onClick={() => setConfirm(id)}>
-                    Remove
-                  </Button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="Appoint a moderator" className="mt-8">
-        <div className="max-w-xl">
-          <Field label="Find an account" hint="Search by name or handle. They must already have a Skopia account.">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Name or @handle"
-            />
-          </Field>
-          {candidates.length > 0 && (
-            <ul className="mt-2 divide-y divide-ink-800 overflow-hidden rounded-lg border border-ink-700 bg-ink-850">
-              {candidates.map((a) => (
-                <li key={a.id} className="flex items-center gap-3 p-3">
-                  <Avatar name={a.name} size={30} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] text-fg">{a.name}</p>
-                    <p className="truncate font-mono text-[11px] text-ink-300">@{a.handle}</p>
-                  </div>
-                  <Button size="sm" onClick={() => grant(a)}>Appoint</Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {query.length > 1 && candidates.length === 0 && (
-            <p className="mt-2 text-[13px] text-ink-300">
-              No account matches “{query}”.
-            </p>
-          )}
-        </div>
-      </Section>
-
-      <Modal
-        open={!!confirm}
-        onClose={() => setConfirm(null)}
-        title={`Remove ${target?.name ?? ''} as a moderator?`}
-        footer={
-          <>
-            <Button onClick={() => setConfirm(null)}>Keep them</Button>
-            <Button variant="danger" onClick={() => confirm && revoke(confirm)}>
-              Remove
-            </Button>
-          </>
-        }
-      >
-        <p className="text-[14px] leading-relaxed text-ink-200">
-          They lose access to this channel's comment queue immediately. Decisions they already made
-          stay as they are, and stay attributed to them in the log.
-        </p>
-      </Modal>
-    </BackOfHouse>
-  )
+  return <BackOfHouse title="Moderators"><EmptyState icon={<ShieldHalf className="size-6" />}
+    title="Moderator grants are unavailable"
+    body="The server does not support channel moderator assignments yet. No access can be granted or revoked here." /></BackOfHouse>
 }
 
 /* ========================================================= channel settings */

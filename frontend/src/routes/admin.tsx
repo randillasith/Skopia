@@ -96,7 +96,7 @@ export function AdminDashboard() {
       title="Dashboard"
       actions={
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-success-400">
+          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-tone-success-400">
             <span className="size-2 rounded-full bg-success-500 animate-pulse" />
             Live real-time
           </span>
@@ -145,7 +145,7 @@ export function AdminDashboard() {
         </Link>
       </div>
 
-      <Section title="Subscribed users" action={<Link to="/admin/plans" className="text-[13px] text-cyan-300 hover:underline">All access states</Link>} className="mt-10">
+      <Section title="Subscribed users" action={<Link to="/admin/plans" className="text-[13px] text-tone-cyan-300 hover:underline">All access states</Link>} className="mt-10">
         {subscriptionRows == null ? <p className="text-sm text-ink-300">Subscription data could not be read.</p>
           : subscriptionRows.filter((row) => row.status === 'ACTIVE').length === 0 ? <p className="text-sm text-ink-300">No active subscriptions.</p>
           : <div className="overflow-x-auto rounded-lg border border-ink-700 bg-ink-850"><Table labels={['User', 'Plan', 'State', 'Start', 'End']}><thead><Tr><Th>User</Th><Th>Plan</Th><Th>State</Th><Th>Start</Th><Th>End</Th></Tr></thead>
@@ -502,7 +502,7 @@ export function AdminAccounts() {
                           <Tv className="size-3.5 text-purple-400" />
                           <span className="font-medium text-ink-100">{row?.channelName || a.name}</span>
                           {a.isVerified && (
-                            <span className="rounded bg-success-500/20 px-1 py-0.2 font-mono text-[10px] text-success-400">
+                            <span className="rounded bg-success-500/20 px-1 py-0.2 font-mono text-[10px] text-tone-success-400">
                               VERIFIED
                             </span>
                           )}
@@ -932,7 +932,7 @@ export function AdminModeration() {
       title="Content Moderation &amp; Reports"
       actions={
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-success-400">
+          <span className="flex items-center gap-1.5 rounded-full bg-success-500/10 px-2.5 py-1 font-mono text-[11px] text-tone-success-400">
             <span className="size-2 rounded-full bg-success-500 animate-pulse" />
             Live real-time
           </span>

@@ -14,8 +14,8 @@ import { SPEEDS, chaptersFor, clock, seconds, type Video } from '@/lib/data'
  * The transport.
  *
  * An uploaded file uses the browser's media element and its playback events.
- * Catalogue records without a file use a simulated clock so the controls can
- * still be previewed. Both paths update the same player state.
+ * Catalogue records without a file show an unavailable state.
+ * They never advance a simulated playback clock or claim a view.
  *
  * Fullscreen is real. Caption language labels are metadata, not playable tracks;
  * the caption control stays unavailable until a sourced track exists. Picture-in-picture is not offered, because
@@ -100,20 +100,10 @@ export function Player({
   const [failed, setFailed] = useState(false)
   const [scrub, setScrub] = useState<number | null>(null)
 
-  /**
-   * The real media, when there is any.
-   *
-   * Most of the catalogue is records without files, and the controls below are
-   * written against a clock rather than against an element. So the element is
-   * driven from the same state the clock is: when a file exists it is the source
-   * of truth for time, and when there is none the clock simulates it. Both paths
-   * end up in `time`, so the transport, the chapters and the progress written
-   * back to the server do not have to know which one is running.
-   */
+  // Playback state and progress come only from the uploaded media element.
   const media = useRef<HTMLVideoElement>(null)
   const hasMedia = !!video.mediaUrl
   const resumeAfterBreak = useRef(false)
-  const simulatedEndNotified = useRef(false)
 
   useEffect(() => { onPlayingChange?.(playing) }, [playing, onPlayingChange])
 
@@ -133,27 +123,15 @@ export function Player({
     onTimeChange?.(time)
   }, [time, onTimeChange])
 
-  // React subscribes to the media element's play event below. The simulated
-  // clock uses the same state change, so either player can notify its page.
+  // Only actual media playback notifies the page.
   useEffect(() => {
     if (playing) onPlaybackStarted?.()
   }, [playing, onPlaybackStarted])
 
-  /**
-   * Start or stop, whichever of the two is running.
-   *
-   * With a file, the element is asked and its own play/pause events set the
-   * state — asking the element and separately setting the state races, because
-   * a blocked or failed play leaves the two disagreeing. Without a file the
-   * state is all there is.
-   *
-   * A browser that refuses to start an unmuted video without a gesture it
-   * recognises is not a failure: it is muted and tried once more, which is what
-   * the viewer wanted either way. Only a second refusal is a real one.
-   */
+  // Ask the media element to play; only its events confirm playback.
   const toggle = useCallback(() => {
     const el = media.current
-    if (!el) return setPlaying((p) => !p)
+    if (!el) return
     if (el.paused) {
       el.play().catch(() => {
         el.muted = true
@@ -173,38 +151,12 @@ export function Player({
     el.muted = muted
   }, [speed, volume, muted])
 
-  // The clock. Runs at the chosen rate so 2× genuinely reaches the end sooner.
-  // Skipped entirely when a file is playing — there the file keeps the time.
-  useEffect(() => {
-    if (hasMedia) return
-    if (!playing || failed || interrupted) return
-    const id = window.setInterval(() => {
-      setTime((t) => {
-        if (t + speed >= total) {
-          window.clearInterval(id)
-          setPlaying(false)
-          return total
-        }
-        return t + speed
-      })
-    }, 1000)
-    return () => window.clearInterval(id)
-  }, [playing, speed, total, failed, onEnded, interrupted, hasMedia])
-
-  useEffect(() => {
-    if (hasMedia) return
-    if (time < total) simulatedEndNotified.current = false
-    else if (total > 0 && !simulatedEndNotified.current) {
-      simulatedEndNotified.current = true
-      onEnded?.()
-    }
-  }, [time, total, hasMedia, onEnded])
-
   // A seek moves the element when there is one, and the element's timeupdate
   // brings the state back. Setting both keeps the bar responsive while the
   // element is still seeking.
   const seek = useCallback(
     (to: number) => {
+      if (!media.current) return
       const at = Math.max(0, Math.min(total, Math.round(to)))
       if (media.current) media.current.currentTime = at
       setTime(at)
@@ -276,6 +228,17 @@ export function Player({
   }
 
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
+
+  if (!hasMedia) return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-ink-950">
+      <PosterPlate title={video.title} seed={video.seed} thumbnailUrl={video.thumbnailUrl} lettering={false} />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-6 text-center text-white" role="status">
+        <AlertTriangle className="size-8" aria-hidden="true" />
+        <p className="font-semibold">Video unavailable</p>
+        <p className="max-w-sm text-sm">No playable file is available for this title. The creator needs to upload a video, or your account needs access.</p>
+      </div>
+    </div>
+  )
 
   return (
     <div

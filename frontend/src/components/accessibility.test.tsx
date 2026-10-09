@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Modal, Tabs } from './primitives'
 import { Player } from './player'
-import { VIDEOS } from '@/lib/data'
+import { VIDEOS } from '@/test/video-fixture'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let host: HTMLElement
@@ -26,7 +26,8 @@ it('traps focus in a dialog, closes on Escape, and restores the trigger', async 
   document.body.append(trigger)
   trigger.focus()
   await mount(<Modal open onClose={close} title="Dialog"><button>First</button><button>Last</button></Modal>)
-  const dialog = host.querySelector('[role="dialog"]')!
+  const dialog = document.querySelector('[role="dialog"]')!
+  expect(host.contains(dialog)).toBe(false)
   expect(dialog.contains(document.activeElement)).toBe(true)
   const buttons = [...dialog.querySelectorAll('button')]
   buttons.at(-1)!.focus()
@@ -53,7 +54,7 @@ it('keeps focus inside a changing modal form when inline close callback changes 
     </Modal>
   }
   await mount(<Form />)
-  const input = host.querySelector<HTMLInputElement>('input')!
+  const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!
   input.focus()
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -102,9 +103,9 @@ it('never presents caption labels as actual tracks without a source; slider keys
 })
 
 it('does not draw fabricated captions for a playing title with only a language label', async () => {
-  await mount(<Player video={{...VIDEOS[0], captions: ['English'], mediaUrl: undefined}} theater={false}
+  await mount(<Player video={{...VIDEOS[0], captions: ['English'], mediaUrl: '/uploads/test-video.mp4'}} theater={false}
     onTheater={() => {}} autoplay={false} onAutoplay={() => {}} onReport={() => {}} />)
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Play"]')!.click())
+  await act(async () => host.querySelector<HTMLVideoElement>('video')!.dispatchEvent(new Event('play')))
   expect(host.textContent).not.toContain('placeholder caption line')
   expect(host.querySelector('button[aria-label="Captions unavailable"]')).toHaveProperty('disabled', true)
 })
