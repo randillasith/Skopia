@@ -16,6 +16,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import java.nio.file.*;
+import java.time.LocalDate;
 import java.util.UUID;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -31,6 +32,7 @@ class VideoSecurityIntegrationTest {
     @Autowired VideoRepository videos;
     @Autowired ContentCreatorRepository creators;
     @Autowired RegisteredViewerRepository viewers;
+    @Autowired AdministratorRepository administrators;
     @Autowired AccessTierRepository tiers;
     @Autowired TokenService tokens;
     @Autowired BillingService billing;
@@ -107,6 +109,43 @@ class VideoSecurityIntegrationTest {
         for (int i = 0; i < 3; i++) mvc.perform(post("/api/videos/" + v.getId() + "/view"))
                 .andExpect(status().isUnauthorized());
         assertThat(videos.findById(v.getId()).orElseThrow().getViewCount()).isZero();
+    }
+
+    @Test void creatorsAndAdministratorsCanParticipateInComments() throws Exception {
+        ContentCreator creator = new ContentCreator();
+        creator.setUsername("creator_" + UUID.randomUUID());
+        creator.setEmail(UUID.randomUUID() + "@example.test");
+        creator.setPasswordHash("hash");
+        creator.setChannelName("Creator Channel");
+        creator = creators.saveAndFlush(creator);
+        Video video = video(creator, null, "PUBLISHED", "https://example.test/comments.mp4");
+
+        mvc.perform(post("/api/videos/" + video.getId() + "/comments")
+                        .header("Authorization", "Bearer " + tokens.issue(creator.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"Creator comment\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value(creator.getId()))
+                .andExpect(jsonPath("$.displayName").value("Creator Channel"));
+
+        Administrator administrator = new Administrator();
+        administrator.setUsername("admin_" + UUID.randomUUID());
+        administrator.setEmail(UUID.randomUUID() + "@example.test");
+        administrator.setPasswordHash("hash");
+        administrator.setFirstName("Comment");
+        administrator.setLastName("Administrator");
+        administrator.setDesignation("Administrator");
+        administrator.setHireDate(LocalDate.now());
+        administrator.setAdminLevel("SYSTEM");
+        administrator = administrators.saveAndFlush(administrator);
+
+        mvc.perform(post("/api/videos/" + video.getId() + "/comments")
+                        .header("Authorization", "Bearer " + tokens.issue(administrator.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"Administrator comment\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value(administrator.getId()))
+                .andExpect(jsonPath("$.displayName").value("Comment Administrator"));
     }
 
     @Test void commentBadgeFollowsEntitlementNotLegacyFlag() throws Exception {

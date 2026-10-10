@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.gp14.skopia.model.user.RegisteredViewer;
+import org.gp14.skopia.model.user.User;
 import org.gp14.skopia.model.video.Video;
 
 import java.time.LocalDateTime;
@@ -29,7 +29,7 @@ public class Comment {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "viewer_id")
     @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
-    private RegisteredViewer viewer;
+    private User viewer;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_comment_id")
