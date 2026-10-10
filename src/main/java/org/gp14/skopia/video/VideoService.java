@@ -466,7 +466,7 @@ public class VideoService {
                     try {
                         if (c.getViewer() != null) {
                             commentUserId = c.getViewer().getId();
-                            displayName = c.getViewer().getDisplayName() != null ? c.getViewer().getDisplayName() : c.getViewer().getUsername();
+                            displayName = commentDisplayName(c.getViewer());
                         }
                     } catch (Exception ignored) {}
 
@@ -507,8 +507,8 @@ public class VideoService {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new IllegalArgumentException("Video not found"));
         access.requireVisible(video, viewerId);
-        RegisteredViewer viewer = registeredViewerRepository.findById(viewerId)
-                .orElseThrow(() -> new AccessDeniedException("Viewer account required"));
+        User viewer = userRepository.findById(viewerId)
+                .orElseThrow(() -> new AccessDeniedException("Authenticated account required"));
 
         Comment comment = new Comment();
         comment.setVideo(video);
@@ -527,7 +527,7 @@ public class VideoService {
 
         Comment saved = commentRepository.save(comment);
 
-        String author = viewer.getDisplayName() != null ? viewer.getDisplayName() : viewer.getUsername();
+        String author = commentDisplayName(viewer);
         String avatar = "https://i.pravatar.cc/160?img=" + (Math.abs((saved.getId() != null ? saved.getId().hashCode() : 1) % 50) + 1);
 
         return CommentResponse.builder()
@@ -558,7 +558,7 @@ public class VideoService {
         return CommentResponse.builder().id(comment.getId()).text(comment.getCommentText())
                 .parentId(comment.getParentComment() == null ? null : comment.getParentComment().getId())
                 .userId(viewerId)
-                .displayName(comment.getViewer().getDisplayName() != null ? comment.getViewer().getDisplayName() : comment.getViewer().getUsername())
+                .displayName(commentDisplayName(comment.getViewer()))
                 .postedAt(comment.getPostedDatetime() == null ? "" : comment.getPostedDatetime().toInstant(ZoneOffset.UTC).toString())
                 .avatarUrl("https://i.pravatar.cc/160?img=" + (Math.abs(commentId.hashCode() % 50) + 1))
                 .badge(billing.hasActivePremium(viewerId) ? "Music Pass" : null)
@@ -576,6 +576,21 @@ public class VideoService {
         comment.setCommentText("");
         commentRepository.save(comment);
         return true;
+    }
+
+    private String commentDisplayName(User user) {
+        if (user == null) return "Viewer";
+        if (user instanceof RegisteredViewer viewer
+                && viewer.getDisplayName() != null && !viewer.getDisplayName().isBlank()) {
+            return viewer.getDisplayName().trim();
+        }
+        if (user instanceof ContentCreator creator
+                && creator.getChannelName() != null && !creator.getChannelName().isBlank()) {
+            return creator.getChannelName().trim();
+        }
+        String fullName = ((user.getFirstName() == null ? "" : user.getFirstName().trim()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName().trim())).trim();
+        return fullName.isEmpty() ? user.getUsername() : fullName;
     }
 
     private void requireCommentOwner(Comment comment, Long viewerId) {

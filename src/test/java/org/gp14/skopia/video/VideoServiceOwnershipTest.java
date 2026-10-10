@@ -157,7 +157,7 @@ class VideoServiceOwnershipTest {
     void rejectsReplyToAnotherVideo() {
         org.gp14.skopia.model.user.RegisteredViewer author = new org.gp14.skopia.model.user.RegisteredViewer();
         author.setId(7L);
-        when(viewers.findById(7L)).thenReturn(Optional.of(author));
+        when(users.findById(7L)).thenReturn(Optional.of(author));
         org.gp14.skopia.model.interaction.Comment parent = new org.gp14.skopia.model.interaction.Comment();
         Video other = new Video(); other.setId(10L); parent.setVideo(other); parent.setCommentStatus("VISIBLE");
         when(comments.findById(12L)).thenReturn(Optional.of(parent));
